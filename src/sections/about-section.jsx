@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, Droplet } from 'lucide-react';
 import useReveal from '../hooks/use-reveal';
-
-const ABOUT_IMG = '/assets/about.jpg';
+import aboutImage from '../assets/images/about.jpg';
 
 const aboutItems = [
     {
@@ -36,7 +35,7 @@ export default function AboutSection() {
             <div ref={ref} className='reveal mx-auto grid max-w-7xl gap-4 sm:gap-5 lg:grid-cols-[0.82fr_1.18fr] lg:items-center lg:gap-7'>
                 <div className='relative overflow-hidden rounded-[18px] sm:rounded-[22px]'>
                     <img
-                        src={ABOUT_IMG}
+                        src={aboutImage}
                         alt='A10tion To Detail vehicle being hand washed'
                         className='h-[180px] w-full object-cover object-[center_72%] sm:h-[240px] lg:h-[315px]'
                         loading='lazy'

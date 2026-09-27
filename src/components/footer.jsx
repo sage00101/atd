@@ -9,11 +9,13 @@ import {
     Phone,
     ShieldCheck,
 } from 'lucide-react';
+import footerLogo from '../assets/logos/footer-logo.svg';
 
 
 const SUPPORT_EMAIL = 'A10tiontodetailmobiledetailing@gmail.com';
 const SUPPORT_PHONE = '083 445 3888';
 const BUSINESS_ADDRESS = '2 Pinnacle Crescent, Strandfontein, Cape Town, 7798';
+const TERMS_URL = `${import.meta.env.BASE_URL}terms.html`;
 
 const navLinks = [
     { label: 'Home', href: '#home' },
@@ -28,10 +30,10 @@ const navLinks = [
 ];
 
 const policyLinks = [
-    { label: 'Privacy', href: '/terms.html#confidentiality' },
-    { label: 'Terms', href: '/terms.html' },
-    { label: 'Cancellation', href: '/terms.html#cancellation' },
-    { label: 'No-show', href: '/terms.html#cancellation' },
+    { label: 'Privacy', href: `${TERMS_URL}#confidentiality` },
+    { label: 'Terms', href: TERMS_URL },
+    { label: 'Cancellation', href: `${TERMS_URL}#cancellation` },
+    { label: 'No-show', href: `${TERMS_URL}#cancellation` },
 ];
 
 const socialLinks = [
@@ -79,7 +81,7 @@ export default function Footer({ onOpenVacancies }) {
                                 aria-label='A10tion To Detail home'
                             >
                                 <img
-                                    src='/assets/footer-logo.svg'
+                                    src={footerLogo}
                                     alt='A10tion To Detail'
                                     className='h-9 w-auto object-contain sm:h-10'
                                     draggable={false}

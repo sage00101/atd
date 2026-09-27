@@ -1,19 +1,23 @@
 import SectionTitle from '../components/section-title';
 import BeforeAfterSlider from '../components/before-after-slider';
 import useReveal from '../hooks/use-reveal';
+import exteriorAfter from '../assets/images/eafter.png';
+import exteriorBefore from '../assets/images/ebefore.png';
+import interiorAfter from '../assets/images/iafter.png';
+import interiorBefore from '../assets/images/ibefore.png';
 
 const pairs = [
     {
-        before: '/assets/eafter.png',
+        before: exteriorAfter,
         beforeAlt: 'Before: exterior detail preparation',
-        after: '/assets/ebefore.png',
+        after: exteriorBefore,
         afterAlt: 'After: completed exterior detail',
         caption: 'Exterior',
     },
     {
-        before: '/assets/iafter.png',
+        before: interiorAfter,
         beforeAlt: 'Before: interior mid-clean',
-        after: '/assets/ibefore.png',
+        after: interiorBefore,
         afterAlt: 'After: glossy conditioned dashboard and leather',
         caption: 'Interior',
     },

@@ -887,7 +887,7 @@ export default function BookingSection() {
 
                                         <label className='flex items-start gap-2 rounded-xl border border-line bg-white/80 px-3 py-2.5'>
                                             <input type='checkbox' checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className='mt-0.5 accent-[#365943]' required />
-                                            <span className='text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>I agree to the <a href='/terms.html' target='_blank' rel='noreferrer' className='font-semibold text-sagedeep underline underline-offset-2'>Terms &amp; Conditions</a> and acknowledge the booking/cancellation rules.</span>
+                                            <span className='text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>I agree to the <a href={`${import.meta.env.BASE_URL}terms.html`} target='_blank' rel='noreferrer' className='font-semibold text-sagedeep underline underline-offset-2'>Terms &amp; Conditions</a> and acknowledge the booking/cancellation rules.</span>
                                         </label>
                                     </div>
 

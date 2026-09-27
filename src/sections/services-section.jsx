@@ -9,9 +9,10 @@ import {
 } from 'lucide-react';
 
 import useReveal from '../hooks/use-reveal';
+import roundLogo from '../assets/logos/logo-round.svg';
 
 
-const ROUND_LOGO = '/assets/logo-round.svg';
+const ROUND_LOGO = roundLogo;
 
 
 const includedServices = [

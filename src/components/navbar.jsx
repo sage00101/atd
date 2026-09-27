@@ -5,6 +5,8 @@ import {
     X,
     ArrowUpRight,
 } from 'lucide-react';
+import navLogo from '../assets/logos/nav-logo.svg';
+import navLogoClose from '../assets/logos/nav-logo-close.svg';
 
 
 const links = [
@@ -132,7 +134,7 @@ export default function Navbar({ onOpenVacancies }) {
                                     className='flex shrink-0 items-center'
                         >
                             <img
-                                src='/assets/nav-logo.svg'
+                                src={navLogo}
                                 alt='A10tion To Detail'
                                 className='h-10 w-auto sm:h-11 md:h-12'
                             />
@@ -422,7 +424,7 @@ export default function Navbar({ onOpenVacancies }) {
                             className='flex items-center'
                         >
                             <img
-                                src='/assets/nav-logo-close.svg'
+                                src={navLogoClose}
                                 alt='A10tion To Detail'
                                 className='h-auto w-[105px] object-contain min-[390px]:w-[115px]'
                             />

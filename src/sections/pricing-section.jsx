@@ -10,6 +10,12 @@ import {
 } from 'lucide-react';
 import useReveal from '../hooks/use-reveal';
 import ServicesOfferedModal from '../components/services-offered-modal';
+import privateTwoWashesImage from '../assets/images/private-2-washes.png';
+import privateFourWashesImage from '../assets/images/private-4-washes.png';
+import businessTwoWashesImage from '../assets/images/business-2-washes.png';
+import businessFourWashesImage from '../assets/images/business-4-washes.png';
+
+const publicAssetUrl = (filename) => `${import.meta.env.BASE_URL}assets/${encodeURIComponent(filename)}`;
 
 const packageGroups = {
     private: {
@@ -22,7 +28,7 @@ const packageGroups = {
                 title: 'Standard Package',
                 washes: '2 Washes A Month',
                 badge: 'Discounted Rates',
-                image: '/assets/private-2-washes.png',
+                image: privateTwoWashesImage,
                 imageAlt: 'Private client two-wash monthly package',
                 monthlyPrices: [
                     ['Sedan / Hatchback', 'R1 150,00'],
@@ -41,7 +47,7 @@ const packageGroups = {
                 title: 'Premium Package',
                 washes: '4 Washes A Month',
                 badge: 'Best Value',
-                image: '/assets/private-4-washes.png',
+                image: privateFourWashesImage,
                 imageAlt: 'Private client four-wash monthly package',
                 monthlyPrices: [
                     ['Sedan / Hatchback', 'R2 300,00'],
@@ -67,7 +73,7 @@ const packageGroups = {
                 title: 'Standard Package',
                 washes: '2 Washes A Month',
                 badge: 'Discounted Rates',
-                image: '/assets/business-2-washes.png',
+                image: businessTwoWashesImage,
                 imageAlt: 'Business, fleet or family two-wash monthly package',
                 monthlyPrices: [
                     ['Sedan / Hatchback', 'R3 300,00'],
@@ -88,7 +94,7 @@ const packageGroups = {
                 title: 'Premium Package',
                 washes: '4 Washes A Month',
                 badge: 'Best Value',
-                image: '/assets/business-4-washes.png',
+                image: businessFourWashesImage,
                 imageAlt: 'Business, fleet or family four-wash monthly package',
                 monthlyPrices: [
                     ['Sedan / Hatchback', 'R6 600,00'],
@@ -108,22 +114,22 @@ const packageGroups = {
     },
 };
 
-const CLIENT_CONTRACT_URL = '/assets/Client%20Contract%20Agreement.docx';
+const CLIENT_CONTRACT_URL = publicAssetUrl('Client Contract Agreement.docx');
 const CONTRACT_DOWNLOAD_KEY = 'a10tion-client-contract-downloaded';
 
 const PRIVATE_CONTRACT_DOCUMENTS = [
     { name: 'Client Contract Agreement.docx', href: CLIENT_CONTRACT_URL },
-    { name: 'Annexure A - Pre-inspection.docx', href: '/assets/Annexure%20A%20-%20Pre-inspection.docx' },
-    { name: 'Private Client Prices_Final.docx', href: '/assets/Private%20Client%20Prices_Final.docx' },
-    { name: 'Supplier_Client Contract Agreement.docx', href: '/assets/Supplier_Client%20Contract%20Agreement.docx' },
+    { name: 'Annexure A - Pre-inspection.docx', href: publicAssetUrl('Annexure A - Pre-inspection.docx') },
+    { name: 'Private Client Prices_Final.docx', href: publicAssetUrl('Private Client Prices_Final.docx') },
+    { name: 'Supplier_Client Contract Agreement.docx', href: publicAssetUrl('Supplier_Client Contract Agreement.docx') },
 ];
 
 const BUSINESS_CONTRACT_DOCUMENTS = [
     { name: 'Client Contract Agreement.docx', href: CLIENT_CONTRACT_URL },
-    { name: 'Annexure A - Pre-inspection.docx', href: '/assets/Annexure%20A%20-%20Pre-inspection.docx' },
-    { name: 'Annexure B - Fleet Maintenance Checklist.docx', href: '/assets/Annexure%20B%20-%20Fleet%20Maintenance%20Checklist.docx' },
-    { name: 'Businesses_Fleet_Family Prices_Final.docx', href: '/assets/Businesses_Fleet_Family%20Prices_Final.docx' },
-    { name: 'Supplier_Client Contract Agreement.docx', href: '/assets/Supplier_Client%20Contract%20Agreement.docx' },
+    { name: 'Annexure A - Pre-inspection.docx', href: publicAssetUrl('Annexure A - Pre-inspection.docx') },
+    { name: 'Annexure B - Fleet Maintenance Checklist.docx', href: publicAssetUrl('Annexure B - Fleet Maintenance Checklist.docx') },
+    { name: 'Businesses_Fleet_Family Prices_Final.docx', href: publicAssetUrl('Businesses_Fleet_Family Prices_Final.docx') },
+    { name: 'Supplier_Client Contract Agreement.docx', href: publicAssetUrl('Supplier_Client Contract Agreement.docx') },
 ];
 
 function getContractDocuments(packageId) {

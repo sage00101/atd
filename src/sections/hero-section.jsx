@@ -5,14 +5,17 @@ import {
     Mail,
     MapPin,
 } from 'lucide-react';
+import heroLogo from '../assets/logos/hero-logo.svg';
+import heroImageDesktop from '../assets/images/hero-desktop.jpg';
+import heroImageMobile from '../assets/images/hero-mobile.jpg';
 
 /* ============================================================
    ASSETS
    Point these at whatever paths your build serves them from.
 ============================================================ */
-const HERO_LOGO = '/assets/hero-logo.svg';
-const HERO_IMAGE_DESKTOP = '/assets/hero-desktop.jpg';
-const HERO_IMAGE_MOBILE = '/assets/hero-mobile.jpg';
+const HERO_LOGO = heroLogo;
+const HERO_IMAGE_DESKTOP = heroImageDesktop;
+const HERO_IMAGE_MOBILE = heroImageMobile;
 
 /* Nudge the photo inside its frame without touching markup. */
 const DESKTOP_IMAGE_POSITION = '48% 58%';
