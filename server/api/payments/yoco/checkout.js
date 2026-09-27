@@ -1,11 +1,12 @@
 import crypto from 'node:crypto';
 import { IncomingForm } from 'formidable';
 import { applyCors } from '../../_lib/cors.js';
+import { generateReferenceNumber } from '../../_lib/reference.js';
 import {
+    getPromoCode,
     looksLikeVehicleRegistration,
     normaliseReg,
-    pendingBookings,
-    promoCodes,
+    savePendingBooking,
     PROMO_DISCOUNT_RATE,
     SINGLE_WASH_CENTS,
 } from '../../_lib/store.js';
@@ -83,24 +84,26 @@ export default async function handler(req, res) {
         }
 
         // --- Amount calculation (server is the only source of truth for price) ---
+        let originalAmountCents;
         let amountCents;
         let discountCents = 0;
         let appliedPromo = null;
 
         if (!isMonthly) {
-            amountCents = SINGLE_WASH_CENTS[vehicleType];
-            if (!amountCents) {
+            originalAmountCents = SINGLE_WASH_CENTS[vehicleType];
+            if (!originalAmountCents) {
                 res.status(400).json({ message: 'Unknown vehicle type.' });
                 return;
             }
+            amountCents = originalAmountCents;
 
             if (promoCode) {
                 const code = String(promoCode).trim().toUpperCase();
-                const record = promoCodes.get(code);
+                const record = await getPromoCode(code);
                 const reg = normaliseReg(customer.registration);
                 if (record && !record.usedAt && record.vehicleRegistration === reg) {
-                    discountCents = Math.round(amountCents * PROMO_DISCOUNT_RATE);
-                    amountCents -= discountCents;
+                    discountCents = Math.round(originalAmountCents * PROMO_DISCOUNT_RATE);
+                    amountCents = originalAmountCents - discountCents;
                     appliedPromo = code;
                 }
             }
@@ -120,6 +123,7 @@ export default async function handler(req, res) {
 
         const siteUrl = process.env.SITE_URL || 'https://sage00101.github.io/atd/';
         const idempotencyKey = crypto.randomUUID();
+        const reference = generateReferenceNumber();
 
         const yocoRes = await fetch('https://payments.yoco.com/api/checkouts', {
             method: 'POST',
@@ -131,10 +135,13 @@ export default async function handler(req, res) {
             body: JSON.stringify({
                 amount: amountCents,
                 currency: 'ZAR',
-                successUrl: `${siteUrl}?payment=success#booking`,
+                subtotalAmount: originalAmountCents,
+                totalDiscount: discountCents || undefined,
+                successUrl: `${siteUrl}?payment=success&ref=${reference}#booking`,
                 cancelUrl: `${siteUrl}?payment=cancelled#booking`,
                 failureUrl: `${siteUrl}?payment=failed#booking`,
                 metadata: {
+                    reference,
                     packageId,
                     packageName,
                     purchaseType,
@@ -143,6 +150,8 @@ export default async function handler(req, res) {
                     bookingTime,
                     registration: normaliseReg(customer.registration),
                     promoCode: appliedPromo || '',
+                    originalAmountCents,
+                    discountCents,
                     customerEmail: customer.email,
                     customerMobile: customer.mobile,
                     customerName: `${customer.firstName} ${customer.surname}`.trim(),
@@ -158,8 +167,10 @@ export default async function handler(req, res) {
         }
 
         // Store pending booking until the webhook confirms payment.
-        pendingBookings.set(yocoBody.id, {
+        await savePendingBooking(yocoBody.id, {
             ...booking,
+            reference,
+            originalAmountCents,
             amountCents,
             discountCents,
             appliedPromo,
@@ -167,7 +178,7 @@ export default async function handler(req, res) {
             createdAt: new Date().toISOString(),
         });
 
-        res.status(200).json({ redirectUrl: yocoBody.redirectUrl, checkoutId: yocoBody.id });
+        res.status(200).json({ redirectUrl: yocoBody.redirectUrl, checkoutId: yocoBody.id, reference });
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Secure payment could not be started.' });

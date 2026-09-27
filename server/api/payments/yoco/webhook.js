@@ -1,6 +1,14 @@
 import crypto from 'node:crypto';
 import { applyCors } from '../../_lib/cors.js';
-import { pendingBookings, processedWebhookIds, promoCodes } from '../../_lib/store.js';
+import { sendReceiptEmail } from '../../_lib/email.js';
+import {
+    getBooking,
+    getPromoCode,
+    hasProcessedWebhook,
+    markBookingConfirmed,
+    markPromoCodeUsed,
+    markWebhookProcessed,
+} from '../../_lib/store.js';
 
 // Vercel must not pre-parse the body — signature verification requires the
 // exact raw bytes that Yoco signed.
@@ -60,11 +68,11 @@ export default async function handler(req, res) {
         return;
     }
 
-    if (processedWebhookIds.has(webhookId)) {
+    if (await hasProcessedWebhook(webhookId)) {
         res.status(200).send('already processed');
         return;
     }
-    processedWebhookIds.add(webhookId);
+    await markWebhookProcessed(webhookId);
 
     let event;
     try {
@@ -80,23 +88,23 @@ export default async function handler(req, res) {
     }
 
     const checkoutId = event.payload?.metadata?.checkoutId;
-    const pending = checkoutId ? pendingBookings.get(checkoutId) : null;
+    const pending = checkoutId ? await getBooking(checkoutId) : null;
     const meta = event.payload?.metadata || pending || {};
 
-    // Mark the promo used only after payment is confirmed.
+    // Mark the promo (and its vehicle) used only after payment is confirmed.
     const promo = meta.promoCode || pending?.appliedPromo;
-    if (promo && promoCodes.has(promo)) {
-        const record = promoCodes.get(promo);
-        if (!record.usedAt) {
-            record.usedAt = new Date().toISOString();
-            promoCodes.set(promo, record);
-        }
+    if (promo && await getPromoCode(promo)) {
+        await markPromoCodeUsed(promo);
     }
 
     // TODO: persist the confirmed booking in a real database here.
 
     const amountCents = pending?.amountCents || event.payload?.amount || 0;
+    const discountCents = Number(meta.discountCents || pending?.discountCents || 0);
+    const originalAmountCents = Number(meta.originalAmountCents || pending?.originalAmountCents || amountCents + discountCents);
+    const formatZar = (cents) => `R${(cents / 100).toFixed(2)}`;
     const receipt = {
+        reference: meta.reference || pending?.reference || (checkoutId || event.id),
         bookingDate: meta.bookingDate || pending?.bookingDate,
         bookingTime: meta.bookingTime || pending?.bookingTime,
         packageName: meta.packageName || pending?.packageName,
@@ -106,14 +114,21 @@ export default async function handler(req, res) {
         customerEmail: meta.customerEmail || pending?.customer?.email,
         customerMobile: meta.customerMobile || pending?.customer?.mobile,
         address: pending?.customer?.address,
-        amountZar: `R${(amountCents / 100).toFixed(2)}`,
+        originalAmountZar: formatZar(originalAmountCents),
+        discountZar: discountCents > 0 ? formatZar(discountCents) : null,
+        amountZar: formatZar(amountCents),
         promoCode: promo || null,
+        promoApplied: Boolean(promo && discountCents > 0),
         yocoRef: checkoutId || event.id,
     };
 
-    // TODO: send receipt email / business SMS (Resend, Twilio, etc.) using `receipt`.
-    console.log('[payment.succeeded]', receipt);
+    try {
+        await sendReceiptEmail(receipt);
+    } catch (err) {
+        console.error('[receipt email failed]', receipt.reference, err);
+    }
 
-    if (checkoutId) pendingBookings.delete(checkoutId);
+    // Keep the slot durably blocked (booking stays, just flipped to "paid").
+    if (checkoutId) await markBookingConfirmed(checkoutId);
     res.status(200).send('ok');
 }

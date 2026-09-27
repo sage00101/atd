@@ -1,10 +1,9 @@
 import { applyCors } from '../_lib/cors.js';
-import { pendingBookings } from '../_lib/store.js';
+import { getBookedSlotsInRange } from '../_lib/store.js';
 
 // GET /api/bookings/availability?from=YYYY-MM-DD&to=YYYY-MM-DD
-// Returns { bookedSlots: { [date]: [time, ...] } } built from unpaid + paid
-// bookings held in memory. Replace with a real database query once bookings
-// are persisted durably.
+// Returns { bookedSlots: { [date]: [time, ...] } } from the per-date Redis
+// slot index (covers both pending and confirmed bookings).
 export default async function handler(req, res) {
     if (applyCors(req, res)) return;
     if (req.method !== 'GET') {
@@ -13,16 +12,6 @@ export default async function handler(req, res) {
     }
 
     const { from, to } = req.query || {};
-    const bookedSlots = {};
-
-    for (const booking of pendingBookings.values()) {
-        const date = booking.bookingDate;
-        const time = booking.bookingTime;
-        if (!date || !time) continue;
-        if (from && date < from) continue;
-        if (to && date > to) continue;
-        bookedSlots[date] = [...(bookedSlots[date] || []), time];
-    }
-
+    const bookedSlots = await getBookedSlotsInRange(from, to);
     res.status(200).json({ bookedSlots });
 }

@@ -191,6 +191,7 @@ export default function BookingSection() {
     const checkoutScrollRef = useRef(null);
     const [now, setNow] = useState(() => new Date());
     const [paymentStatus, setPaymentStatus] = useState(null);
+    const [paymentReference, setPaymentReference] = useState(null);
     const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
     const [bookedSlots, setBookedSlots] = useState({});
     const [selectedDate, setSelectedDate] = useState(null);
@@ -273,7 +274,9 @@ export default function BookingSection() {
         const status = params.get('payment');
         if (status && PAYMENT_STATUS_MESSAGES[status]) {
             setPaymentStatus(status);
+            setPaymentReference(params.get('ref'));
             params.delete('payment');
+            params.delete('ref');
             const cleanedSearch = params.toString();
             const cleanedUrl = `${window.location.pathname}${cleanedSearch ? `?${cleanedSearch}` : ''}${window.location.hash}`;
             window.history.replaceState(null, '', cleanedUrl);
@@ -576,7 +579,12 @@ export default function BookingSection() {
                                   : 'border-line bg-white text-body'
                         }`}
                     >
-                        <span className='flex-1'>{PAYMENT_STATUS_MESSAGES[paymentStatus].text}</span>
+                        <span className='flex-1'>
+                            {PAYMENT_STATUS_MESSAGES[paymentStatus].text}
+                            {paymentStatus === 'success' && paymentReference && (
+                                <span className='mt-1 block font-semibold'>Reference: {paymentReference}</span>
+                            )}
+                        </span>
                         <button type='button' onClick={() => setPaymentStatus(null)} className='shrink-0 text-current/70 hover:text-current' aria-label='Dismiss'>
                             <X className='size-3.5' />
                         </button>

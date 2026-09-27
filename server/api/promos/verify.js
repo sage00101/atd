@@ -1,5 +1,5 @@
 import { applyCors } from '../_lib/cors.js';
-import { looksLikeVehicleRegistration, normaliseReg, promoCodes } from '../_lib/store.js';
+import { getPromoCode, looksLikeVehicleRegistration, normaliseReg } from '../_lib/store.js';
 
 // POST /api/promos/verify
 // Body: { promoCode, vehicleRegistration, email, purchaseType }
@@ -27,7 +27,7 @@ export default async function handler(req, res) {
         return;
     }
 
-    const record = promoCodes.get(promoCode);
+    const record = await getPromoCode(promoCode);
     if (!record) {
         res.status(404).json({ valid: false, message: 'This promo code was not found.' });
         return;
