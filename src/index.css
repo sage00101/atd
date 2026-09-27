@@ -1,0 +1,211 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+/* ---------------------------------------------------------
+   Design tokens — A10tion To Detail
+   Palette: white canvas, soft warm-grey, deep sage accent.
+   Type: Montserrat for headings and strong UI emphasis.
+--------------------------------------------------------- */
+@theme {
+    --font-sans: 'Montserrat', sans-serif;
+    --font-display: 'Montserrat', sans-serif;
+
+    --color-ink: #161B18;
+    --color-body: #5B6560;
+    --color-canvas: #FFFFFF;
+    --color-canvasoft: #F6F7F3;
+    --color-cream: #FBFAF7;
+    --color-line: #E6E9E3;
+
+    --color-sage: #2F4B3C;
+    --color-sagedeep: #1E3128;
+    --color-sagelight: #EAF0E9;
+    --color-sagemute: #7E9686;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    @apply bg-white text-ink text-sm antialiased;
+    font-family: var(--font-sans);
+}
+
+button {
+    @apply cursor-pointer;
+}
+
+.font-display {
+    font-family: var(--font-display);
+}
+
+::selection {
+    background: var(--color-sage);
+    color: #fff;
+}
+
+/* Scroll-reveal utility: pair with the useReveal hook / IntersectionObserver */
+.reveal {
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity .8s cubic-bezier(.22, .61, .36, 1), transform .8s cubic-bezier(.22, .61, .36, 1);
+}
+
+.reveal.in {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* "Gleam" sweep — signature hover treatment evoking a polished clear coat */
+.gleam {
+    position: relative;
+    overflow: hidden;
+}
+
+.gleam::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -160%;
+    width: 55%;
+    height: 100%;
+    background: linear-gradient(115deg, transparent, rgba(255, 255, 255, .5), transparent);
+    transform: skewX(-18deg);
+    transition: left .85s cubic-bezier(.22, .61, .36, 1);
+    pointer-events: none;
+}
+
+.gleam:hover::after {
+    left: 160%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .reveal {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+
+    .gleam::after {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    body {
+        font-size: 0.92rem;
+    }
+
+    section {
+        text-align: center;
+    }
+
+    header .font-display,
+    footer .font-display {
+        font-size: 1rem;
+    }
+
+    .max-w-7xl {
+        max-width: 100%;
+    }
+
+    .px-5,
+    .px-4,
+    .px-6,
+    .px-8 {
+        padding-left: 0.85rem !important;
+        padding-right: 0.85rem !important;
+    }
+
+    .py-4,
+    .py-5,
+    .py-6,
+    .py-8,
+    .py-10,
+    .pt-16 {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+
+    .gap-12,
+    .gap-8,
+    .gap-10,
+    .gap-14,
+    .gap-16,
+    .gap-20 {
+        gap: 1rem !important;
+    }
+
+    .mobile-text-small,
+    .text-body,
+    .text-ink,
+    header a,
+    footer a,
+    section a {
+        line-height: 1.5;
+    }
+
+    button,
+    input[type='submit'],
+    input[type='button'],
+    a[class*='rounded-full'] {
+        font-size: 0.85rem !important;
+        padding: 0.75rem 1rem !important;
+    }
+
+    .mt-32,
+    .mt-28,
+    .mt-24,
+    .mt-20,
+    .mt-16,
+    .mt-14,
+    .mt-12,
+    .mt-10,
+    .mt-8 {
+        margin-top: 1rem !important;
+    }
+
+    .mb-5,
+    .mb-6,
+    .mb-8 {
+        margin-bottom: 0.85rem !important;
+    }
+
+    .break-word {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .mobile-left-text,
+    .mobile-left-text * {
+        text-align: left !important;
+    }
+
+    .mobile-left-items {
+        justify-content: flex-start !important;
+        align-items: flex-start !important;
+    }
+
+    .mobile-left-stack {
+        align-items: flex-start !important;
+    }
+
+    .mobile-left-stack > * {
+        justify-content: flex-start !important;
+    }
+
+    footer .mobile-left-text,
+    footer .mobile-left-text * {
+        text-align: left !important;
+    }
+
+    footer .mobile-left-stack {
+        align-items: flex-start !important;
+    }
+
+    footer .mobile-left-stack > * {
+        justify-content: flex-start !important;
+    }
+}
