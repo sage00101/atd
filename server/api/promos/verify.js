@@ -1,8 +1,8 @@
 import { applyCors } from '../_lib/cors.js';
-import { getPromoCode, looksLikeVehicleRegistration, normaliseReg } from '../_lib/store.js';
+import { getPromoCode, looksLikeEmail, normaliseEmail } from '../_lib/store.js';
 
 // POST /api/promos/verify
-// Body: { promoCode, vehicleRegistration, email, purchaseType }
+// Body: { promoCode, email, purchaseType }
 export default async function handler(req, res) {
     if (applyCors(req, res)) return;
     if (req.method !== 'POST') {
@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     }
 
     const promoCode = String(req.body?.promoCode || '').trim().toUpperCase();
-    const vehicleRegistration = normaliseReg(req.body?.vehicleRegistration);
+    const email = normaliseEmail(req.body?.email);
     const purchaseType = req.body?.purchaseType || 'single';
 
     if (purchaseType !== 'single') {
@@ -22,8 +22,8 @@ export default async function handler(req, res) {
         res.status(400).json({ valid: false, message: 'Enter a promo code.' });
         return;
     }
-    if (!looksLikeVehicleRegistration(vehicleRegistration)) {
-        res.status(400).json({ valid: false, message: 'Enter a valid-looking vehicle registration number.' });
+    if (!looksLikeEmail(email)) {
+        res.status(400).json({ valid: false, message: 'Enter a valid email address.' });
         return;
     }
 
@@ -36,10 +36,10 @@ export default async function handler(req, res) {
         res.status(410).json({ valid: false, message: 'This promo code has already been used.' });
         return;
     }
-    if (record.vehicleRegistration !== vehicleRegistration) {
+    if (record.email !== email) {
         res.status(400).json({
             valid: false,
-            message: 'This promo code is not linked to the registration number you entered.',
+            message: 'This promo code is not linked to the email address you entered.',
         });
         return;
     }

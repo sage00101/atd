@@ -14,8 +14,8 @@ function escapeHtml(value) {
     })[char]);
 }
 
-/** Email delivering a one-time 10%-off single-wash promo code after vehicle approval. */
-export function buildPromoCodeEmailHtml({ code, vehicleRegistration }) {
+/** Email delivering a one-time 10%-off single-wash promo code after registration approval. */
+export function buildPromoCodeEmailHtml({ code }) {
     return `
 <!doctype html>
 <html>
@@ -33,7 +33,7 @@ export function buildPromoCodeEmailHtml({ code, vehicleRegistration }) {
                     <tr>
                         <td style="padding:28px 32px;">
                             <p style="margin:0 0 16px;color:${BRAND.body};font-size:14px;line-height:1.6;">
-                                Your vehicle (${escapeHtml(vehicleRegistration)}) has been verified. Use the one-time code below at checkout for
+                                You're approved! Use the one-time code below at checkout for
                                 10% off a single wash.
                             </p>
                             <div style="margin:0 0 20px;padding:14px 16px;background:${BRAND.sagelight};border-radius:10px;text-align:center;">
@@ -41,7 +41,7 @@ export function buildPromoCodeEmailHtml({ code, vehicleRegistration }) {
                                 <p style="margin:4px 0 0;color:${BRAND.ink};font-size:22px;font-weight:700;letter-spacing:.06em;">${escapeHtml(code)}</p>
                             </div>
                             <p style="margin:0;color:${BRAND.body};font-size:12.5px;line-height:1.6;">
-                                Enter this code (and the same vehicle registration and email) at the single-wash checkout step.
+                                Enter this code (and the same email address) at the single-wash checkout step.
                                 It can only be used once and becomes invalid immediately after a successful purchase.
                             </p>
                         </td>

@@ -28,6 +28,14 @@ export function looksLikeVehicleRegistration(value) {
     return true;
 }
 
+export function normaliseEmail(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+export function looksLikeEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normaliseEmail(value));
+}
+
 /** Generate a human-friendly one-time code: A10-XXXXXXXX */
 export function generatePromoCode() {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -39,51 +47,54 @@ export function generatePromoCode() {
 }
 
 // ---------------------------------------------------------------------------
-// Promo codes + vehicle lifetime history
+// Promo codes + per-email lifetime history
+//
+// Codes are tied to the customer's email address, not their vehicle
+// registration — we deliberately avoid persisting vehicle registration
+// numbers as a tracked identifier in our own storage.
 // ---------------------------------------------------------------------------
 
 const promoCodeKey = (code) => `promo:code:${code}`;
-const vehicleHistoryKey = (reg) => `promo:vehicle:${reg}`;
+const emailHistoryKey = (email) => `promo:email:${email}`;
 
 export async function getPromoCode(code) {
     return redis.get(promoCodeKey(code));
 }
 
-/** True if this vehicle registration has ever been issued a promo code (used or not). */
-export async function hasVehicleAlreadyRegistered(vehicleRegistration) {
-    const reg = normaliseReg(vehicleRegistration);
-    const history = await redis.get(vehicleHistoryKey(reg));
+/** True if this email address has ever been issued a promo code (used or not). */
+export async function hasEmailAlreadyRegistered(email) {
+    const normalised = normaliseEmail(email);
+    const history = await redis.get(emailHistoryKey(normalised));
     return Boolean(history);
 }
 
-/** Call after approving a vehicle promo registration (admin action via /api/promos/issue). */
-export async function issuePromoForRegistration({ vehicleRegistration, email }) {
-    if (!looksLikeVehicleRegistration(vehicleRegistration)) {
-        throw new Error('Invalid registration format');
+/** Call after approving a promo registration (admin action via /api/promos/issue). */
+export async function issuePromoForRegistration({ email }) {
+    if (!looksLikeEmail(email)) {
+        throw new Error('Invalid email address.');
     }
-    const reg = normaliseReg(vehicleRegistration);
+    const normalisedEmail = normaliseEmail(email);
 
     const code = generatePromoCode();
     const record = {
         code,
-        vehicleRegistration: reg,
-        email: String(email || '').trim().toLowerCase(),
+        email: normalisedEmail,
         usedAt: null,
         createdAt: new Date().toISOString(),
     };
 
-    // Atomic "claim" — only succeeds if no history exists yet for this vehicle,
-    // preventing a race between two simultaneous issue calls for the same reg.
-    const claimed = await redis.set(vehicleHistoryKey(reg), { code, issuedAt: record.createdAt, usedAt: null }, { nx: true });
+    // Atomic "claim" — only succeeds if no history exists yet for this email,
+    // preventing a race between two simultaneous issue calls for the same address.
+    const claimed = await redis.set(emailHistoryKey(normalisedEmail), { code, issuedAt: record.createdAt, usedAt: null }, { nx: true });
     if (!claimed) {
-        throw new Error('This vehicle registration has already been issued a promo code and cannot be registered again.');
+        throw new Error('This email address has already been issued a promo code and cannot be registered again.');
     }
 
     await redis.set(promoCodeKey(code), record);
     return record;
 }
 
-/** Marks a promo code (and its vehicle) as redeemed, so neither can be used again. */
+/** Marks a promo code (and its email) as redeemed, so neither can be used again. */
 export async function markPromoCodeUsed(code) {
     const record = await redis.get(promoCodeKey(code));
     if (!record || record.usedAt) return record;
@@ -91,7 +102,7 @@ export async function markPromoCodeUsed(code) {
     record.usedAt = new Date().toISOString();
     await redis.set(promoCodeKey(code), record);
 
-    const historyKey = vehicleHistoryKey(record.vehicleRegistration);
+    const historyKey = emailHistoryKey(record.email);
     const history = await redis.get(historyKey);
     if (history) {
         history.usedAt = record.usedAt;

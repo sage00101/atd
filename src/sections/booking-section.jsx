@@ -434,21 +434,16 @@ export default function BookingSection() {
 
     const verifyPromo = async () => {
         const cleanPromo = promoCode.trim().toUpperCase();
-        const cleanRegistration = customer.registration.trim().toUpperCase();
+        const cleanEmail = customer.email.trim();
 
         if (!cleanPromo) {
             setPromoState('error');
-            setPromoMessage('Enter the one-time promo code you received after vehicle registration.');
+            setPromoMessage('Enter the one-time promo code you received after registering.');
             return;
         }
-        if (!customer.email.trim() || !cleanRegistration) {
+        if (!cleanEmail) {
             setPromoState('error');
-            setPromoMessage('Enter your email address and vehicle registration above before verifying.');
-            return;
-        }
-        if (!looksLikeVehicleRegistration(cleanRegistration)) {
-            setPromoState('error');
-            setPromoMessage('Enter a valid-looking vehicle registration number (e.g. CA 123-456 or GP 12 AB C).');
+            setPromoMessage('Enter your email address above before verifying.');
             return;
         }
 
@@ -460,14 +455,13 @@ export default function BookingSection() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     promoCode: cleanPromo,
-                    vehicleRegistration: cleanRegistration,
-                    email: customer.email.trim(),
+                    email: cleanEmail,
                     purchaseType: 'single',
                 }),
             });
             const result = await response.json().catch(() => ({}));
             if (!response.ok || !result.valid) {
-                throw new Error(result.message || 'This promo code is invalid, already used, or not linked to this registration.');
+                throw new Error(result.message || 'This promo code is invalid, already used, or not linked to this email address.');
             }
             setPromoState('success');
             setPromoMessage(

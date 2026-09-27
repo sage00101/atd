@@ -5,6 +5,7 @@ import { generateReferenceNumber } from '../../_lib/reference.js';
 import {
     getPromoCode,
     looksLikeVehicleRegistration,
+    normaliseEmail,
     normaliseReg,
     savePendingBooking,
     PROMO_DISCOUNT_RATE,
@@ -100,8 +101,8 @@ export default async function handler(req, res) {
             if (promoCode) {
                 const code = String(promoCode).trim().toUpperCase();
                 const record = await getPromoCode(code);
-                const reg = normaliseReg(customer.registration);
-                if (record && !record.usedAt && record.vehicleRegistration === reg) {
+                const email = normaliseEmail(customer.email);
+                if (record && !record.usedAt && record.email === email) {
                     discountCents = Math.round(originalAmountCents * PROMO_DISCOUNT_RATE);
                     amountCents = originalAmountCents - discountCents;
                     appliedPromo = code;

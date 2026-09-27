@@ -56,8 +56,8 @@ export async function sendReceiptEmail(receipt) {
 }
 
 /** Emails a newly issued one-time promo code to the verified customer. */
-export async function sendPromoCodeEmail({ code, vehicleRegistration, email }) {
-    const html = buildPromoCodeEmailHtml({ code, vehicleRegistration });
+export async function sendPromoCodeEmail({ code, email }) {
+    const html = buildPromoCodeEmailHtml({ code });
     const businessEmail = process.env.BUSINESS_EMAIL;
 
     await sendViaResend({
