@@ -541,7 +541,7 @@ export default function PricingSection() {
                         })}
                     </div>
 
-                    <button type='button' onClick={() => setServicesOpen(true)} className='flex min-h-[39px] min-w-0 items-center justify-center gap-1 rounded-[12px] border border-[#cbdace] bg-white px-2 text-[8px] font-semibold text-[#31553c] transition hover:border-[#91ae98] hover:bg-[#edf4ee] sm:min-h-[43px] sm:min-w-[125px] sm:px-2.5 sm:text-[9px]' aria-haspopup='dialog'>
+                    <button type='button' onClick={() => setServicesOpen(true)} className='flex min-h-[39px] min-w-0 items-center justify-center gap-1 rounded-[12px] border border-[#cbdace] bg-white px-2 text-[9.5px] font-semibold text-[#31553c] transition hover:border-[#91ae98] hover:bg-[#edf4ee] sm:min-h-[43px] sm:min-w-[125px] sm:px-2.5 sm:text-[10.5px]' aria-haspopup='dialog'>
                         Services offered
                         <ChevronDown className='size-3.5' />
                     </button>
@@ -586,6 +586,7 @@ export default function PricingSection() {
                                 );
                             })}
                         </div>
+                        <p className='mx-auto mt-2 max-w-[540px] text-center text-[10px] font-medium text-body sm:text-[11.5px]'>Contract options: 3, 6, or 12 months.</p>
 
                         <div className='mt-3 grid items-start gap-3 sm:grid-cols-2 sm:gap-4'>
                             {activeData.packages.map((pkg) => (
@@ -618,9 +619,25 @@ export default function PricingSection() {
                         <div className='p-3.5 sm:p-5'>
                             <p className='text-[9.5px] leading-[1.5] text-body sm:text-[10.5px]'>Choose how many months you want your washes for. Review, complete and attach all required documents when making your purchase.</p>
                             <div className={`mt-3 space-y-2 rounded-[12px] border border-line bg-[#fafcfb] p-3 ${contractPrompted ? 'ring-2 ring-sage/30 ring-offset-2' : ''}`}>
-                                <label className='block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Contract duration in months
-                                    <input type='number' min='1' step='1' value={contractMonths || ''} onChange={(event) => { setContractMonths(event.target.value); setContractPrompted(false); }} placeholder='e.g. 6' className='mt-1 h-10 w-full rounded-[9px] border border-line bg-white px-2.5 text-[11px] text-ink outline-none focus:border-sage/60 sm:text-[12px]' />
-                                </label>
+                                <div className='block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>
+                                    Contract duration in months
+                                    <div className='mt-1 grid grid-cols-3 gap-2'>
+                                        {[3, 6, 12].map((months) => {
+                                            const selected = String(contractMonths) === String(months);
+                                            return (
+                                                <button
+                                                    key={months}
+                                                    type='button'
+                                                    onClick={() => { setContractMonths(String(months)); setContractPrompted(false); }}
+                                                    aria-pressed={selected}
+                                                    className={`min-h-[40px] rounded-[9px] border text-[11px] font-semibold transition sm:text-[12px] ${selected ? 'border-sage/60 bg-[#1d3426] text-white' : 'border-line bg-white text-ink hover:border-sage/45 hover:bg-sagelight'}`}
+                                                >
+                                                    {months}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
                                 <button type='button' onClick={() => { downloadContractDocuments(getContractDocuments(pendingPackage.id)); rememberContractDownload(); setContractDownloaded(true); }} className='flex min-h-[38px] w-full items-center justify-center gap-2 rounded-[9px] bg-[#1a2a20] px-3 text-[9px] font-semibold text-white transition hover:bg-[#24362a] sm:text-[10px]'>
                                     <FileText className='size-3.5' />
                                     {contractDownloaded ? 'Download documents' : 'Download required documents'}

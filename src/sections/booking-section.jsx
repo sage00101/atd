@@ -22,13 +22,20 @@ import {
 import useReveal from '../hooks/use-reveal';
 import VehiclePromoModal from '../components/vehicle-promo-modal';
 
-const PAYMENT_API_ENDPOINT = '/api/payments/yoco/checkout';
-const PROMO_VERIFY_ENDPOINT = '/api/promos/verify';
-const AVAILABILITY_API_ENDPOINT = '/api/bookings/availability';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const PAYMENT_API_ENDPOINT = `${API_BASE_URL}/api/payments/yoco/checkout`;
+const PROMO_VERIFY_ENDPOINT = `${API_BASE_URL}/api/promos/verify`;
+const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
 const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 15);
 const BUSINESS_ADDRESS = '2 Pinnacle Crescent, Strandfontein';
 const SINGLE_WASH_VEHICLE_KEY = 'a10tion-single-wash-vehicle-type';
+
+const PAYMENT_STATUS_MESSAGES = {
+    success: { tone: 'success', text: 'Payment received — thank you! Your booking is confirmed and a receipt is on its way.' },
+    cancelled: { tone: 'info', text: 'Checkout was cancelled. No payment was taken — you can restart whenever you\u2019re ready.' },
+    failed: { tone: 'error', text: 'The payment did not go through. Please try again or use a different card.' },
+};
 
 const PRIVATE_DOCUMENT_NAMES = [
     'Client Contract Agreement.docx',
@@ -183,6 +190,7 @@ export default function BookingSection() {
     const checkoutDialogRef = useRef(null);
     const checkoutScrollRef = useRef(null);
     const [now, setNow] = useState(() => new Date());
+    const [paymentStatus, setPaymentStatus] = useState(null);
     const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
     const [bookedSlots, setBookedSlots] = useState({});
     const [selectedDate, setSelectedDate] = useState(null);
@@ -259,6 +267,18 @@ export default function BookingSection() {
         while (dates.length % 5 !== 0) dates.push(null);
         return dates;
     }, [calendarMonthKey, todayKey]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const status = params.get('payment');
+        if (status && PAYMENT_STATUS_MESSAGES[status]) {
+            setPaymentStatus(status);
+            params.delete('payment');
+            const cleanedSearch = params.toString();
+            const cleanedUrl = `${window.location.pathname}${cleanedSearch ? `?${cleanedSearch}` : ''}${window.location.hash}`;
+            window.history.replaceState(null, '', cleanedUrl);
+        }
+    }, []);
 
     useEffect(() => {
         const refreshClock = () => setNow(new Date());
@@ -395,7 +415,7 @@ export default function BookingSection() {
         : !selectedTime
           ? 'Choose a time to continue'
                     : !isMonthly && !selectedVehicleType
-                        ? 'Choose your vehicle type in pricing'
+                        ? 'Select your package to purchase'
           : isMonthly && !selectedContract
             ? 'Choose a monthly package first'
             : null;
@@ -471,26 +491,23 @@ export default function BookingSection() {
             return;
         }
 
-        const requiredDocumentNames = getRequiredDocumentNames(selectedPackage);
-        const uploadedDocumentNames = new Set(contractFiles.map((file) => file.name));
-        const hasRequiredDocumentSet = requiredDocumentNames.every((name) => uploadedDocumentNames.has(name));
-        const isValidContractFiles = contractFiles.length === requiredDocumentNames.length
-            && hasRequiredDocumentSet
-            && contractFiles.every((file) => (
-                (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                    || file.name.toLowerCase().endsWith('.docx'))
-                && file.size <= 10 * 1024 * 1024
-            ));
+        if (isMonthly) {
+            const requiredDocumentNames = getRequiredDocumentNames(selectedPackage);
+            const uploadedDocumentNames = new Set(contractFiles.map((file) => file.name));
+            const hasRequiredDocumentSet = requiredDocumentNames.every((name) => uploadedDocumentNames.has(name));
+            const isValidContractFiles = contractFiles.length === requiredDocumentNames.length
+                && hasRequiredDocumentSet
+                && contractFiles.every((file) => (
+                    (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                        || file.name.toLowerCase().endsWith('.docx'))
+                    && file.size <= 10 * 1024 * 1024
+                ));
 
-        if (isMonthly && !isValidContractFiles) {
-            setContractFileError(`Please attach the correct ${requiredDocumentNames.length} completed package documents. Each file must be a DOCX no larger than 10 MB.`);
-            setPaymentError('All completed package documents are required for a monthly package.');
-            return;
-        }
-        if (!contractFiles.length) {
-            setContractFileError('Please attach at least one document before continuing.');
-            setPaymentError('A document is required before continuing.');
-            return;
+            if (!isValidContractFiles) {
+                setContractFileError(`Please attach the correct ${requiredDocumentNames.length} completed package documents. Each file must be a DOCX no larger than 10 MB.`);
+                setPaymentError('All completed package documents are required for a monthly package.');
+                return;
+            }
         }
 
         setIsSubmitting(true);
@@ -547,6 +564,24 @@ export default function BookingSection() {
                     <h2 className='mt-1 font-display text-[24px] font-medium tracking-[-0.025em] text-ink sm:text-[32px]'>Reserve your slot</h2>
                     <p className='mx-auto mt-1 max-w-lg text-[9.5px] leading-[1.5] text-body sm:text-[11px]'>Choose a date and time, then complete your vehicle and payment details.</p>
                 </div>
+
+                {paymentStatus && PAYMENT_STATUS_MESSAGES[paymentStatus] && (
+                    <div
+                        role='status'
+                        className={`mx-auto mt-3 flex max-w-xl items-start gap-2 rounded-[12px] border px-3 py-2.5 text-[9.5px] leading-[1.5] sm:text-[10.5px] ${
+                            PAYMENT_STATUS_MESSAGES[paymentStatus].tone === 'success'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                : PAYMENT_STATUS_MESSAGES[paymentStatus].tone === 'error'
+                                  ? 'border-red-200 bg-red-50 text-red-700'
+                                  : 'border-line bg-white text-body'
+                        }`}
+                    >
+                        <span className='flex-1'>{PAYMENT_STATUS_MESSAGES[paymentStatus].text}</span>
+                        <button type='button' onClick={() => setPaymentStatus(null)} className='shrink-0 text-current/70 hover:text-current' aria-label='Dismiss'>
+                            <X className='size-3.5' />
+                        </button>
+                    </div>
+                )}
 
                 <div className='mx-auto mt-3 flex max-w-xl items-center justify-between gap-2 rounded-[12px] border border-line bg-white px-2.5 py-2 sm:mt-4 sm:px-3'>
                     <div className='flex min-w-0 items-center gap-2'>
@@ -663,7 +698,19 @@ export default function BookingSection() {
                             </p>
                         </div>
 
-                        <button type='button' disabled={Boolean(missingSelection)} onClick={() => { setPaymentError(''); setCheckoutOpen(true); }} className={`group mt-2.5 flex min-h-[38px] w-full items-center justify-center gap-2 rounded-[11px] px-4 text-[10px] font-semibold transition sm:min-h-[44px] sm:text-[11px] ${missingSelection ? 'cursor-not-allowed bg-ink/15 text-body/55' : 'bg-ink text-white hover:-translate-y-px'}`}>
+                        <button
+                            type='button'
+                            disabled={Boolean(missingSelection) && missingSelection !== 'Select your package to purchase'}
+                            onClick={() => {
+                                if (missingSelection === 'Select your package to purchase') {
+                                    document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                    return;
+                                }
+                                setPaymentError('');
+                                setCheckoutOpen(true);
+                            }}
+                            className={`group mt-2.5 flex min-h-[38px] w-full items-center justify-center gap-2 rounded-[11px] px-4 text-[10px] font-semibold transition sm:min-h-[44px] sm:text-[11px] ${missingSelection ? missingSelection === 'Select your package to purchase' ? 'bg-ink text-white hover:-translate-y-px' : 'cursor-not-allowed bg-ink/15 text-body/55' : 'bg-ink text-white hover:-translate-y-px'}`}
+                        >
                             {missingSelection || 'Continue to payment details'}
                             <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' />
                         </button>
@@ -811,73 +858,75 @@ export default function BookingSection() {
                                         <textarea className={`${fieldClassName} min-h-[54px] resize-none py-2 sm:min-h-[62px]`} name='notes' value={customer.notes} onChange={updateCustomer} placeholder={`Outside ${SERVICE_RADIUS_KM} km? Add your travel request here.`} maxLength={300} rows={2} />
                                     </label>
 
-                                    <div className='mt-3 rounded-2xl border border-[#cddbd0] bg-white p-3.5 sm:p-4'>
-                                        <div className='flex items-start gap-3'>
-                                            <div className='grid size-8 shrink-0 place-items-center rounded-xl bg-[#edf3ee] text-sage'>
-                                                <Package className='size-4' />
-                                            </div>
-                                            <div className='min-w-0'>
-                                                <p className='text-[8px] font-semibold uppercase tracking-[0.11em] text-sage sm:text-[9px]'>Required package documents</p>
-                                                <p className='mt-1 text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>
-                                                    Review, complete and attach all {getRequiredDocumentNames(selectedPackage).length} required documents before continuing.
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div className='mt-3 rounded-xl border border-dashed border-[#c9d6cc] bg-[#f8faf8] p-3'>
-                                            <input
-                                                type='file'
-                                                name='contract_files'
-                                                accept='.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                                                multiple
-                                                onChange={(event) => {
-                                                    const selectedFiles = Array.from(event.target.files || []);
-                                                    const filesByName = new Map(contractFiles.map((file) => [file.name, file]));
-                                                    selectedFiles.forEach((file) => filesByName.set(file.name, file));
-                                                    setContractFiles(Array.from(filesByName.values()));
-                                                    event.target.value = '';
-                                                    setContractFileError('');
-                                                    setPaymentError('');
-                                                }}
-                                                className='block w-full cursor-pointer text-[9px] text-body file:mr-2 file:cursor-pointer file:rounded-full file:border-0 file:bg-[#dfece2] file:px-3 file:py-1.5 file:text-[9px] file:font-semibold file:text-[#31553c]'
-                                            />
-
-                                            {contractFiles.length > 0 && (
-                                                <div className='mt-2 grid gap-1'>
-                                                    {contractFiles.map((file) => (
-                                                        <div key={`${file.name}-${file.lastModified}`} className='flex min-w-0 items-center gap-1.5 rounded-lg bg-white px-2 py-1.5 text-[8.5px] font-medium text-emerald-700'>
-                                                            <CheckCircle2 className='size-3 shrink-0' />
-                                                            <span className='min-w-0 flex-1 truncate'>{file.name}</span>
-                                                            <button
-                                                                type='button'
-                                                                onClick={() => {
-                                                                    setContractFiles((current) => current.filter((currentFile) => currentFile.name !== file.name));
-                                                                    setContractFileError('');
-                                                                    setPaymentError('');
-                                                                }}
-                                                                className='grid size-6 shrink-0 place-items-center rounded text-body transition hover:bg-red-50 hover:text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sagedeep'
-                                                                aria-label={`Remove ${file.name}`}
-                                                                title='Remove file'
-                                                            >
-                                                                <X className='size-3.5' />
-                                                            </button>
-                                                        </div>
-                                                    ))}
+                                    {isMonthly && (
+                                        <div className='mt-3 rounded-2xl border border-[#cddbd0] bg-white p-3.5 sm:p-4'>
+                                            <div className='flex items-start gap-3'>
+                                                <div className='grid size-8 shrink-0 place-items-center rounded-xl bg-[#edf3ee] text-sage'>
+                                                    <Package className='size-4' />
                                                 </div>
-                                            )}
+                                                <div className='min-w-0'>
+                                                    <p className='text-[8px] font-semibold uppercase tracking-[0.11em] text-sage sm:text-[9px]'>Required package documents</p>
+                                                    <p className='mt-1 text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>
+                                                        Review, complete and attach all {getRequiredDocumentNames(selectedPackage).length} required documents before continuing.
+                                                    </p>
+                                                </div>
+                                            </div>
 
-                                            {contractFileError && (
-                                                <p className='mt-2 rounded-lg bg-red-50 px-2.5 py-2 text-[8.5px] leading-[1.4] text-red-700' role='alert'>
-                                                    {contractFileError}
-                                                </p>
-                                            )}
+                                            <div className='mt-3 rounded-xl border border-dashed border-[#c9d6cc] bg-[#f8faf8] p-3'>
+                                                <input
+                                                    type='file'
+                                                    name='contract_files'
+                                                    accept='.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                                                    multiple
+                                                    onChange={(event) => {
+                                                        const selectedFiles = Array.from(event.target.files || []);
+                                                        const filesByName = new Map(contractFiles.map((file) => [file.name, file]));
+                                                        selectedFiles.forEach((file) => filesByName.set(file.name, file));
+                                                        setContractFiles(Array.from(filesByName.values()));
+                                                        event.target.value = '';
+                                                        setContractFileError('');
+                                                        setPaymentError('');
+                                                    }}
+                                                    className='block w-full cursor-pointer text-[9px] text-body file:mr-2 file:cursor-pointer file:rounded-full file:border-0 file:bg-[#dfece2] file:px-3 file:py-1.5 file:text-[9px] file:font-semibold file:text-[#31553c]'
+                                                />
+
+                                                {contractFiles.length > 0 && (
+                                                    <div className='mt-2 grid gap-1'>
+                                                        {contractFiles.map((file) => (
+                                                            <div key={`${file.name}-${file.lastModified}`} className='flex min-w-0 items-center gap-1.5 rounded-lg bg-white px-2 py-1.5 text-[8.5px] font-medium text-emerald-700'>
+                                                                <CheckCircle2 className='size-3 shrink-0' />
+                                                                <span className='min-w-0 flex-1 truncate'>{file.name}</span>
+                                                                <button
+                                                                    type='button'
+                                                                    onClick={() => {
+                                                                        setContractFiles((current) => current.filter((currentFile) => currentFile.name !== file.name));
+                                                                        setContractFileError('');
+                                                                        setPaymentError('');
+                                                                    }}
+                                                                    className='grid size-6 shrink-0 place-items-center rounded text-body transition hover:bg-red-50 hover:text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-sagedeep'
+                                                                    aria-label={`Remove ${file.name}`}
+                                                                    title='Remove file'
+                                                                >
+                                                                    <X className='size-3.5' />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {contractFileError && (
+                                                    <p className='mt-2 rounded-lg bg-red-50 px-2.5 py-2 text-[8.5px] leading-[1.4] text-red-700' role='alert'>
+                                                        {contractFileError}
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            <label className='mt-3 flex items-start gap-2 text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>
+                                                <input type='checkbox' checked={contractAccepted} onChange={(event) => setContractAccepted(event.target.checked)} className='mt-0.5 accent-[#365943]' required />
+                                                <span>I confirm that all required documents have been reviewed, completed and attached for my selected {selectedContract?.replace('-', ' ')} duration.</span>
+                                            </label>
                                         </div>
-
-                                        <label className='mt-3 flex items-start gap-2 text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>
-                                            <input type='checkbox' checked={contractAccepted} onChange={(event) => setContractAccepted(event.target.checked)} className='mt-0.5 accent-[#365943]' required />
-                                            <span>I confirm that all required documents have been reviewed, completed and attached for my selected {selectedContract?.replace('-', ' ')} duration.</span>
-                                        </label>
-                                    </div>
+                                    )}
 
                                     <div className='mt-2.5 grid gap-2'>
                                         <label className='flex items-start gap-2 rounded-xl border border-line bg-white/80 px-3 py-2.5'>
