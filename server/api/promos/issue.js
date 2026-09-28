@@ -4,10 +4,11 @@ import { issuePromoForRegistration } from '../_lib/store.js';
 
 // POST /api/promos/issue
 // Header: x-admin-key: <ADMIN_API_KEY>
-// Body: { email }
+// Body: { firstName, surname, mobile, email }
 // Call this yourself once you've manually verified a promo registration
 // (e.g. from the Formspree submission email). Codes are tied to the
-// customer's email only — we don't persist vehicle registrations.
+// customer's first name + surname + cell number — one code per person,
+// ever. Email is only used to deliver the code and isn't checked for reuse.
 export default async function handler(req, res) {
     if (applyCors(req, res)) return;
     if (req.method !== 'POST') {
@@ -21,15 +22,15 @@ export default async function handler(req, res) {
         return;
     }
 
-    const { email } = req.body || {};
-    if (!email) {
-        res.status(400).json({ message: 'email is required.' });
+    const { firstName, surname, mobile, email } = req.body || {};
+    if (!firstName || !surname || !mobile || !email) {
+        res.status(400).json({ message: 'firstName, surname, mobile and email are required.' });
         return;
     }
 
     let record;
     try {
-        record = await issuePromoForRegistration({ email });
+        record = await issuePromoForRegistration({ firstName, surname, mobile, email });
     } catch (err) {
         res.status(400).json({ message: err instanceof Error ? err.message : 'Could not issue promo code.' });
         return;

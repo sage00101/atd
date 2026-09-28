@@ -36,6 +36,14 @@ export function looksLikeEmail(value) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normaliseEmail(value));
 }
 
+export function normaliseName(value) {
+    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+export function normalisePhone(value) {
+    return String(value || '').replace(/\D/g, '');
+}
+
 /** Generate a human-friendly one-time code: A10-XXXXXXXX */
 export function generatePromoCode() {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -47,54 +55,63 @@ export function generatePromoCode() {
 }
 
 // ---------------------------------------------------------------------------
-// Promo codes + per-email lifetime history
+// Promo codes + per-person lifetime history
 //
-// Codes are tied to the customer's email address, not their vehicle
-// registration — we deliberately avoid persisting vehicle registration
-// numbers as a tracked identifier in our own storage.
+// Eligibility is tied to (first name + surname + cell number), not email and
+// not vehicle registration — we deliberately avoid persisting vehicle
+// registration numbers as a tracked identifier in our own storage. Email is
+// still collected purely so we have somewhere to deliver the code.
 // ---------------------------------------------------------------------------
 
 const promoCodeKey = (code) => `promo:code:${code}`;
-const emailHistoryKey = (email) => `promo:email:${email}`;
+const identityKey = (firstName, surname, mobile) => `promo:identity:${normaliseName(firstName)}|${normaliseName(surname)}|${normalisePhone(mobile)}`;
 
 export async function getPromoCode(code) {
     return redis.get(promoCodeKey(code));
 }
 
-/** True if this email address has ever been issued a promo code (used or not). */
-export async function hasEmailAlreadyRegistered(email) {
-    const normalised = normaliseEmail(email);
-    const history = await redis.get(emailHistoryKey(normalised));
+/** True if this name + surname + cell number combo has ever been issued a promo code (used or not). */
+export async function hasPersonAlreadyRegistered({ firstName, surname, mobile }) {
+    const history = await redis.get(identityKey(firstName, surname, mobile));
     return Boolean(history);
 }
 
 /** Call after approving a promo registration (admin action via /api/promos/issue). */
-export async function issuePromoForRegistration({ email }) {
+export async function issuePromoForRegistration({ firstName, surname, mobile, email }) {
+    if (!String(firstName || '').trim() || !String(surname || '').trim()) {
+        throw new Error('First name and surname are required.');
+    }
+    if (normalisePhone(mobile).length < 7) {
+        throw new Error('Invalid cell number.');
+    }
     if (!looksLikeEmail(email)) {
         throw new Error('Invalid email address.');
     }
-    const normalisedEmail = normaliseEmail(email);
 
+    const key = identityKey(firstName, surname, mobile);
     const code = generatePromoCode();
     const record = {
         code,
-        email: normalisedEmail,
+        firstName: normaliseName(firstName),
+        surname: normaliseName(surname),
+        mobile: normalisePhone(mobile),
+        email: normaliseEmail(email),
         usedAt: null,
         createdAt: new Date().toISOString(),
     };
 
-    // Atomic "claim" — only succeeds if no history exists yet for this email,
-    // preventing a race between two simultaneous issue calls for the same address.
-    const claimed = await redis.set(emailHistoryKey(normalisedEmail), { code, issuedAt: record.createdAt, usedAt: null }, { nx: true });
+    // Atomic "claim" — only succeeds if no history exists yet for this person,
+    // preventing a race between two simultaneous issue calls for the same identity.
+    const claimed = await redis.set(key, { code, issuedAt: record.createdAt, usedAt: null }, { nx: true });
     if (!claimed) {
-        throw new Error('This email address has already been issued a promo code and cannot be registered again.');
+        throw new Error('This name, surname and cell number combination has already been issued a promo code and cannot be registered again. Codes cannot be reissued if lost.');
     }
 
     await redis.set(promoCodeKey(code), record);
     return record;
 }
 
-/** Marks a promo code (and its email) as redeemed, so neither can be used again. */
+/** Marks a promo code (and its identity) as redeemed, so neither can be used again. */
 export async function markPromoCodeUsed(code) {
     const record = await redis.get(promoCodeKey(code));
     if (!record || record.usedAt) return record;
@@ -102,7 +119,7 @@ export async function markPromoCodeUsed(code) {
     record.usedAt = new Date().toISOString();
     await redis.set(promoCodeKey(code), record);
 
-    const historyKey = emailHistoryKey(record.email);
+    const historyKey = identityKey(record.firstName, record.surname, record.mobile);
     const history = await redis.get(historyKey);
     if (history) {
         history.usedAt = record.usedAt;

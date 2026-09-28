@@ -1,8 +1,8 @@
 import { applyCors } from '../_lib/cors.js';
-import { getPromoCode, looksLikeEmail, normaliseEmail } from '../_lib/store.js';
+import { getPromoCode, normaliseName, normalisePhone } from '../_lib/store.js';
 
 // POST /api/promos/verify
-// Body: { promoCode, email, purchaseType }
+// Body: { promoCode, firstName, surname, mobile, purchaseType }
 export default async function handler(req, res) {
     if (applyCors(req, res)) return;
     if (req.method !== 'POST') {
@@ -11,7 +11,9 @@ export default async function handler(req, res) {
     }
 
     const promoCode = String(req.body?.promoCode || '').trim().toUpperCase();
-    const email = normaliseEmail(req.body?.email);
+    const firstName = normaliseName(req.body?.firstName);
+    const surname = normaliseName(req.body?.surname);
+    const mobile = normalisePhone(req.body?.mobile);
     const purchaseType = req.body?.purchaseType || 'single';
 
     if (purchaseType !== 'single') {
@@ -22,8 +24,8 @@ export default async function handler(req, res) {
         res.status(400).json({ valid: false, message: 'Enter a promo code.' });
         return;
     }
-    if (!looksLikeEmail(email)) {
-        res.status(400).json({ valid: false, message: 'Enter a valid email address.' });
+    if (!firstName || !surname || mobile.length < 7) {
+        res.status(400).json({ valid: false, message: 'Enter your first name, surname and cell number above.' });
         return;
     }
 
@@ -36,10 +38,10 @@ export default async function handler(req, res) {
         res.status(410).json({ valid: false, message: 'This promo code has already been used.' });
         return;
     }
-    if (record.email !== email) {
+    if (record.firstName !== firstName || record.surname !== surname || record.mobile !== mobile) {
         res.status(400).json({
             valid: false,
-            message: 'This promo code is not linked to the email address you entered.',
+            message: 'This promo code is not linked to the name and cell number you entered.',
         });
         return;
     }
