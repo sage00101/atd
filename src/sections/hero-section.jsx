@@ -189,7 +189,7 @@ export default function HeroSection() {
                     </p>
 
                     <div className="mt-4 flex flex-col items-stretch gap-2">
-                        <PrimaryButton href="#pricing">View packages</PrimaryButton>
+                        <PrimaryButton href="#pricing#monthly">View packages</PrimaryButton>
                         <div className="grid grid-cols-2 gap-2">
                             <SecondaryButton href="#pricelist" icon={HelpCircle}>
                                 Pricelist

@@ -3,11 +3,9 @@ import { useEffect, useState } from 'react';
 import {
     Check,
     Copy,
-    Film,
     Link2,
     LoaderCircle,
     LockKeyhole,
-    Play,
     RotateCcw,
     ShieldCheck,
     Sparkles,
@@ -20,8 +18,8 @@ import VehiclePromoModal from '../components/vehicle-promo-modal';
 
 
 const SITE_URL = import.meta.env.VITE_SITE_URL || 'https://a10tion.co.za';
-const PROMO_VIDEO_URL = import.meta.env.VITE_PROMO_VIDEO_URL || '';
-const PROMO_UNLOCK_ENDPOINT = '/api/promo/unlock';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const PROMO_UNLOCK_ENDPOINT = `${API_BASE_URL}/api/promo/unlock`;
 const STORED_PROMO_KEY = 'a10tionPromoCode';
 
 const QR_SRC =
@@ -195,7 +193,7 @@ export default function PromoSection() {
                     sm:rounded-[28px] sm:p-4 lg:p-5
                 '
             >
-                <div className='grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-[0.82fr_1.2fr_0.82fr]'>
+                <div className='grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-[0.82fr_1.2fr]'>
                     <div
                         className='
                             order-2 hidden min-w-0 flex-col items-center
@@ -248,12 +246,12 @@ export default function PromoSection() {
                     </div>
 
 
-                    <div className='order-2 col-span-2 grid grid-cols-2 gap-2 lg:hidden'>
+                    <div className='order-2 col-span-2 lg:hidden'>
                         <button
                             type='button'
                             onClick={() => setActiveMobilePanel('qr')}
                             className='
-                                flex min-h-[48px] min-w-0 items-center
+                                flex min-h-[48px] w-full min-w-0 items-center
                                 justify-between gap-2 rounded-xl border
                                 border-[#d3dfd6] bg-white px-3.5 text-left
                                 text-[10.5px] font-semibold text-[#24402f]
@@ -268,27 +266,6 @@ export default function PromoSection() {
                                 <span className='truncate'>Share website</span>
                             </span>
                             <span className='text-[15px] font-normal text-sage'>+</span>
-                        </button>
-
-                        <button
-                            type='button'
-                            onClick={() => setActiveMobilePanel('video')}
-                            className='
-                                flex min-h-[48px] min-w-0 items-center
-                                justify-between gap-2 rounded-xl border
-                                border-white/10 bg-[#1b2d22] px-3.5 text-left
-                                text-[10.5px] font-semibold text-white
-                                shadow-[0_12px_28px_-24px_rgba(20,49,30,.5)]
-                                transition active:scale-[0.98]
-                            '
-                        >
-                            <span className='flex min-w-0 items-center gap-2'>
-                                <span className='grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/10 text-[#bdd4c2]'>
-                                    <Play className='ml-px h-3.5 w-3.5 fill-current' />
-                                </span>
-                                <span className='truncate'>Watch reel</span>
-                            </span>
-                            <span className='text-[15px] font-normal text-white/55'>+</span>
                         </button>
                     </div>
 
@@ -317,7 +294,7 @@ export default function PromoSection() {
                                 </h2>
 
                                 <p className='mx-auto mt-2 max-w-md text-[9.5px] leading-[1.55] text-white/65 sm:text-[11px]'>
-                                    Enter the passphrase you received and get a 10% discount on your next vehicle detail.
+                                    Enter the passphrase you received and get a 10% discount on your next car wash.
                                 </p>
 
                                 {promoCode ? (
@@ -453,25 +430,17 @@ export default function PromoSection() {
                         onClick={(event) => event.stopPropagation()}
                         role='dialog'
                         aria-modal='true'
-                        aria-label={
-                            activeMobilePanel === 'qr'
-                                ? 'Share the A10tion website'
-                                : 'A10tion promotional video'
-                        }
+                        aria-label='Share the A10tion website'
                     >
                         <div className='mx-auto mb-2.5 h-1 w-9 rounded-full bg-[#ccd9cf]' />
 
                         <div className='flex items-start justify-between gap-3'>
                             <div className='text-left'>
                                 <p className='text-[8px] font-semibold uppercase tracking-[0.14em] text-sage'>
-                                    {activeMobilePanel === 'qr'
-                                        ? 'Share the site'
-                                        : 'Brand reel'}
+                                    Share the site
                                 </p>
                                 <h3 className='mt-0.5 font-display text-[21px] font-medium leading-tight text-ink'>
-                                    {activeMobilePanel === 'qr'
-                                        ? 'Scan or copy the link'
-                                        : 'The finish, in motion'}
+                                    Scan or copy the link
                                 </h3>
                             </div>
 
@@ -497,7 +466,7 @@ export default function PromoSection() {
                             </button>
                         </div>
 
-                        {activeMobilePanel === 'qr' ? (
+                        {activeMobilePanel === 'qr' && (
                             <div className='mt-3 flex flex-col items-center rounded-[16px] border border-[#dce5de] bg-white p-3.5 text-center'>
                                 <div className='rounded-xl border border-[#d8e3da] bg-white p-2'>
                                     <img
@@ -526,32 +495,6 @@ export default function PromoSection() {
                                     )}
                                     {linkCopied ? 'Website link copied' : 'Copy website link'}
                                 </button>
-                            </div>
-                        ) : (
-                            <div className='mt-3 overflow-hidden rounded-[16px] bg-[#1b2d22] text-white'>
-                                {PROMO_VIDEO_URL ? (
-                                    <video
-                                        src={PROMO_VIDEO_URL}
-                                        className='max-h-[62vh] w-full object-contain'
-                                        controls
-                                        autoPlay
-                                        playsInline
-                                        preload='metadata'
-                                        aria-label='A10tion To Detail promotional video'
-                                    />
-                                ) : (
-                                    <div className='flex min-h-[190px] flex-col items-center justify-center px-6 py-7 text-center'>
-                                        <div className='grid h-11 w-11 place-items-center rounded-full border border-white/15 bg-white/10'>
-                                            <Film className='h-4 w-4 text-[#bdd4c2]' />
-                                        </div>
-                                        <p className='mt-3 font-display text-[19px] font-medium'>
-                                            Reel coming soon
-                                        </p>
-                                        <p className='mt-1 max-w-[230px] text-[10px] leading-[1.55] text-white/55'>
-                                            This space is ready for a short before-and-after transformation video.
-                                        </p>
-                                    </div>
-                                )}
                             </div>
                         )}
                     </div>
