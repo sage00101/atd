@@ -426,7 +426,7 @@ export default function BookingSection() {
     const updateCustomer = (event) => {
         const { name, value } = event.target;
         setCustomer((current) => ({ ...current, [name]: value }));
-        if (['email', 'registration'].includes(name)) {
+        if (['firstName', 'surname', 'mobile'].includes(name)) {
             setPromoState('idle');
             setPromoMessage('');
         }
@@ -434,16 +434,18 @@ export default function BookingSection() {
 
     const verifyPromo = async () => {
         const cleanPromo = promoCode.trim().toUpperCase();
-        const cleanEmail = customer.email.trim();
+        const cleanFirstName = customer.firstName.trim();
+        const cleanSurname = customer.surname.trim();
+        const cleanMobile = customer.mobile.trim();
 
         if (!cleanPromo) {
             setPromoState('error');
             setPromoMessage('Enter the one-time promo code you received after registering.');
             return;
         }
-        if (!cleanEmail) {
+        if (!cleanFirstName || !cleanSurname || !cleanMobile) {
             setPromoState('error');
-            setPromoMessage('Enter your email address above before verifying.');
+            setPromoMessage('Enter your first name, surname and cell number above before verifying.');
             return;
         }
 
@@ -455,13 +457,15 @@ export default function BookingSection() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     promoCode: cleanPromo,
-                    email: cleanEmail,
+                    firstName: cleanFirstName,
+                    surname: cleanSurname,
+                    mobile: cleanMobile,
                     purchaseType: 'single',
                 }),
             });
             const result = await response.json().catch(() => ({}));
             if (!response.ok || !result.valid) {
-                throw new Error(result.message || 'This promo code is invalid, already used, or not linked to this email address.');
+                throw new Error(result.message || 'This promo code is invalid, already used, or not linked to your name and cell number.');
             }
             setPromoState('success');
             setPromoMessage(
