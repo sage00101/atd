@@ -193,3 +193,18 @@ export async function hasProcessedWebhook(webhookId) {
 export async function markWebhookProcessed(webhookId) {
     await redis.set(`webhook:processed:${webhookId}`, 1, { ex: WEBHOOK_DEDUPE_TTL_SECONDS });
 }
+
+// ---------------------------------------------------------------------------
+// Google reviews cache (avoids burning SerpApi search credits on every page load)
+// ---------------------------------------------------------------------------
+
+const GOOGLE_REVIEWS_CACHE_KEY = 'google-reviews:cache';
+const GOOGLE_REVIEWS_CACHE_TTL_SECONDS = 60 * 60 * 6; // 6 hours
+
+export async function getCachedGoogleReviews() {
+    return redis.get(GOOGLE_REVIEWS_CACHE_KEY);
+}
+
+export async function setCachedGoogleReviews(payload) {
+    await redis.set(GOOGLE_REVIEWS_CACHE_KEY, payload, { ex: GOOGLE_REVIEWS_CACHE_TTL_SECONDS });
+}
