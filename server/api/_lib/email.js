@@ -1,5 +1,5 @@
 import { buildReceiptEmailHtml } from './email-template.js';
-import { buildPromoCodeEmailHtml } from './promo-email-template.js';
+import { buildVehiclePromoApprovedEmailHtml } from './promo-email-template.js';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
@@ -55,15 +55,15 @@ export async function sendReceiptEmail(receipt) {
     });
 }
 
-/** Emails a newly issued one-time promo code to the verified customer. */
-export async function sendPromoCodeEmail({ code, email }) {
-    const html = buildPromoCodeEmailHtml({ code });
+/** Emails a newly approved customer confirming their vehicle registration now works as a promo code. */
+export async function sendVehiclePromoApprovedEmail({ vehicleRegistration, email }) {
+    const html = buildVehiclePromoApprovedEmailHtml({ vehicleRegistration });
     const businessEmail = process.env.BUSINESS_EMAIL;
 
     await sendViaResend({
         to: email,
         bcc: businessEmail,
-        subject: 'Your 10% single-wash promo code',
+        subject: 'Your 10% single-wash discount is ready',
         html,
         replyTo: businessEmail,
     });

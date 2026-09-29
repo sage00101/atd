@@ -3,10 +3,8 @@ import { IncomingForm } from 'formidable';
 import { applyCors } from '../../_lib/cors.js';
 import { generateReferenceNumber } from '../../_lib/reference.js';
 import {
-    getPromoCode,
+    getVehiclePromo,
     looksLikeVehicleRegistration,
-    normaliseName,
-    normalisePhone,
     normaliseReg,
     savePendingBooking,
     PROMO_DISCOUNT_RATE,
@@ -54,7 +52,6 @@ export default async function handler(req, res) {
             vehicleType,
             bookingDate,
             bookingTime,
-            promoCode,
             customer,
             serviceAreaAccepted,
             termsAccepted,
@@ -99,17 +96,13 @@ export default async function handler(req, res) {
             }
             amountCents = originalAmountCents;
 
-            if (promoCode) {
-                const code = String(promoCode).trim().toUpperCase();
-                const record = await getPromoCode(code);
-                const firstName = normaliseName(customer.firstName);
-                const surname = normaliseName(customer.surname);
-                const mobile = normalisePhone(customer.mobile);
-                if (record && !record.usedAt && record.firstName === firstName && record.surname === surname && record.mobile === mobile) {
-                    discountCents = Math.round(originalAmountCents * PROMO_DISCOUNT_RATE);
-                    amountCents = originalAmountCents - discountCents;
-                    appliedPromo = code;
-                }
+            // The customer's own vehicle registration doubles as their promo code —
+            // no separate code field to submit or match.
+            const record = await getVehiclePromo(customer.registration);
+            if (record && !record.usedAt) {
+                discountCents = Math.round(originalAmountCents * PROMO_DISCOUNT_RATE);
+                amountCents = originalAmountCents - discountCents;
+                appliedPromo = normaliseReg(customer.registration);
             }
         } else {
             // Monthly package pricing depends on a business decision (per-vehicle rate

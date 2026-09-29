@@ -3,10 +3,10 @@ import { applyCors } from '../../_lib/cors.js';
 import { sendReceiptEmail } from '../../_lib/email.js';
 import {
     getBooking,
-    getPromoCode,
+    getVehiclePromo,
     hasProcessedWebhook,
     markBookingConfirmed,
-    markPromoCodeUsed,
+    markVehiclePromoUsed,
     markWebhookProcessed,
 } from '../../_lib/store.js';
 
@@ -91,10 +91,10 @@ export default async function handler(req, res) {
     const pending = checkoutId ? await getBooking(checkoutId) : null;
     const meta = event.payload?.metadata || pending || {};
 
-    // Mark the promo (and its vehicle) used only after payment is confirmed.
+    // Mark this vehicle's promo used only after payment is confirmed.
     const promo = meta.promoCode || pending?.appliedPromo;
-    if (promo && await getPromoCode(promo)) {
-        await markPromoCodeUsed(promo);
+    if (promo && await getVehiclePromo(promo)) {
+        await markVehiclePromoUsed(promo);
     }
 
     // TODO: persist the confirmed booking in a real database here.

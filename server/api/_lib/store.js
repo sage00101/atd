@@ -36,95 +36,48 @@ export function looksLikeEmail(value) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normaliseEmail(value));
 }
 
-export function normaliseName(value) {
-    return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-export function normalisePhone(value) {
-    return String(value || '').replace(/\D/g, '');
-}
-
-/** Generate a human-friendly one-time code: A10-XXXXXXXX */
-export function generatePromoCode() {
-    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let body = '';
-    for (let i = 0; i < 8; i += 1) {
-        body += alphabet[Math.floor(Math.random() * alphabet.length)];
-    }
-    return `A10-${body}`;
-}
-
 // ---------------------------------------------------------------------------
-// Promo codes + per-person lifetime history
-//
-// Eligibility is tied to (first name + surname + cell number), not email and
-// not vehicle registration — we deliberately avoid persisting vehicle
-// registration numbers as a tracked identifier in our own storage. Email is
-// still collected purely so we have somewhere to deliver the code.
+// Single-wash promo eligibility — the customer's own vehicle registration
+// number doubles as their promo code, so there's no separate code to
+// generate, deliver, or lose. One-time use per vehicle, forever.
 // ---------------------------------------------------------------------------
 
-const promoCodeKey = (code) => `promo:code:${code}`;
-const identityKey = (firstName, surname, mobile) => `promo:identity:${normaliseName(firstName)}|${normaliseName(surname)}|${normalisePhone(mobile)}`;
+const vehiclePromoKey = (reg) => `promo:vehicle:${reg}`;
 
-export async function getPromoCode(code) {
-    return redis.get(promoCodeKey(code));
+export async function getVehiclePromo(vehicleRegistration) {
+    return redis.get(vehiclePromoKey(normaliseReg(vehicleRegistration)));
 }
 
-/** True if this name + surname + cell number combo has ever been issued a promo code (used or not). */
-export async function hasPersonAlreadyRegistered({ firstName, surname, mobile }) {
-    const history = await redis.get(identityKey(firstName, surname, mobile));
-    return Boolean(history);
-}
-
-/** Call after approving a promo registration (admin action via /api/promos/issue). */
-export async function issuePromoForRegistration({ firstName, surname, mobile, email }) {
-    if (!String(firstName || '').trim() || !String(surname || '').trim()) {
-        throw new Error('First name and surname are required.');
+/** Call after approving a vehicle for the promo (admin action via /api/promos/issue). */
+export async function approveVehicleForPromo({ vehicleRegistration, email }) {
+    if (!looksLikeVehicleRegistration(vehicleRegistration)) {
+        throw new Error('Invalid vehicle registration format.');
     }
-    if (normalisePhone(mobile).length < 7) {
-        throw new Error('Invalid cell number.');
-    }
-    if (!looksLikeEmail(email)) {
-        throw new Error('Invalid email address.');
-    }
-
-    const key = identityKey(firstName, surname, mobile);
-    const code = generatePromoCode();
+    const reg = normaliseReg(vehicleRegistration);
     const record = {
-        code,
-        firstName: normaliseName(firstName),
-        surname: normaliseName(surname),
-        mobile: normalisePhone(mobile),
-        email: normaliseEmail(email),
+        vehicleRegistration: reg,
+        email: email ? normaliseEmail(email) : null,
         usedAt: null,
-        createdAt: new Date().toISOString(),
+        approvedAt: new Date().toISOString(),
     };
 
-    // Atomic "claim" — only succeeds if no history exists yet for this person,
-    // preventing a race between two simultaneous issue calls for the same identity.
-    const claimed = await redis.set(key, { code, issuedAt: record.createdAt, usedAt: null }, { nx: true });
+    // Atomic "claim" — only succeeds if this vehicle hasn't been approved before,
+    // preventing a race between two simultaneous approval calls for the same reg.
+    const claimed = await redis.set(vehiclePromoKey(reg), record, { nx: true });
     if (!claimed) {
-        throw new Error('This name, surname and cell number combination has already been issued a promo code and cannot be registered again. Codes cannot be reissued if lost.');
+        throw new Error('This vehicle registration has already been approved for the promo and cannot be registered again.');
     }
-
-    await redis.set(promoCodeKey(code), record);
     return record;
 }
 
-/** Marks a promo code (and its identity) as redeemed, so neither can be used again. */
-export async function markPromoCodeUsed(code) {
-    const record = await redis.get(promoCodeKey(code));
+/** Marks a vehicle's promo as redeemed, so it can never be discounted again. */
+export async function markVehiclePromoUsed(vehicleRegistration) {
+    const reg = normaliseReg(vehicleRegistration);
+    const record = await redis.get(vehiclePromoKey(reg));
     if (!record || record.usedAt) return record;
 
     record.usedAt = new Date().toISOString();
-    await redis.set(promoCodeKey(code), record);
-
-    const historyKey = identityKey(record.firstName, record.surname, record.mobile);
-    const history = await redis.get(historyKey);
-    if (history) {
-        history.usedAt = record.usedAt;
-        await redis.set(historyKey, history);
-    }
+    await redis.set(vehiclePromoKey(reg), record);
     return record;
 }
 

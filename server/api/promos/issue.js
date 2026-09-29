@@ -1,14 +1,14 @@
 import { applyCors } from '../_lib/cors.js';
-import { sendPromoCodeEmail } from '../_lib/email.js';
-import { issuePromoForRegistration } from '../_lib/store.js';
+import { sendVehiclePromoApprovedEmail } from '../_lib/email.js';
+import { approveVehicleForPromo } from '../_lib/store.js';
 
 // POST /api/promos/issue
 // Header: x-admin-key: <ADMIN_API_KEY>
-// Body: { firstName, surname, mobile, email }
+// Body: { vehicleRegistration, email }
 // Call this yourself once you've manually verified a promo registration
-// (e.g. from the Formspree submission email). Codes are tied to the
-// customer's first name + surname + cell number — one code per person,
-// ever. Email is only used to deliver the code and isn't checked for reuse.
+// (e.g. from the Formspree submission email). There's no separate code to
+// generate — the vehicle's own registration number becomes usable as the
+// promo code at single-wash checkout. One approval per vehicle, ever.
 export default async function handler(req, res) {
     if (applyCors(req, res)) return;
     if (req.method !== 'POST') {
@@ -22,26 +22,28 @@ export default async function handler(req, res) {
         return;
     }
 
-    const { firstName, surname, mobile, email } = req.body || {};
-    if (!firstName || !surname || !mobile || !email) {
-        res.status(400).json({ message: 'firstName, surname, mobile and email are required.' });
+    const { vehicleRegistration, email } = req.body || {};
+    if (!vehicleRegistration) {
+        res.status(400).json({ message: 'vehicleRegistration is required.' });
         return;
     }
 
     let record;
     try {
-        record = await issuePromoForRegistration({ firstName, surname, mobile, email });
+        record = await approveVehicleForPromo({ vehicleRegistration, email });
     } catch (err) {
-        res.status(400).json({ message: err instanceof Error ? err.message : 'Could not issue promo code.' });
+        res.status(400).json({ message: err instanceof Error ? err.message : 'Could not approve this vehicle.' });
         return;
     }
 
-    try {
-        await sendPromoCodeEmail({ code: record.code, email: record.email });
-    } catch (err) {
-        console.error('[promo email failed]', record.code, err);
-        // The code is still issued and valid even if the email failed to send.
+    if (record.email) {
+        try {
+            await sendVehiclePromoApprovedEmail({ vehicleRegistration: record.vehicleRegistration, email: record.email });
+        } catch (err) {
+            console.error('[promo approval email failed]', record.vehicleRegistration, err);
+            // The approval still stands even if the email failed to send.
+        }
     }
 
-    res.status(200).json({ code: record.code, email: record.email });
+    res.status(200).json({ vehicleRegistration: record.vehicleRegistration, email: record.email });
 }

@@ -1,8 +1,8 @@
 import { applyCors } from '../_lib/cors.js';
-import { getPromoCode, normaliseName, normalisePhone } from '../_lib/store.js';
+import { getVehiclePromo, looksLikeVehicleRegistration, normaliseReg } from '../_lib/store.js';
 
 // POST /api/promos/verify
-// Body: { promoCode, firstName, surname, mobile, purchaseType }
+// Body: { vehicleRegistration, purchaseType }
 export default async function handler(req, res) {
     if (applyCors(req, res)) return;
     if (req.method !== 'POST') {
@@ -10,45 +10,31 @@ export default async function handler(req, res) {
         return;
     }
 
-    const promoCode = String(req.body?.promoCode || '').trim().toUpperCase();
-    const firstName = normaliseName(req.body?.firstName);
-    const surname = normaliseName(req.body?.surname);
-    const mobile = normalisePhone(req.body?.mobile);
+    const vehicleRegistration = normaliseReg(req.body?.vehicleRegistration);
     const purchaseType = req.body?.purchaseType || 'single';
 
     if (purchaseType !== 'single') {
-        res.status(400).json({ valid: false, message: 'Promo codes apply to single washes only.' });
+        res.status(400).json({ valid: false, message: 'The vehicle registration discount applies to single washes only.' });
         return;
     }
-    if (!promoCode) {
-        res.status(400).json({ valid: false, message: 'Enter a promo code.' });
-        return;
-    }
-    if (!firstName || !surname || mobile.length < 7) {
-        res.status(400).json({ valid: false, message: 'Enter your first name, surname and cell number above.' });
+    if (!looksLikeVehicleRegistration(vehicleRegistration)) {
+        res.status(400).json({ valid: false, message: 'Enter a valid-looking vehicle registration number.' });
         return;
     }
 
-    const record = await getPromoCode(promoCode);
+    const record = await getVehiclePromo(vehicleRegistration);
     if (!record) {
-        res.status(404).json({ valid: false, message: 'This promo code was not found.' });
+        res.status(404).json({ valid: false, message: 'This vehicle isn\u2019t approved for a discount yet.' });
         return;
     }
     if (record.usedAt) {
-        res.status(410).json({ valid: false, message: 'This promo code has already been used.' });
-        return;
-    }
-    if (record.firstName !== firstName || record.surname !== surname || record.mobile !== mobile) {
-        res.status(400).json({
-            valid: false,
-            message: 'This promo code is not linked to the name and cell number you entered.',
-        });
+        res.status(410).json({ valid: false, message: 'This vehicle\u2019s discount has already been used.' });
         return;
     }
 
     res.status(200).json({
         valid: true,
         discountPercent: 10,
-        message: 'Promo verified. A 10% single-wash discount will be applied securely at checkout. The code becomes invalid after a successful purchase.',
+        message: 'This vehicle qualifies for a 10% single-wash discount, applied securely at checkout. It becomes invalid after a successful purchase.',
     });
 }
