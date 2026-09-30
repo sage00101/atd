@@ -3,9 +3,11 @@ import { IncomingForm } from 'formidable';
 import { applyCors } from '../../_lib/cors.js';
 import { generateReferenceNumber } from '../../_lib/reference.js';
 import {
-    getVehiclePromo,
+    getSharedPromoCodeStatus,
     looksLikeVehicleRegistration,
     normaliseReg,
+    releaseSharedPromoCode,
+    reserveSharedPromoCode,
     savePendingBooking,
     PROMO_DISCOUNT_RATE,
     SINGLE_WASH_CENTS,
@@ -33,6 +35,8 @@ export default async function handler(req, res) {
         return;
     }
 
+    let reservedPromoCode = null;
+    let promoReservationId = null;
     try {
         const { fields, files } = await parseMultipart(req);
         const bookingRaw = Array.isArray(fields.booking) ? fields.booking[0] : fields.booking;
@@ -52,6 +56,7 @@ export default async function handler(req, res) {
             vehicleType,
             bookingDate,
             bookingTime,
+            promoCode,
             customer,
             serviceAreaAccepted,
             termsAccepted,
@@ -82,11 +87,18 @@ export default async function handler(req, res) {
             }
         }
 
+        const yocoSecret = process.env.YOCO_SECRET_KEY;
+        if (!yocoSecret) {
+            res.status(500).json({ message: 'Payment gateway not configured.' });
+            return;
+        }
+
         // --- Amount calculation (server is the only source of truth for price) ---
         let originalAmountCents;
         let amountCents;
         let discountCents = 0;
         let appliedPromo = null;
+        let appliedPromoType = null;
 
         if (!isMonthly) {
             originalAmountCents = SINGLE_WASH_CENTS[vehicleType];
@@ -96,25 +108,40 @@ export default async function handler(req, res) {
             }
             amountCents = originalAmountCents;
 
-            // The customer's own vehicle registration doubles as their promo code —
-            // no separate code field to submit or match.
-            const record = await getVehiclePromo(customer.registration);
-            if (record && !record.usedAt) {
+            if (promoCode) {
+                const submittedCode = String(promoCode).trim().toUpperCase();
+                const status = await getSharedPromoCodeStatus(submittedCode);
+                if (status.status === 'invalid') {
+                    res.status(400).json({ message: 'That promo code is not in the active promo batch.' });
+                    return;
+                }
+                if (status.status === 'used') {
+                    res.status(410).json({ message: 'That promo code has already been redeemed.' });
+                    return;
+                }
+                if (status.status === 'reserved') {
+                    res.status(409).json({ message: 'That promo code is already being used in another checkout.' });
+                    return;
+                }
+
+                promoReservationId = crypto.randomUUID();
+                const reserved = await reserveSharedPromoCode(status.promoCode, promoReservationId);
+                if (!reserved) {
+                    promoReservationId = null;
+                    res.status(409).json({ message: 'That promo code was just claimed by another checkout. Please try another code.' });
+                    return;
+                }
+                reservedPromoCode = status.promoCode;
+                appliedPromo = status.promoCode;
+                appliedPromoType = 'shared-code';
                 discountCents = Math.round(originalAmountCents * PROMO_DISCOUNT_RATE);
                 amountCents = originalAmountCents - discountCents;
-                appliedPromo = normaliseReg(customer.registration);
             }
         } else {
             // Monthly package pricing depends on a business decision (per-vehicle rate
             // card vs. quote-based fleet pricing) that isn't encoded in the booking
             // payload yet. Reject rather than guess an amount.
             res.status(501).json({ message: 'Monthly package payments are not yet automated. Please contact the business to arrange payment.' });
-            return;
-        }
-
-        const yocoSecret = process.env.YOCO_SECRET_KEY;
-        if (!yocoSecret) {
-            res.status(500).json({ message: 'Payment gateway not configured.' });
             return;
         }
 
@@ -147,6 +174,8 @@ export default async function handler(req, res) {
                     bookingTime,
                     registration: normaliseReg(customer.registration),
                     promoCode: appliedPromo || '',
+                    promoCodeType: appliedPromoType || '',
+                    promoReservationId: promoReservationId || '',
                     originalAmountCents,
                     discountCents,
                     customerEmail: customer.email,
@@ -158,6 +187,10 @@ export default async function handler(req, res) {
 
         const yocoBody = await yocoRes.json().catch(() => ({}));
         if (!yocoRes.ok || !yocoBody.redirectUrl) {
+            if (reservedPromoCode && promoReservationId) {
+                await releaseSharedPromoCode(reservedPromoCode, promoReservationId);
+                reservedPromoCode = null;
+            }
             console.error('Yoco error', yocoBody);
             res.status(502).json({ message: yocoBody.message || 'Could not start secure payment.' });
             return;
@@ -171,12 +204,17 @@ export default async function handler(req, res) {
             amountCents,
             discountCents,
             appliedPromo,
+            appliedPromoType,
+            promoReservationId,
             yocoCheckoutId: yocoBody.id,
             createdAt: new Date().toISOString(),
         });
 
         res.status(200).json({ redirectUrl: yocoBody.redirectUrl, checkoutId: yocoBody.id, reference });
     } catch (err) {
+        if (reservedPromoCode && promoReservationId) {
+            await releaseSharedPromoCode(reservedPromoCode, promoReservationId).catch(() => {});
+        }
         console.error(err);
         res.status(500).json({ message: 'Secure payment could not be started.' });
     }

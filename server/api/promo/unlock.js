@@ -1,21 +1,13 @@
-import crypto from 'node:crypto';
 import { applyCors } from '../_lib/cors.js';
 import { redis } from '../_lib/redis.js';
+import { findSharedPromoForPassword } from '../_lib/store.js';
 
 const MAX_ATTEMPTS = 10;
 const ATTEMPT_WINDOW_SECONDS = 60 * 60; // 1 hour
 
-function timingSafeEqualStrings(a, b) {
-    const bufferA = Buffer.from(String(a));
-    const bufferB = Buffer.from(String(b));
-    if (bufferA.length !== bufferB.length) return false;
-    return crypto.timingSafeEqual(bufferA, bufferB);
-}
-
 // POST /api/promo/unlock
 // Body: { passphrase }
-// Gate for the shared "Discount Code" marketing passphrase — unrelated to
-// the per-person single-wash promo codes issued via /api/promos/issue.
+// The active password/code batch is stored in Redis and never sent to the client.
 export default async function handler(req, res) {
     if (applyCors(req, res)) return;
     if (req.method !== 'POST') {
@@ -23,16 +15,9 @@ export default async function handler(req, res) {
         return;
     }
 
-    const passphrase = String(req.body?.passphrase || '').trim();
-    if (!passphrase) {
-        res.status(400).json({ message: 'Enter the passphrase.' });
-        return;
-    }
-
-    const configuredPassphrase = process.env.PROMO_PASSPHRASE;
-    const configuredCode = process.env.PROMO_UNLOCK_CODE;
-    if (!configuredPassphrase || !configuredCode) {
-        res.status(503).json({ message: 'Promo unlock is not configured yet.' });
+    const password = String(req.body?.passphrase || '').trim();
+    if (!password) {
+        res.status(400).json({ message: 'Enter your password.' });
         return;
     }
 
@@ -45,12 +30,25 @@ export default async function handler(req, res) {
         return;
     }
 
-    if (!timingSafeEqualStrings(passphrase, configuredPassphrase)) {
+    const match = await findSharedPromoForPassword(password);
+    if (match.status === 'unconfigured') {
+        res.status(503).json({ message: 'Promo codes have not been loaded yet.' });
+        return;
+    }
+    if (match.status === 'used') {
+        res.status(410).json({ message: 'The promo code linked to this password has already been redeemed.' });
+        return;
+    }
+    if (match.status === 'reserved') {
+        res.status(409).json({ message: 'This promo code is currently being used in a checkout.' });
+        return;
+    }
+    if (match.status !== 'available') {
         await redis.set(attemptsKey, attempts + 1, { ex: ATTEMPT_WINDOW_SECONDS });
-        res.status(401).json({ message: 'That passphrase doesn\u2019t match.' });
+        res.status(401).json({ message: 'That password does not match.' });
         return;
     }
 
     await redis.del(attemptsKey);
-    res.status(200).json({ promoCode: configuredCode });
+    res.status(200).json({ promoCode: match.promoCode });
 }

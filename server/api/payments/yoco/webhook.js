@@ -6,8 +6,10 @@ import {
     getVehiclePromo,
     hasProcessedWebhook,
     markBookingConfirmed,
+    markSharedPromoCodeUsed,
     markVehiclePromoUsed,
     markWebhookProcessed,
+    releaseSharedPromoCode,
 } from '../../_lib/store.js';
 
 // Vercel must not pre-parse the body — signature verification requires the
@@ -82,18 +84,31 @@ export default async function handler(req, res) {
         return;
     }
 
+    const checkoutId = event.payload?.metadata?.checkoutId;
+    const pending = checkoutId ? await getBooking(checkoutId) : null;
+    const meta = event.payload?.metadata || pending || {};
+
+    if (event.type === 'payment.failed') {
+        const promo = meta.promoCode || pending?.appliedPromo;
+        const reservationId = meta.promoReservationId || pending?.promoReservationId;
+        if (meta.promoCodeType === 'shared-code' && promo && reservationId) {
+            await releaseSharedPromoCode(promo, reservationId);
+        }
+        res.status(200).send('ignored');
+        return;
+    }
     if (event.type !== 'payment.succeeded') {
         res.status(200).send('ignored');
         return;
     }
 
-    const checkoutId = event.payload?.metadata?.checkoutId;
-    const pending = checkoutId ? await getBooking(checkoutId) : null;
-    const meta = event.payload?.metadata || pending || {};
-
-    // Mark this vehicle's promo used only after payment is confirmed.
+    // Redeem a shared code or vehicle promo only after payment is confirmed.
     const promo = meta.promoCode || pending?.appliedPromo;
-    if (promo && await getVehiclePromo(promo)) {
+    const promoCodeType = meta.promoCodeType || pending?.appliedPromoType;
+    if (promo && promoCodeType === 'shared-code') {
+        const reservationId = meta.promoReservationId || pending?.promoReservationId;
+        if (reservationId) await markSharedPromoCodeUsed(promo, reservationId);
+    } else if (promo && await getVehiclePromo(promo)) {
         await markVehiclePromoUsed(promo);
     }
 

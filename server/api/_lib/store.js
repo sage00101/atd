@@ -1,12 +1,13 @@
-// Persistent storage backed by Upstash Redis (Vercel Marketplace). Replaces
-// the earlier in-memory Maps, which reset unpredictably between serverless
-// invocations. All functions here are async.
+// Persistent storage backed by Upstash Redis (Vercel Marketplace).
+import crypto from 'node:crypto';
 import { redis } from './redis.js';
 
 const PENDING_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 3; // 3 days — abandoned checkouts expire
 const CONFIRMED_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year — keep the slot blocked long-term
 const DATE_INDEX_TTL_SECONDS = 60 * 60 * 24 * 90; // 90 days — bookings are never made further out than this
 const WEBHOOK_DEDUPE_TTL_SECONDS = 60 * 60 * 24 * 3; // 3 days — longer than Yoco's retry window
+const PROMO_BATCH_KEY = 'promo:shared:active-batch';
+const PROMO_RESERVATION_TTL_SECONDS = 60 * 60;
 
 export const SINGLE_WASH_CENTS = {
     'Sedan / Hatchback': 65000,
@@ -79,6 +80,116 @@ export async function markVehiclePromoUsed(vehicleRegistration) {
     record.usedAt = new Date().toISOString();
     await redis.set(vehiclePromoKey(reg), record);
     return record;
+}
+
+// ---------------------------------------------------------------------------
+// Admin-managed password/code batches and one-time shared code redemption
+// ---------------------------------------------------------------------------
+
+const promoCodeDigest = (code) => crypto.createHash('sha256').update(String(code).trim().toUpperCase()).digest('hex');
+const promoUsedKey = (code) => `promo:shared:used:${promoCodeDigest(code)}`;
+const promoReservationKey = (code) => `promo:shared:reservation:${promoCodeDigest(code)}`;
+
+export async function getSharedPromoBatch() {
+    return redis.get(PROMO_BATCH_KEY);
+}
+
+export async function getSharedPromoBatchForAdmin() {
+    const batch = await getSharedPromoBatch();
+    if (!batch) return { batchId: null, updatedAt: null, pairs: [] };
+
+    const pairs = await Promise.all(batch.pairs.map(async (pair) => ({
+        ...pair,
+        used: Boolean(await redis.get(promoUsedKey(pair.promoCode))),
+    })));
+    return { ...batch, pairs };
+}
+
+export async function saveSharedPromoBatch(inputPairs) {
+    if (!Array.isArray(inputPairs) || inputPairs.length < 1 || inputPairs.length > 50) {
+        throw new Error('A batch must contain between 1 and 50 password/code pairs.');
+    }
+
+    const passwords = new Set();
+    const pairs = inputPairs.map((pair, index) => {
+        const password = String(pair?.password || '').trim();
+        const promoCode = String(pair?.promoCode || '').trim();
+        if (!password || !promoCode) {
+            throw new Error(`Row ${index + 1} needs both a password and a promo code.`);
+        }
+        if (passwords.has(password)) {
+            throw new Error(`Password on row ${index + 1} is duplicated.`);
+        }
+        passwords.add(password);
+        return { password, promoCode };
+    });
+
+    const promoCodes = [...new Set(pairs.map((pair) => pair.promoCode.toUpperCase()))];
+    for (const promoCode of promoCodes) {
+        if (await redis.get(promoUsedKey(promoCode))) {
+            throw new Error(`Promo code ${promoCode} has already been redeemed and cannot be reused.`);
+        }
+    }
+
+    const batch = {
+        batchId: crypto.randomUUID(),
+        updatedAt: new Date().toISOString(),
+        pairs,
+    };
+    await redis.set(PROMO_BATCH_KEY, batch);
+    return batch;
+}
+
+export async function findSharedPromoForPassword(password) {
+    const batch = await getSharedPromoBatch();
+    if (!batch) return { status: 'unconfigured' };
+
+    const submitted = crypto.createHash('sha256').update(String(password).trim()).digest();
+    let promoCode = null;
+    for (const pair of batch.pairs) {
+        const candidate = crypto.createHash('sha256').update(pair.password).digest();
+        if (crypto.timingSafeEqual(submitted, candidate)) promoCode = pair.promoCode;
+    }
+    if (!promoCode) return { status: 'invalid' };
+    if (await redis.get(promoUsedKey(promoCode))) return { status: 'used' };
+    if (await redis.get(promoReservationKey(promoCode))) return { status: 'reserved' };
+    return { status: 'available', promoCode };
+}
+
+export async function getSharedPromoCodeStatus(promoCode) {
+    const batch = await getSharedPromoBatch();
+    if (!batch || !batch.pairs.some((pair) => pair.promoCode.toUpperCase() === String(promoCode).trim().toUpperCase())) {
+        return { status: 'invalid' };
+    }
+    if (await redis.get(promoUsedKey(promoCode))) return { status: 'used' };
+    if (await redis.get(promoReservationKey(promoCode))) return { status: 'reserved' };
+    return { status: 'available', promoCode: String(promoCode).trim().toUpperCase() };
+}
+
+export async function reserveSharedPromoCode(promoCode, reservationId) {
+    const result = await redis.set(promoReservationKey(promoCode), reservationId, {
+        nx: true,
+        ex: PROMO_RESERVATION_TTL_SECONDS,
+    });
+    return result === 'OK';
+}
+
+export async function releaseSharedPromoCode(promoCode, reservationId) {
+    const key = promoReservationKey(promoCode);
+    if (await redis.get(key) === reservationId) await redis.del(key);
+}
+
+export async function markSharedPromoCodeUsed(promoCode, reservationId) {
+    const usedKey = promoUsedKey(promoCode);
+    if (await redis.get(usedKey)) return true;
+
+    const reservationKey = promoReservationKey(promoCode);
+    const reservedBy = await redis.get(reservationKey);
+    if (reservedBy && reservedBy !== reservationId) return false;
+
+    await redis.set(usedKey, { usedAt: new Date().toISOString(), reservationId }, { nx: true });
+    if (reservedBy === reservationId) await redis.del(reservationKey);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
