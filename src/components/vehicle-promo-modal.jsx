@@ -723,7 +723,7 @@ export default function VehiclePromoModal({
                                             lg:text-[9.5px]
                                         '
                                     >
-                                        Registration is not activated automatically. The business must first confirm the vehicle against its client/vehicle records and mark it as verified.
+                                        Registration is activated automatically.
                                     </p>
                                 </div>
                             </div>

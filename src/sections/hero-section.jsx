@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
     ArrowRight,
     BadgeDollarSign,
@@ -8,6 +9,7 @@ import {
 import heroLogo from '../assets/logos/hero-logo.svg';
 import heroImageDesktop from '../assets/images/hero-desktop.jpg';
 import heroImageMobile from '../assets/images/hero-mobile.jpg';
+import PriceListModal from '../components/price-list-modal';
 
 /* ============================================================
    ASSETS
@@ -64,35 +66,33 @@ function PrimaryButton({ href, children, compact = false }) {
 /* ============================================================
    SECONDARY BUTTON
 ============================================================ */
-function SecondaryButton({ href, icon: Icon, children, compact = false }) {
-    return (
-        <a
-            href={href}
-            className={
-                compact
-                    ? `
-                        group inline-flex min-h-[42px] items-center justify-center gap-1.5
-                        rounded-full border border-white/20 bg-white/[0.07] px-4 text-[12.5px]
-                        font-semibold text-white backdrop-blur-xl transition-all duration-300
-                        hover:-translate-y-0.5 hover:border-white/35 hover:bg-white/[0.13]
-                        active:translate-y-0 active:scale-[0.98]
-                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5FE07A]/70
-                    `
-                    : `
-                        group inline-flex min-h-[44px] items-center justify-center gap-1.5
-                        rounded-full border border-white/20 bg-white/[0.07] px-4 text-[13px]
-                        font-semibold text-white backdrop-blur-xl transition-all duration-300
-                        hover:-translate-y-0.5 hover:border-white/35 hover:bg-white/[0.13]
-                        active:translate-y-0 active:scale-[0.98]
-                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5FE07A]/70
-                        sm:min-h-[50px] sm:gap-2 sm:px-6 sm:text-[15px]
-                    `
-            }
-        >
-            <Icon className={compact ? 'h-3.5 w-3.5 text-[#a7c5af] transition-transform duration-300 group-hover:rotate-[-6deg]' : 'h-3.5 w-3.5 text-[#a7c5af] transition-transform duration-300 group-hover:rotate-[-6deg] sm:h-4 sm:w-4'} strokeWidth={1.7} />
-            {children}
-        </a>
-    );
+function SecondaryButton({ href, onClick, icon: Icon, children, compact = false }) {
+    const className = compact
+        ? `
+            group inline-flex min-h-[42px] items-center justify-center gap-1.5
+            rounded-full border border-white/20 bg-white/[0.07] px-4 text-[12.5px]
+            font-semibold text-white backdrop-blur-xl transition-all duration-300
+            hover:-translate-y-0.5 hover:border-white/35 hover:bg-white/[0.13]
+            active:translate-y-0 active:scale-[0.98]
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5FE07A]/70
+        `
+        : `
+            group inline-flex min-h-[44px] items-center justify-center gap-1.5
+            rounded-full border border-white/20 bg-white/[0.07] px-4 text-[13px]
+            font-semibold text-white backdrop-blur-xl transition-all duration-300
+            hover:-translate-y-0.5 hover:border-white/35 hover:bg-white/[0.13]
+            active:translate-y-0 active:scale-[0.98]
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5FE07A]/70
+            sm:min-h-[50px] sm:gap-2 sm:px-6 sm:text-[15px]
+        `;
+    const iconClassName = compact
+        ? 'h-3.5 w-3.5 text-[#a7c5af] transition-transform duration-300 group-hover:rotate-[-6deg]'
+        : 'h-3.5 w-3.5 text-[#a7c5af] transition-transform duration-300 group-hover:rotate-[-6deg] sm:h-4 sm:w-4';
+    const content = <><Icon className={iconClassName} strokeWidth={1.7} />{children}</>;
+
+    return onClick
+        ? <button type='button' onClick={onClick} className={className}>{content}</button>
+        : <a href={href} className={className}>{content}</a>;
 }
 
 /* ============================================================
@@ -133,6 +133,8 @@ function Seam({ x1, y1, x2, y2 }) {
    HERO
 ============================================================ */
 export default function HeroSection() {
+    const [priceListOpen, setPriceListOpen] = useState(false);
+
     return (
         <section
             id="home"
@@ -191,7 +193,7 @@ export default function HeroSection() {
                     <div className="mt-4 flex flex-col items-stretch gap-2">
                         <PrimaryButton href="#pricing#monthly">View packages</PrimaryButton>
                         <div className="grid grid-cols-2 gap-2">
-                            <SecondaryButton href="#pricelist" icon={HelpCircle}>
+                            <SecondaryButton onClick={() => setPriceListOpen(true)} icon={HelpCircle}>
                                 Pricelist
                             </SecondaryButton>
                             <SecondaryButton href="#booking" icon={Mail}>
@@ -238,7 +240,7 @@ export default function HeroSection() {
 
                         <div className="mt-6 flex flex-wrap items-center gap-2.5">
                             <PrimaryButton href="#pricing" compact>View packages</PrimaryButton>
-                            <SecondaryButton href="#pricelist" icon={HelpCircle} compact>
+                            <SecondaryButton onClick={() => setPriceListOpen(true)} icon={HelpCircle} compact>
                                 Pricelist
                             </SecondaryButton>
                             <SecondaryButton href="#booking" icon={Mail} compact>
@@ -276,6 +278,8 @@ export default function HeroSection() {
                 seam, the content settles in just after. Respect
                 reduced-motion.
             ===================================================== */}
+
+            <PriceListModal open={priceListOpen} onClose={() => setPriceListOpen(false)} />
 
             <style>{`
                 @keyframes heroWipeReveal {

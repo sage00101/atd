@@ -9,12 +9,10 @@ import {
     RotateCcw,
     ShieldCheck,
     Sparkles,
-    Tag,
     X,
 } from 'lucide-react';
 
 import useReveal from '../hooks/use-reveal';
-import VehiclePromoModal from '../components/vehicle-promo-modal';
 
 
 const SITE_URL = import.meta.env.VITE_SITE_URL || 'https://a10tion.co.za';
@@ -61,7 +59,6 @@ export default function PromoSection() {
     const [unlockState, setUnlockState] = useState('idle');
     const [unlockMessage, setUnlockMessage] = useState('');
     const [activeMobilePanel, setActiveMobilePanel] = useState(null);
-    const [vehiclePromoOpen, setVehiclePromoOpen] = useState(false);
 
 
     useEffect(() => {
@@ -160,6 +157,7 @@ export default function PromoSection() {
             setPassphrase('');
             setUnlockState('success');
             window.sessionStorage.setItem(STORED_PROMO_KEY, unlockedCode);
+            window.dispatchEvent(new CustomEvent('a10tion-promo-code-updated', { detail: { promoCode: unlockedCode } }));
         } catch {
             setUnlockState('error');
             setUnlockMessage(
@@ -175,6 +173,7 @@ export default function PromoSection() {
         setUnlockState('idle');
         setUnlockMessage('');
         window.sessionStorage.removeItem(STORED_PROMO_KEY);
+        window.dispatchEvent(new CustomEvent('a10tion-promo-code-updated', { detail: { promoCode: '' } }));
     };
 
 
@@ -294,7 +293,7 @@ export default function PromoSection() {
                                 </h2>
 
                                 <p className='mx-auto mt-2 max-w-md text-[9.5px] leading-[1.55] text-white/65 sm:text-[11px]'>
-                                    Enter the passphrase you received and get a 10% discount on your next car wash.
+                                    Enter one of your private passwords to reveal its paired promo code. Copy it and use it when booking.
                                 </p>
 
                                 {promoCode ? (
@@ -350,7 +349,7 @@ export default function PromoSection() {
                                                 </label>
                                                 <input
                                                     id='promo-passphrase'
-                                                    type='password'
+                                                    type='text'
                                                     value={passphrase}
                                                     onChange={(event) => {
                                                         setPassphrase(event.target.value);
@@ -361,7 +360,7 @@ export default function PromoSection() {
                                                     }}
                                                     autoComplete='off'
                                                     placeholder='Enter passphrase'
-                                                    className='min-w-0 flex-1 bg-transparent py-2 text-[10px] text-white outline-none placeholder:text-white/40 sm:text-[11.5px]'
+                                                    className='min-w-0 flex-1 bg-transparent py-2 text-[13px] text-white outline-none placeholder:text-white/40 sm:text-[14.5px]'
                                                 />
                                             </div>
 
@@ -399,15 +398,6 @@ export default function PromoSection() {
                                         )}
                                     </form>
                                 )}
-
-                                <button
-                                    type='button'
-                                    onClick={() => setVehiclePromoOpen(true)}
-                                    className='mt-3 inline-flex min-h-[34px] w-full items-center justify-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 text-[9px] font-semibold text-white transition hover:bg-white/15 sm:min-h-[36px] sm:text-[10px]'
-                                >
-                                    <Tag className='h-3 w-3' />
-                                    Register
-                                </button>
 
                                 <p className='mt-3 hidden items-center justify-center gap-1.5 text-[8.5px] text-white/45 sm:flex'>
                                     <ShieldCheck className='h-3 w-3' />
@@ -501,10 +491,6 @@ export default function PromoSection() {
                 </div>
             )}
 
-            <VehiclePromoModal
-                open={vehiclePromoOpen}
-                onClose={() => setVehiclePromoOpen(false)}
-            />
         </section>
     );
 }

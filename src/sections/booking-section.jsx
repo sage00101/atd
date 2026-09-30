@@ -24,7 +24,6 @@ import VehiclePromoModal from '../components/vehicle-promo-modal';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const PAYMENT_API_ENDPOINT = `${API_BASE_URL}/api/payments/yoco/checkout`;
-const PROMO_VERIFY_ENDPOINT = `${API_BASE_URL}/api/promos/verify`;
 const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
 const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 15);
@@ -206,9 +205,13 @@ export default function BookingSection() {
     const [promoRegistrationOpen, setPromoRegistrationOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [paymentError, setPaymentError] = useState('');
-    const [promoCode, setPromoCode] = useState('');
-    const [promoState, setPromoState] = useState('idle');
-    const [promoMessage, setPromoMessage] = useState('');
+    const [promoCode, setPromoCode] = useState(() => {
+        try {
+            return sessionStorage.getItem('a10tionPromoCode') || '';
+        } catch {
+            return '';
+        }
+    });
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [contractAccepted, setContractAccepted] = useState(false);
     const [contractFiles, setContractFiles] = useState([]);
@@ -224,6 +227,12 @@ export default function BookingSection() {
         address: '',
         notes: '',
     });
+
+    useEffect(() => {
+        const syncPromoCode = (event) => setPromoCode(event.detail?.promoCode || '');
+        window.addEventListener('a10tion-promo-code-updated', syncPromoCode);
+        return () => window.removeEventListener('a10tion-promo-code-updated', syncPromoCode);
+    }, []);
 
     const today = startOfDay(now);
     const todayKey = dateKey(today);
@@ -343,8 +352,6 @@ export default function BookingSection() {
             setSelectedVehicleType(readSingleWashVehicle());
             if (next.purchaseType !== 'single') {
                 setPromoCode('');
-                setPromoState('idle');
-                setPromoMessage('');
             }
         };
 
@@ -426,56 +433,6 @@ export default function BookingSection() {
     const updateCustomer = (event) => {
         const { name, value } = event.target;
         setCustomer((current) => ({ ...current, [name]: value }));
-        if (['firstName', 'surname', 'mobile'].includes(name)) {
-            setPromoState('idle');
-            setPromoMessage('');
-        }
-    };
-
-    const verifyPromo = async () => {
-        const cleanPromo = promoCode.trim().toUpperCase();
-        const cleanFirstName = customer.firstName.trim();
-        const cleanSurname = customer.surname.trim();
-        const cleanMobile = customer.mobile.trim();
-
-        if (!cleanPromo) {
-            setPromoState('error');
-            setPromoMessage('Enter the one-time promo code you received after registering.');
-            return;
-        }
-        if (!cleanFirstName || !cleanSurname || !cleanMobile) {
-            setPromoState('error');
-            setPromoMessage('Enter your first name, surname and cell number above before verifying.');
-            return;
-        }
-
-        setPromoState('loading');
-        setPromoMessage('');
-        try {
-            const response = await fetch(PROMO_VERIFY_ENDPOINT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    promoCode: cleanPromo,
-                    firstName: cleanFirstName,
-                    surname: cleanSurname,
-                    mobile: cleanMobile,
-                    purchaseType: 'single',
-                }),
-            });
-            const result = await response.json().catch(() => ({}));
-            if (!response.ok || !result.valid) {
-                throw new Error(result.message || 'This promo code is invalid, already used, or not linked to your name and cell number.');
-            }
-            setPromoState('success');
-            setPromoMessage(
-                result.message
-                || 'Promo verified. A 10% single-wash discount will be applied securely at checkout. The code becomes invalid after a successful purchase.'
-            );
-        } catch (error) {
-            setPromoState('error');
-            setPromoMessage(error instanceof Error ? error.message : 'Promo verification failed.');
-        }
     };
 
     const beginSecurePayment = async (event) => {
@@ -525,7 +482,7 @@ export default function BookingSection() {
                     bookingTime: selectedTime,
                     serviceDurationMinutes: 90,
                     travelBufferMinutes: 60,
-                    promoCode: purchaseType === 'single' && promoState === 'success' ? promoCode.trim().toUpperCase() : null,
+                    promoCode: purchaseType === 'single' && promoCode.trim() ? promoCode.trim().toUpperCase() : null,
                     serviceAreaAccepted,
                     termsAccepted,
                     contractAccepted: isMonthly ? contractAccepted : false,
@@ -850,6 +807,22 @@ export default function BookingSection() {
                                             <input className={`${fieldClassName} uppercase`} name='registration' value={customer.registration} onChange={updateCustomer} placeholder='e.g. CA 123-456' autoCapitalize='characters' required />
                                         </label>
                                     </div>
+
+                                    {!isMonthly && (
+                                        <label className='mt-2.5 block'>
+                                            <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Promo code <span className='font-normal text-body/55'>(optional)</span></span>
+                                            <input
+                                                className={`${fieldClassName} uppercase`}
+                                                name='promoCode'
+                                                value={promoCode}
+                                                onChange={(event) => setPromoCode(event.target.value)}
+                                                placeholder='Paste your unlocked code'
+                                                autoCapitalize='characters'
+                                                autoComplete='off'
+                                            />
+                                            <span className='mt-1 block text-[8px] leading-[1.45] text-body/65 sm:text-[9px]'>An active code takes 10% off this single wash. Each code can be redeemed once.</span>
+                                        </label>
+                                    )}
 
                                     <label className='mt-2.5 block'>
                                         <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Service address</span>

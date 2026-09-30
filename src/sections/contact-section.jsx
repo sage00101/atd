@@ -16,8 +16,10 @@ import {
 import useReveal from '../hooks/use-reveal';
 
 
-const SUPPORT_EMAIL = 'A10tiontodetailmobiledetailing@gmail.com';
-const SUPPORT_PHONE = '17084002573';
+const SUPPORT_EMAIL = 'info@a10tion.co.za';
+const SUPPORT_PHONE = '0733069217';
+// wa.me requires international format with no leading 0 (South Africa = +27).
+const SUPPORT_WHATSAPP_NUMBER = `27${SUPPORT_PHONE.replace(/^0/, '')}`;
 
 const issueTypes = [
     { value: 'Booking support', label: 'Booking support', icon: CalendarDays },
@@ -171,7 +173,7 @@ export default function ContactSection() {
                             </a>
 
                             <a
-                                href={`https://wa.me/${SUPPORT_PHONE}`}
+                                href={`https://wa.me/${SUPPORT_WHATSAPP_NUMBER}`}
                                 target='_blank'
                                 rel='noreferrer'
                                 className='flex min-w-0 items-center justify-center gap-2 rounded-xl bg-white/[0.07] px-2.5 py-2.5 text-[8.5px] text-white/80 transition hover:bg-white/12 hover:text-white sm:text-[10px] lg:justify-start'

@@ -12,8 +12,8 @@ import {
 import footerLogo from '../assets/logos/footer-logo.svg';
 
 
-const SUPPORT_EMAIL = 'A10tiontodetailmobiledetailing@gmail.com';
-const SUPPORT_PHONE = '083 445 3888';
+const SUPPORT_EMAIL = 'info@a10tion.co.za';
+const SUPPORT_PHONE = '073 306 9217';
 const BUSINESS_ADDRESS = '2 Pinnacle Crescent, Strandfontein, Cape Town, 7798';
 const TERMS_URL = `${import.meta.env.BASE_URL}terms.html`;
 
@@ -156,7 +156,7 @@ export default function Footer({ onOpenVacancies }) {
                             lg:inline-flex
                         '
                     >
-                        Book a detail
+                        Book a wash
                         <ArrowUpRight className='h-3.5 w-3.5' />
                     </a>
                 </div>
@@ -185,7 +185,7 @@ export default function Footer({ onOpenVacancies }) {
                     <p className='col-span-2 flex min-w-0 flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-xl border border-[#dce5de] bg-white/65 px-2.5 py-2 text-[9.5px] font-medium text-[#202a23] sm:col-span-4 sm:text-[10.5px] lg:col-span-1 lg:justify-start lg:border-0 lg:bg-transparent lg:px-0 lg:py-0'>
                         <span className='inline-flex items-center gap-1.5 whitespace-nowrap'>
                             <ShieldCheck className='h-3.5 w-3.5 shrink-0 text-sage' />
-                            Hand-wash only
+                            B-BBEE Level 1 Contributor
                         </span>
                         <span className='text-sage/45'>•</span>
                     </p>
