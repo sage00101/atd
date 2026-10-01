@@ -14,6 +14,7 @@ import {
     Package,
     RefreshCw,
     ShieldCheck,
+    Sun,
     Tag,
     X,
     Zap,
@@ -36,24 +37,7 @@ const PAYMENT_STATUS_MESSAGES = {
     failed: { tone: 'error', text: 'The payment did not go through. Please try again or use a different card.' },
 };
 
-const PRIVATE_DOCUMENT_NAMES = [
-    'Client Contract Agreement.docx',
-    'Annexure A - Pre-inspection.docx',
-    'Private Client Prices_Final.docx',
-    'Supplier_Client Contract Agreement.docx',
-];
-
-const BUSINESS_DOCUMENT_NAMES = [
-    'Client Contract Agreement.docx',
-    'Annexure A - Pre-inspection.docx',
-    'Annexure B - Fleet Maintenance Checklist.docx',
-    'Businesses_Fleet_Family Prices_Final.docx',
-    'Supplier_Client Contract Agreement.docx',
-];
-
-function getRequiredDocumentNames(packageId) {
-    return packageId.startsWith('business-') ? BUSINESS_DOCUMENT_NAMES : PRIVATE_DOCUMENT_NAMES;
-}
+const REQUIRED_CONTRACT_FILE_NAME = 'Supplier_Client Contract Agreement.docx';
 
 function readSingleWashVehicle() {
     try {
@@ -449,20 +433,16 @@ export default function BookingSection() {
         }
 
         if (isMonthly) {
-            const requiredDocumentNames = getRequiredDocumentNames(selectedPackage);
-            const uploadedDocumentNames = new Set(contractFiles.map((file) => file.name));
-            const hasRequiredDocumentSet = requiredDocumentNames.every((name) => uploadedDocumentNames.has(name));
-            const isValidContractFiles = contractFiles.length === requiredDocumentNames.length
-                && hasRequiredDocumentSet
-                && contractFiles.every((file) => (
-                    (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                        || file.name.toLowerCase().endsWith('.docx'))
-                    && file.size <= 10 * 1024 * 1024
-                ));
+            const [contractFile] = contractFiles;
+            const isValidContractFile = contractFiles.length === 1
+                && contractFile?.name === REQUIRED_CONTRACT_FILE_NAME
+                && (contractFile.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                    || contractFile.name.toLowerCase().endsWith('.docx'))
+                && contractFile.size <= 10 * 1024 * 1024;
 
-            if (!isValidContractFiles) {
-                setContractFileError(`Please attach the correct ${requiredDocumentNames.length} completed package documents. Each file must be a DOCX no larger than 10 MB.`);
-                setPaymentError('All completed package documents are required for a monthly package.');
+            if (!isValidContractFile) {
+                setContractFileError(`Attach the completed ${REQUIRED_CONTRACT_FILE_NAME}. It must be a DOCX no larger than 10 MB.`);
+                setPaymentError('The completed supplier client contract agreement is required for a monthly package.');
                 return;
             }
         }
@@ -843,9 +823,9 @@ export default function BookingSection() {
                                                     <Package className='size-4' />
                                                 </div>
                                                 <div className='min-w-0'>
-                                                    <p className='text-[8px] font-semibold uppercase tracking-[0.11em] text-sage sm:text-[9px]'>Required package documents</p>
+                                                    <p className='text-[8px] font-semibold uppercase tracking-[0.11em] text-sage sm:text-[9px]'>Required package document</p>
                                                     <p className='mt-1 text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>
-                                                        Review, complete and attach all {getRequiredDocumentNames(selectedPackage).length} required documents before continuing.
+                                                        Attach the completed Supplier Client Contract Agreement before continuing.
                                                     </p>
                                                 </div>
                                             </div>
@@ -855,13 +835,9 @@ export default function BookingSection() {
                                                     type='file'
                                                     name='contract_files'
                                                     accept='.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                                                    multiple
                                                     onChange={(event) => {
-                                                        const selectedFiles = Array.from(event.target.files || []);
-                                                        const filesByName = new Map(contractFiles.map((file) => [file.name, file]));
-                                                        selectedFiles.forEach((file) => filesByName.set(file.name, file));
-                                                        setContractFiles(Array.from(filesByName.values()));
-                                                        event.target.value = '';
+                                                        const [selectedFile] = Array.from(event.target.files || []);
+                                                        setContractFiles(selectedFile ? [selectedFile] : []);
                                                         setContractFileError('');
                                                         setPaymentError('');
                                                     }}
@@ -901,7 +877,7 @@ export default function BookingSection() {
 
                                             <label className='mt-3 flex items-start gap-2 text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>
                                                 <input type='checkbox' checked={contractAccepted} onChange={(event) => setContractAccepted(event.target.checked)} className='mt-0.5 accent-[#365943]' required />
-                                                <span>I confirm that all required documents have been reviewed, completed and attached for my selected {selectedContract?.replace('-', ' ')} duration.</span>
+                                                <span>I confirm that I have reviewed the terms and completed and attached the Supplier Client Contract Agreement for my selected {selectedContract?.replace('-', ' ')} duration.</span>
                                             </label>
                                         </div>
                                     )}

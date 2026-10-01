@@ -16,6 +16,8 @@ import {
 // Do not pre-parse the multipart body — formidable needs the raw stream.
 export const config = { api: { bodyParser: false } };
 
+const REQUIRED_CONTRACT_FILE_NAME = 'Supplier_Client Contract Agreement.docx';
+
 function parseMultipart(req) {
     return new Promise((resolve, reject) => {
         const form = new IncomingForm({ multiples: true, maxFileSize: 10 * 1024 * 1024 });
@@ -81,8 +83,14 @@ export default async function handler(req, res) {
             const contractFiles = files.contract_files
                 ? (Array.isArray(files.contract_files) ? files.contract_files : [files.contract_files])
                 : [];
-            if (!contractAccepted || contractFiles.length === 0) {
-                res.status(400).json({ message: 'All completed package documents are required for a monthly package.' });
+            const [contractFile] = contractFiles;
+            const isValidContractFile = contractFiles.length === 1
+                && contractFile?.originalFilename === REQUIRED_CONTRACT_FILE_NAME
+                && (contractFile.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                    || contractFile.originalFilename.toLowerCase().endsWith('.docx'))
+                && contractFile.size <= 10 * 1024 * 1024;
+            if (!contractAccepted || !isValidContractFile) {
+                res.status(400).json({ message: `Attach the completed ${REQUIRED_CONTRACT_FILE_NAME} to continue.` });
                 return;
             }
         }

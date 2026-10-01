@@ -13,27 +13,11 @@ import { packageGroups, singleWashPrices } from '../data/pricing';
 
 const publicAssetUrl = (filename) => `${import.meta.env.BASE_URL}assets/${encodeURIComponent(filename)}`;
 
-const CLIENT_CONTRACT_URL = publicAssetUrl('Client Contract Agreement.docx');
 const CONTRACT_DOWNLOAD_KEY = 'a10tion-client-contract-downloaded';
-
-const PRIVATE_CONTRACT_DOCUMENTS = [
-    { name: 'Client Contract Agreement.docx', href: CLIENT_CONTRACT_URL },
-    { name: 'Annexure A - Pre-inspection.docx', href: publicAssetUrl('Annexure A - Pre-inspection.docx') },
-    { name: 'Private Client Prices_Final.docx', href: publicAssetUrl('Private Client Prices_Final.docx') },
+const MONTHLY_PACKAGE_DOCUMENTS = [
     { name: 'Supplier_Client Contract Agreement.docx', href: publicAssetUrl('Supplier_Client Contract Agreement.docx') },
+    { name: 'ATD Terms and Conditions.pdf', href: publicAssetUrl('ATD Terms and Conditions.pdf') },
 ];
-
-const BUSINESS_CONTRACT_DOCUMENTS = [
-    { name: 'Client Contract Agreement.docx', href: CLIENT_CONTRACT_URL },
-    { name: 'Annexure A - Pre-inspection.docx', href: publicAssetUrl('Annexure A - Pre-inspection.docx') },
-    { name: 'Annexure B - Fleet Maintenance Checklist.docx', href: publicAssetUrl('Annexure B - Fleet Maintenance Checklist.docx') },
-    { name: 'Businesses_Fleet_Family Prices_Final.docx', href: publicAssetUrl('Businesses_Fleet_Family Prices_Final.docx') },
-    { name: 'Supplier_Client Contract Agreement.docx', href: publicAssetUrl('Supplier_Client Contract Agreement.docx') },
-];
-
-function getContractDocuments(packageId) {
-    return packageId.startsWith('business-') ? BUSINESS_CONTRACT_DOCUMENTS : PRIVATE_CONTRACT_DOCUMENTS;
-}
 
 function downloadContractDocuments(documents) {
     documents.forEach((document, index) => {
@@ -531,12 +515,12 @@ export default function PricingSection() {
                                         })}
                                     </div>
                                 </div>
-                                <button type='button' onClick={() => { downloadContractDocuments(getContractDocuments(pendingPackage.id)); rememberContractDownload(); setContractDownloaded(true); }} className='flex min-h-[38px] w-full items-center justify-center gap-2 rounded-[9px] bg-[#1a2a20] px-3 text-[9px] font-semibold text-white transition hover:bg-[#24362a] sm:text-[10px]'>
+                                <button type='button' onClick={() => { downloadContractDocuments(MONTHLY_PACKAGE_DOCUMENTS); rememberContractDownload(); setContractDownloaded(true); }} className='flex min-h-[38px] w-full items-center justify-center gap-2 rounded-[9px] bg-[#1a2a20] px-3 text-[9px] font-semibold text-white transition hover:bg-[#24362a] sm:text-[10px]'>
                                     <FileText className='size-3.5' />
                                     {contractDownloaded ? 'Download documents' : 'Download required documents'}
                                 </button>
                                 <ul className='space-y-1 rounded-[9px] border border-[#e1e9e2] bg-white px-2.5 py-2 text-[8px] leading-[1.4] text-body sm:text-[9px]'>
-                                    {getContractDocuments(pendingPackage.id).map((document) => <li key={document.name}>{document.name}</li>)}
+                                    {MONTHLY_PACKAGE_DOCUMENTS.map((document) => <li key={document.name}>{document.name}</li>)}
                                 </ul>
                                 <label className='flex items-start gap-2 text-[8.5px] leading-[1.45] text-body sm:text-[9.5px]'>
                                     <input type='checkbox' checked={contractDownloaded} readOnly disabled className='mt-0.5 accent-[#365943] disabled:opacity-100' />
