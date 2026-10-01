@@ -1,7 +1,6 @@
 import { Redis } from '@upstash/redis';
 
-// Vercel's Upstash Marketplace integration injects either of these pairs
-// depending on when the integration was connected — support both.
+// Support both legacy KV and standard Upstash Redis environment variable names.
 const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 

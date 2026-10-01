@@ -12,7 +12,7 @@ import {
     releaseSharedPromoCode,
 } from '../../_lib/store.js';
 
-// Vercel must not pre-parse the body — signature verification requires the
+// Do not pre-parse the body — signature verification requires the
 // exact raw bytes that Yoco signed.
 export const config = { api: { bodyParser: false } };
 

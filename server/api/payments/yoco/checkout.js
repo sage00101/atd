@@ -13,7 +13,7 @@ import {
     SINGLE_WASH_CENTS,
 } from '../../_lib/store.js';
 
-// Vercel must not pre-parse the multipart body — formidable needs the raw stream.
+// Do not pre-parse the multipart body — formidable needs the raw stream.
 export const config = { api: { bodyParser: false } };
 
 function parseMultipart(req) {

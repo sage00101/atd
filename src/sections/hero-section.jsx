@@ -28,10 +28,11 @@ const MOBILE_IMAGE_POSITION = '64% 52%';
    `compact` is used once, on desktop, to sit quietly under the
    bigger hero logo. Mobile/tablet always use the default size.
 ============================================================ */
-function PrimaryButton({ href, children, compact = false }) {
+function PrimaryButton({ href, onClick, children, compact = false }) {
     return (
         <a
             href={href}
+            onClick={onClick}
             className={
                 compact
                     ? `
@@ -135,6 +136,15 @@ function Seam({ x1, y1, x2, y2 }) {
 export default function HeroSection() {
     const [priceListOpen, setPriceListOpen] = useState(false);
 
+    const activateMonthlyPackages = () => {
+        try {
+            sessionStorage.setItem('a10tion-pricing-mode', 'monthly');
+        } catch {
+            // The pricing section still responds to the event if storage is unavailable.
+        }
+        window.dispatchEvent(new Event('a10tion-pricing-target'));
+    };
+
     return (
         <section
             id="home"
@@ -191,7 +201,7 @@ export default function HeroSection() {
                     </p>
 
                     <div className="mt-4 flex flex-col items-stretch gap-2">
-                        <PrimaryButton href="#pricing#monthly">View packages</PrimaryButton>
+                        <PrimaryButton href="#pricing" onClick={activateMonthlyPackages}>View packages</PrimaryButton>
                         <div className="grid grid-cols-2 gap-2">
                             <SecondaryButton onClick={() => setPriceListOpen(true)} icon={HelpCircle}>
                                 Pricelist
@@ -239,11 +249,11 @@ export default function HeroSection() {
                         </p>
 
                         <div className="mt-6 flex flex-wrap items-center gap-2.5">
-                            <PrimaryButton href="#pricing" compact>View packages</PrimaryButton>
+                            <PrimaryButton href="#pricing" onClick={activateMonthlyPackages} compact>View packages</PrimaryButton>
                             <SecondaryButton onClick={() => setPriceListOpen(true)} icon={HelpCircle} compact>
                                 Pricelist
                             </SecondaryButton>
-                            <SecondaryButton href="#booking" icon={Mail} compact>
+                            <SecondaryButton href="#pricing" icon={Mail} compact>
                                 Book a single wash
                             </SecondaryButton>
                         </div>

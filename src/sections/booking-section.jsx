@@ -31,8 +31,8 @@ const BUSINESS_ADDRESS = '2 Pinnacle Crescent, Strandfontein';
 const SINGLE_WASH_VEHICLE_KEY = 'a10tion-single-wash-vehicle-type';
 
 const PAYMENT_STATUS_MESSAGES = {
-    success: { tone: 'success', text: 'Payment received — thank you! Your booking is confirmed and a receipt is on its way.' },
-    cancelled: { tone: 'info', text: 'Checkout was cancelled. No payment was taken — you can restart whenever you\u2019re ready.' },
+    success: { tone: 'success', text: 'Payment received - thank you! Your booking is confirmed and a receipt is on its way.' },
+    cancelled: { tone: 'info', text: 'Checkout was cancelled. No payment was taken - you can restart whenever you\u2019re ready.' },
     failed: { tone: 'error', text: 'The payment did not go through. Please try again or use a different card.' },
 };
 
@@ -109,8 +109,7 @@ function formatZarFromCents(cents) {
 
 const onsiteRequirements = [
     { icon: CarFront, text: 'A paved, level parking bay' },
-    { icon: Droplet, text: 'Outdoor water access — or ask about the self-contained tank' },
-    { icon: Zap, text: 'A power outlet within 20m — or ask about the generator' },
+    { icon: Sun, text: 'Preferable shaded area' },
     { icon: Clock3, text: 'Vehicle available for the full appointment window' },
 ];
 

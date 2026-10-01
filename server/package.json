@@ -3,14 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "scripts": {
-    "vercel-dev": "vercel dev"
-  },
   "dependencies": {
     "@upstash/redis": "^1.39.0",
-    "formidable": "^3.5.1"
+    "formidable": "^3.5.1",
+    "yarn": "^1.22.22"
   },
-  "devDependencies": {
-    "vercel": "^61.1.0"
+  "allowScripts": {
+    "yarn@1.22.22": true,
+    "esbuild@0.27.0": true
   }
 }

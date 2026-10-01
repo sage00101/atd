@@ -1,4 +1,4 @@
-// Persistent storage backed by Upstash Redis (Vercel Marketplace).
+// Persistent storage backed by Upstash Redis.
 import crypto from 'node:crypto';
 import { redis } from './redis.js';
 
