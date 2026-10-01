@@ -59,7 +59,7 @@ loadButton.addEventListener('click',async()=>{
     const result=await request('GET');
     rowsInput.value=(result.pairs||[]).map((pair,index)=>[String(index+1).padStart(2,'0'),pair.password,pair.promoCode].join('\\t')).join('\\n');
     const used=(result.pairs||[]).filter(pair=>pair.used).length;
-    summaryNode.textContent=result.pairs?.length?`Batch ${result.batchId} · ${result.pairs.length} passwords · ${used} promo codes redeemed\\n`+(result.pairs||[]).map((pair,index)=>`${String(index+1).padStart(2,'0')}  ${pair.promoCode}  ${pair.used?'REDEEMED':'available'}`).join('\\n'):'No active batch is saved yet.';
+    summaryNode.textContent=result.pairs?.length?\`Batch \${result.batchId} · \${result.pairs.length} passwords · \${used} promo codes redeemed\\n\`+(result.pairs||[]).map((pair,index)=>\`\${String(index+1).padStart(2,'0')}  \${pair.promoCode}  \${pair.used?'REDEEMED':'available'}\`).join('\\n'):'No active batch is saved yet.';
     setStatus('Current batch loaded.','ok');
   }catch(error){setStatus(error.message,'error');}
   finally{loadButton.disabled=false;}
@@ -70,7 +70,7 @@ saveButton.addEventListener('click',async()=>{
     const pairs=parseRows(rowsInput.value);
     const result=await request('PUT',{pairs});
     rowsInput.value=(result.pairs||[]).map((pair,index)=>[String(index+1).padStart(2,'0'),pair.password,pair.promoCode].join('\\t')).join('\\n');
-    summaryNode.textContent=`Batch ${result.batchId} saved with ${result.pairs.length} password/code pairs.`;
+    summaryNode.textContent=\`Batch \${result.batchId} saved with \${result.pairs.length} password/code pairs.\`;
     setStatus('Batch saved. Promo codes are ready to reveal.','ok');
   }catch(error){setStatus(error.message,'error');}
   finally{saveButton.disabled=false;}
