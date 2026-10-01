@@ -33,17 +33,17 @@ export default function AboutSection() {
     return (
         <section id='about' className='px-3 pt-8 sm:px-4 sm:pt-10 md:px-8 lg:px-10 lg:pt-12'>
             <div ref={ref} className='reveal mx-auto grid max-w-7xl gap-4 sm:gap-5 lg:grid-cols-[0.82fr_1.18fr] lg:items-center lg:gap-7'>
-                <div className='relative overflow-hidden rounded-[18px] sm:rounded-[22px]'>
+                <div className='relative overflow-hidden rounded-[18px] bg-canvasoft sm:rounded-[22px]'>
                     <img
                         src={aboutImage}
                         alt='A10tion To Detail vehicle being hand washed'
-                        className='h-[180px] w-full object-cover object-[center_72%] sm:h-[240px] lg:h-[315px]'
+                        className='h-[220px] w-full object-contain sm:h-[280px] lg:h-[360px]'
                         loading='lazy'
                         decoding='async'
                         sizes='(max-width: 768px) 100vw, 50vw'
                         draggable={false}
                     />
-                    <div className='pointer-events-none absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent' />
+                    <div className='pointer-events-none absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent' />
                 </div>
 
                 <div className='text-center lg:text-left'>

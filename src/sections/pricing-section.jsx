@@ -211,6 +211,21 @@ function PackageDetailsModal({ pkg, open, onClose }) {
                         <p className='mt-3 rounded-[10px] bg-sagelight/70 px-3 py-2 text-[9px] leading-[1.45] text-body sm:text-[10px]'>Pricing for Business / Fleet / Family packages is confirmed according to the selected vehicle and service requirements.</p>
                     )}
 
+                    {hasPackagePricing && Array.isArray(pkg.threeMonthPrices) && (
+                        <div className='mt-3 rounded-[11px] border border-[#dce8de] bg-white p-3'>
+                            <p className='text-[8px] font-semibold uppercase tracking-[0.1em] text-sage sm:text-[9px]'>3-month contract totals</p>
+                            <div className='mt-2 space-y-1.5'>
+                                {pkg.monthlyPrices.map(([vehicle], index) => (
+                                    <div key={vehicle} className='flex items-center justify-between gap-3 text-[9px] sm:text-[10px]'>
+                                        <span className='text-body'>{vehicle}</span>
+                                        <span className='font-semibold text-ink'>{pkg.threeMonthPrices[index]}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <p className='mt-2 text-[8px] leading-[1.45] text-body'>6- and 12-month contract totals are not specified in the current rate sheet and will be confirmed before payment.</p>
+                        </div>
+                    )}
+
                     <div className='mt-3 rounded-[11px] border border-[#dce8de] bg-white p-3'>
                         <p className='text-[8px] font-semibold uppercase tracking-[0.1em] text-sage sm:text-[9px]'>Included with this package</p>
                         <ul className='mt-2 grid gap-1.5 sm:grid-cols-2'>
@@ -314,6 +329,7 @@ export default function PricingSection() {
     const [contractDownloaded, setContractDownloaded] = useState(false);
     const [servicesOpen, setServicesOpen] = useState(false);
     const [singleWashPricingOpen, setSingleWashPricingOpen] = useState(false);
+    const [selectedPackageVehicle, setSelectedPackageVehicle] = useState(readSingleWashVehicle);
 
     useEffect(() => {
         const syncTarget = () => {
@@ -349,6 +365,7 @@ export default function PricingSection() {
         setContractMonths(readContractDuration());
         setContractPrompted(false);
         setContractDownloaded(readContractDownloadState());
+        setSelectedPackageVehicle(readSingleWashVehicle());
     };
 
     const closeContractModal = () => {
@@ -359,11 +376,12 @@ export default function PricingSection() {
     };
 
     const continueToBooking = () => {
-        if (!pendingPackage || !contractMonths || !contractDownloaded) {
+        if (!pendingPackage || !contractMonths || !contractDownloaded || !selectedPackageVehicle) {
             setContractPrompted(true);
             return;
         }
 
+        saveSingleWashVehicle(selectedPackageVehicle);
         saveSelection({
             purchaseType: 'monthly',
             packageId: pendingPackage.id,
@@ -496,6 +514,25 @@ export default function PricingSection() {
 
                         <div className='p-3.5 sm:p-5'>
                             <p className='text-[9.5px] leading-[1.5] text-body sm:text-[10.5px]'>Choose how many months you want your washes for. Review, complete and attach all required documents when making your purchase.</p>
+
+                            {Array.isArray(pendingPackage.monthlyPrices) && (
+                                <div className={`mt-3 rounded-[12px] border border-line bg-[#fafcfb] p-3 ${contractPrompted && !selectedPackageVehicle ? 'ring-2 ring-sage/30 ring-offset-2' : ''}`}>
+                                    <p className='text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Vehicle type</p>
+                                    <div className='mt-1.5 space-y-1.5'>
+                                        {pendingPackage.monthlyPrices.map(([vehicle, price]) => {
+                                            const selected = selectedPackageVehicle === vehicle;
+                                            return (
+                                                <button key={vehicle} type='button' onClick={() => setSelectedPackageVehicle(vehicle)} className={`grid min-h-[40px] w-full grid-cols-[auto_1fr_auto] items-center gap-2 rounded-[9px] border px-2.5 text-left text-[9px] transition sm:text-[10px] ${selected ? 'border-[#294633] bg-[#eaf2eb] text-ink' : 'border-[#e6eee7] bg-white text-body hover:border-[#9ab6a0]'}`} aria-pressed={selected}>
+                                                    <span className={`grid size-4 place-items-center rounded-full border ${selected ? 'border-[#294633] bg-[#294633]' : 'border-[#b9cdbd]'}`}><span className={selected ? 'size-1.5 rounded-full bg-white' : ''} /></span>
+                                                    <span>{vehicle}</span>
+                                                    <span className='font-semibold text-ink'>{price}/mo</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
                             <div className={`mt-3 space-y-2 rounded-[12px] border border-line bg-[#fafcfb] p-3 ${contractPrompted ? 'ring-2 ring-sage/30 ring-offset-2' : ''}`}>
                                 <div className='block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>
                                     Contract duration in months
@@ -516,6 +553,21 @@ export default function PricingSection() {
                                         })}
                                     </div>
                                 </div>
+                                {selectedPackageVehicle && contractMonths && Array.isArray(pendingPackage.monthlyPrices) && (() => {
+                                    const vehicleIndex = pendingPackage.monthlyPrices.findIndex(([vehicle]) => vehicle === selectedPackageVehicle);
+                                    const monthlyPrice = vehicleIndex >= 0 ? pendingPackage.monthlyPrices[vehicleIndex][1] : '';
+                                    const threeMonthTotal = pendingPackage.threeMonthPrices?.[vehicleIndex];
+                                    return (
+                                        <div className='rounded-[9px] border border-[#dce8de] bg-white px-3 py-2 text-[9px] sm:text-[10px]'>
+                                            <div className='flex justify-between gap-3'><span className='text-body'>Monthly rate</span><strong className='text-ink'>{monthlyPrice}</strong></div>
+                                            {contractMonths === '3' && threeMonthTotal ? (
+                                                <div className='mt-1 flex justify-between gap-3 border-t border-[#edf1ed] pt-1'><span className='text-body'>3-month contract total</span><strong className='text-ink'>{threeMonthTotal}</strong></div>
+                                            ) : (
+                                                <p className='mt-1 border-t border-[#edf1ed] pt-1 leading-[1.45] text-body'>Total for {contractMonths} months: to be confirmed. The rate sheet does not provide this contract total.</p>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
                                 <button type='button' onClick={() => { downloadContractDocuments(MONTHLY_PACKAGE_DOCUMENTS); rememberContractDownload(); setContractDownloaded(true); }} className='flex min-h-[38px] w-full items-center justify-center gap-2 rounded-[9px] bg-[#1a2a20] px-3 text-[9px] font-semibold text-white transition hover:bg-[#24362a] sm:text-[10px]'>
                                     <FileText className='size-3.5' />
                                     {contractDownloaded ? 'Download documents' : 'Download required documents'}
@@ -530,7 +582,7 @@ export default function PricingSection() {
                             </div>
 
                             <p className={`mt-2 min-h-[14px] text-center text-[8.5px] font-medium ${contractPrompted ? 'text-[#466b50]' : 'text-body/60'}`} role={contractPrompted ? 'alert' : undefined}>
-                                {contractPrompted ? 'Enter the duration, download the contract and confirm before continuing.' : contractMonths ? `${contractMonths}-month contract selected.` : 'A contract is required for monthly packages.'}
+                                {contractPrompted ? 'Choose a vehicle type, duration, download the contract and confirm before continuing.' : contractMonths ? `${contractMonths}-month contract selected.` : 'A contract is required for monthly packages.'}
                             </p>
 
                             <div className='mt-2 grid gap-2 sm:grid-cols-[auto_1fr]'>

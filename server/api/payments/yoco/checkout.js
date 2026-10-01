@@ -11,6 +11,7 @@ import {
     reserveBookingSlot,
     reserveSharedPromoCode,
     savePendingBooking,
+    MONTHLY_PACKAGE_CENTS,
     PROMO_DISCOUNT_RATE,
     SINGLE_WASH_CENTS,
 } from '../../_lib/store.js';
@@ -189,14 +190,17 @@ export default async function handler(req, res) {
                 amountCents = originalAmountCents - discountCents;
             }
         } else {
-            // Monthly package pricing depends on a business decision (per-vehicle rate
-            // card vs. quote-based fleet pricing) that isn't encoded in the booking
-            // payload yet. Reject rather than guess an amount.
-            await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
-            reservedSlotDate = null;
-            reservedSlotTime = null;
-            res.status(501).json({ message: 'Monthly package payments are not yet automated. Please contact the business to arrange payment.' });
-            return;
+            // First monthly installment, charged according to the package + vehicle rate card.
+            const vehicleRates = MONTHLY_PACKAGE_CENTS[packageId];
+            originalAmountCents = vehicleRates?.[vehicleType];
+            if (!originalAmountCents) {
+                await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
+                reservedSlotDate = null;
+                reservedSlotTime = null;
+                res.status(400).json({ message: 'Unknown monthly package or vehicle type.' });
+                return;
+            }
+            amountCents = originalAmountCents; // promo codes don't apply to monthly packages
         }
 
         const siteUrl = process.env.SITE_URL || 'https://sage00101.github.io/atd/';

@@ -409,7 +409,7 @@ export default function BookingSection() {
         ? 'Choose a date to continue'
         : !selectedTime
           ? 'Choose a time to continue'
-                    : !isMonthly && !selectedVehicleType
+                    : !selectedVehicleType
                         ? 'Select your package to purchase'
           : isMonthly && !selectedContract
             ? 'Choose a monthly package first'
@@ -465,7 +465,7 @@ export default function BookingSection() {
                     purchaseType,
                     packageId: selectedPackage,
                     packageName: selectedPackageName,
-                    vehicleType: !isMonthly ? selectedVehicleType : null,
+                    vehicleType: selectedVehicleType,
                     contractOption: isMonthly ? selectedContract : null,
                     bookingDate: selectedDateKey,
                     bookingTime: selectedTime,
@@ -540,7 +540,7 @@ export default function BookingSection() {
                         <div className='grid size-7 shrink-0 place-items-center rounded-full bg-sagelight text-sagedeep'><Package className='size-3.5' /></div>
                         <div className='min-w-0 text-left'>
                             <p className='text-[7.5px] font-semibold uppercase tracking-[0.11em] text-sage'>{isMonthly ? 'Monthly package' : 'Once-off booking'}</p>
-                            <p className='truncate text-[9.5px] font-semibold text-ink sm:text-[10.5px]'>{selectedPackageName}{!isMonthly && selectedVehicleType ? ` · ${selectedVehicleType}` : ''}{isMonthly && selectedContract ? ` · ${selectedContract.replace('-', ' ')}` : ''}</p>
+                            <p className='truncate text-[9.5px] font-semibold text-ink sm:text-[10.5px]'>{selectedPackageName}{selectedVehicleType ? ` · ${selectedVehicleType}` : ''}{isMonthly && selectedContract ? ` · ${selectedContract.replace('-', ' ')}` : ''}</p>
                         </div>
                     </div>
                     <a href='#pricing' className='shrink-0 rounded-full border border-sage/25 bg-canvasoft px-2.5 py-1.5 text-[8px] font-semibold text-sagedeep transition hover:border-sage/45'>Change</a>
