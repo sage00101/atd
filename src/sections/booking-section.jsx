@@ -210,6 +210,7 @@ export default function BookingSection() {
         address: '',
         notes: '',
     });
+    const [confirmEmail, setConfirmEmail] = useState('');
 
     useEffect(() => {
         const syncPromoCode = (event) => setPromoCode(event.detail?.promoCode || '');
@@ -418,12 +419,20 @@ export default function BookingSection() {
         setCustomer((current) => ({ ...current, [name]: value }));
     };
 
+    const emailMismatch = confirmEmail.length > 0
+        && confirmEmail.trim().toLowerCase() !== customer.email.trim().toLowerCase();
+
     const beginSecurePayment = async (event) => {
         event.preventDefault();
         if (missingSelection || isSubmitting) return;
 
         if (!looksLikeVehicleRegistration(customer.registration)) {
             setPaymentError('Please enter a valid-looking vehicle registration number (e.g. CA 123-456 or GP 12 AB C).');
+            return;
+        }
+
+        if (confirmEmail.trim().toLowerCase() !== customer.email.trim().toLowerCase()) {
+            setPaymentError('Please make sure both email addresses match.');
             return;
         }
 
@@ -776,6 +785,22 @@ export default function BookingSection() {
                                         <label>
                                             <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Email address</span>
                                             <input className={fieldClassName} type='email' name='email' value={customer.email} onChange={updateCustomer} autoComplete='email' required />
+                                        </label>
+                                        <label>
+                                            <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Confirm email address</span>
+                                            <input
+                                                className={`${fieldClassName} ${emailMismatch ? 'border-red-300 focus:border-red-400' : ''}`}
+                                                type='email'
+                                                name='confirmEmail'
+                                                value={confirmEmail}
+                                                onChange={(event) => setConfirmEmail(event.target.value)}
+                                                onPaste={(event) => event.preventDefault()}
+                                                autoComplete='off'
+                                                required
+                                            />
+                                            {emailMismatch && (
+                                                <span className='mt-1 block text-[8px] font-medium text-red-600 sm:text-[9px]'>Email addresses don't match.</span>
+                                            )}
                                         </label>
                                         <label>
                                             <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Vehicle</span>

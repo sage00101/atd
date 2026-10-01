@@ -321,6 +321,7 @@ export default function PricingSection() {
                 const requestedMode = sessionStorage.getItem('a10tion-pricing-mode');
                 const requestedGroup = sessionStorage.getItem('a10tion-package-group');
                 if (requestedMode === 'monthly') setMode('monthly');
+                else if (requestedMode === 'single') setMode('single');
                 if (requestedGroup && packageGroups[requestedGroup]) setActiveGroup(requestedGroup);
             } catch {
                 // Safe fallback.

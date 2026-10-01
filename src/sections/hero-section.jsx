@@ -91,9 +91,9 @@ function SecondaryButton({ href, onClick, icon: Icon, children, compact = false 
         : 'h-3.5 w-3.5 text-[#a7c5af] transition-transform duration-300 group-hover:rotate-[-6deg] sm:h-4 sm:w-4';
     const content = <><Icon className={iconClassName} strokeWidth={1.7} />{children}</>;
 
-    return onClick
-        ? <button type='button' onClick={onClick} className={className}>{content}</button>
-        : <a href={href} className={className}>{content}</a>;
+    return href
+        ? <a href={href} onClick={onClick} className={className}>{content}</a>
+        : <button type='button' onClick={onClick} className={className}>{content}</button>;
 }
 
 /* ============================================================
@@ -139,6 +139,15 @@ export default function HeroSection() {
     const activateMonthlyPackages = () => {
         try {
             sessionStorage.setItem('a10tion-pricing-mode', 'monthly');
+        } catch {
+            // The pricing section still responds to the event if storage is unavailable.
+        }
+        window.dispatchEvent(new Event('a10tion-pricing-target'));
+    };
+
+    const activateSingleWash = () => {
+        try {
+            sessionStorage.setItem('a10tion-pricing-mode', 'single');
         } catch {
             // The pricing section still responds to the event if storage is unavailable.
         }
@@ -249,12 +258,12 @@ export default function HeroSection() {
                         </p>
 
                         <div className="mt-6 flex flex-wrap items-center gap-2.5">
-                            <PrimaryButton href="#pricing" onClick={activateMonthlyPackages} compact>View packages</PrimaryButton>
+                            <PrimaryButton href="#pricing" onClick={activateSingleWash} compact>Book a single wash</PrimaryButton>
                             <SecondaryButton onClick={() => setPriceListOpen(true)} icon={HelpCircle} compact>
                                 Pricelist
                             </SecondaryButton>
-                            <SecondaryButton href="#pricing" icon={Mail} compact>
-                                Book a single wash
+                            <SecondaryButton href="#pricing" onClick={activateMonthlyPackages} icon={Mail} compact>
+                                View packages
                             </SecondaryButton>
                         </div>
                     </div>
