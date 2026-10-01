@@ -1,6 +1,7 @@
 // Persistent storage backed by Upstash Redis.
 import crypto from 'node:crypto';
 import { redis } from './redis.js';
+import { generateReferenceNumber } from './reference.js';
 
 const PENDING_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 3; // 3 days — abandoned checkouts expire
 const CONFIRMED_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year — keep the slot blocked long-term
@@ -8,6 +9,19 @@ const DATE_INDEX_TTL_SECONDS = 60 * 60 * 24 * 90; // 90 days — bookings are ne
 const WEBHOOK_DEDUPE_TTL_SECONDS = 60 * 60 * 24 * 3; // 3 days — longer than Yoco's retry window
 const PROMO_BATCH_KEY = 'promo:shared:active-batch';
 const PROMO_RESERVATION_TTL_SECONDS = 60 * 60;
+const REFERENCE_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year — matches confirmed-booking retention
+
+const referenceKey = (reference) => `booking-ref:${reference}`;
+
+/** Generates a reference number and atomically claims it, retrying on the astronomically rare collision. */
+export async function claimUniqueReferenceNumber() {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        const candidate = generateReferenceNumber();
+        const claimed = await redis.set(referenceKey(candidate), 1, { nx: true, ex: REFERENCE_TTL_SECONDS });
+        if (claimed === 'OK') return candidate;
+    }
+    throw new Error('Could not generate a unique booking reference. Please try again.');
+}
 
 export const SINGLE_WASH_CENTS = {
     'Sedan / Hatchback': 65000,
@@ -194,41 +208,63 @@ export async function markSharedPromoCodeUsed(promoCode, reservationId) {
 
 // ---------------------------------------------------------------------------
 // Bookings (pending checkout -> confirmed payment) + per-date slot index
+//
+// Each slot has its own key (`booking-slot:<date>:<time>`) with a TTL tied to
+// its real lifecycle: short-lived while pending (so an abandoned checkout —
+// one that never gets a webhook at all — self-releases automatically after
+// PENDING_BOOKING_TTL_SECONDS) and long-lived once paid. The per-date SET is
+// only a cheap candidate list; getBookedSlotsInRange cross-checks each
+// candidate's slot key before reporting it as taken, so stale/expired
+// candidates never block a real customer.
 // ---------------------------------------------------------------------------
 
 const bookingKey = (checkoutId) => `booking:${checkoutId}`;
 const dateIndexKey = (date) => `booking-index:${date}`;
+const slotKey = (date, time) => `booking-slot:${date}:${time}`;
 
 export async function getBooking(checkoutId) {
     return redis.get(bookingKey(checkoutId));
 }
 
-/** Stores a booking right after Yoco checkout creation, and reserves its slot. */
-export async function savePendingBooking(checkoutId, booking) {
-    await redis.set(bookingKey(checkoutId), { ...booking, status: 'pending' }, { ex: PENDING_BOOKING_TTL_SECONDS });
-    if (booking.bookingDate && booking.bookingTime) {
-        const key = dateIndexKey(booking.bookingDate);
-        await redis.sadd(key, booking.bookingTime);
-        await redis.expire(key, DATE_INDEX_TTL_SECONDS);
-    }
+/** Atomically claims a date/time slot. Returns false if it's already actively held by someone else. */
+export async function reserveBookingSlot(bookingDate, bookingTime, token) {
+    if (!bookingDate || !bookingTime) return true;
+    const claimed = await redis.set(slotKey(bookingDate, bookingTime), token, {
+        nx: true,
+        ex: PENDING_BOOKING_TTL_SECONDS,
+    });
+    if (claimed !== 'OK') return false;
+    const key = dateIndexKey(bookingDate);
+    await redis.sadd(key, bookingTime);
+    await redis.expire(key, DATE_INDEX_TTL_SECONDS);
+    return true;
 }
 
-/** Marks a booking as paid once the webhook confirms it — keeps the slot blocked long-term. */
+/** Stores the booking record once the slot is already claimed via reserveBookingSlot. */
+export async function savePendingBooking(checkoutId, booking) {
+    await redis.set(bookingKey(checkoutId), { ...booking, status: 'pending' }, { ex: PENDING_BOOKING_TTL_SECONDS });
+}
+
+/** Marks a booking as paid once the webhook confirms it — extends the slot hold long-term. */
 export async function markBookingConfirmed(checkoutId) {
     const booking = await redis.get(bookingKey(checkoutId));
     if (!booking) return null;
     const confirmed = { ...booking, status: 'paid', confirmedAt: new Date().toISOString() };
     await redis.set(bookingKey(checkoutId), confirmed, { ex: CONFIRMED_BOOKING_TTL_SECONDS });
+    if (booking.bookingDate && booking.bookingTime) {
+        await redis.expire(slotKey(booking.bookingDate, booking.bookingTime), CONFIRMED_BOOKING_TTL_SECONDS);
+    }
     return confirmed;
 }
 
-/** Frees a reserved slot after a failed/abandoned payment so it goes back up for booking. */
+/** Frees a reserved slot after a failed/cancelled payment so it goes back up for booking immediately. */
 export async function releaseBookingSlot(bookingDate, bookingTime) {
     if (!bookingDate || !bookingTime) return;
+    await redis.del(slotKey(bookingDate, bookingTime));
     await redis.srem(dateIndexKey(bookingDate), bookingTime);
 }
 
-/** Returns { [date]: [time, ...] } for every reserved slot (pending or paid) in the given date range. */
+/** Returns { [date]: [time, ...] } for every slot still actively held (pending or paid) in the given date range. */
 export async function getBookedSlotsInRange(fromDate, toDate) {
     const bookedSlots = {};
     if (!fromDate || !toDate) return bookedSlots;
@@ -245,7 +281,13 @@ export async function getBookedSlotsInRange(fromDate, toDate) {
     }
 
     await Promise.all(dates.map(async (date) => {
-        const times = await redis.smembers(dateIndexKey(date));
+        const candidates = await redis.smembers(dateIndexKey(date));
+        if (!candidates.length) return;
+
+        const stillHeld = await Promise.all(candidates.map((time) => redis.exists(slotKey(date, time))));
+        const times = candidates.filter((_, index) => stillHeld[index]);
+        const stale = candidates.filter((_, index) => !stillHeld[index]);
+        if (stale.length) await redis.srem(dateIndexKey(date), ...stale); // opportunistic cleanup
         if (times.length) bookedSlots[date] = times;
     }));
 

@@ -1,17 +1,24 @@
 import crypto from 'node:crypto';
 import { IncomingForm } from 'formidable';
 import { applyCors } from '../../_lib/cors.js';
-import { generateReferenceNumber } from '../../_lib/reference.js';
 import {
+    claimUniqueReferenceNumber,
     getSharedPromoCodeStatus,
     looksLikeVehicleRegistration,
     normaliseReg,
+    releaseBookingSlot,
     releaseSharedPromoCode,
+    reserveBookingSlot,
     reserveSharedPromoCode,
     savePendingBooking,
     PROMO_DISCOUNT_RATE,
     SINGLE_WASH_CENTS,
 } from '../../_lib/store.js';
+
+// Business operates in South Africa (UTC+2, no DST) — anchor the quoted
+// booking date/time to that fixed offset regardless of the server's own TZ.
+const SA_UTC_OFFSET = '+02:00';
+const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000; // customers must book at least 3 hours ahead
 
 // Do not pre-parse the multipart body — formidable needs the raw stream.
 export const config = { api: { bodyParser: false } };
@@ -39,6 +46,8 @@ export default async function handler(req, res) {
 
     let reservedPromoCode = null;
     let promoReservationId = null;
+    let reservedSlotDate = null;
+    let reservedSlotTime = null;
     try {
         const { fields, files } = await parseMultipart(req);
         const bookingRaw = Array.isArray(fields.booking) ? fields.booking[0] : fields.booking;
@@ -73,10 +82,23 @@ export default async function handler(req, res) {
             res.status(400).json({ message: 'Choose a date and time.' });
             return;
         }
+        const slotDateTime = new Date(`${bookingDate}T${bookingTime}:00${SA_UTC_OFFSET}`);
+        if (Number.isNaN(slotDateTime.getTime()) || slotDateTime.getTime() - Date.now() < MIN_LEAD_TIME_MS) {
+            res.status(400).json({ message: 'Bookings require at least 3 hours notice. Please choose a later time.' });
+            return;
+        }
         if (!looksLikeVehicleRegistration(customer?.registration)) {
             res.status(400).json({ message: 'Invalid vehicle registration format.' });
             return;
         }
+        const reference = await claimUniqueReferenceNumber();
+        const slotReserved = await reserveBookingSlot(bookingDate, bookingTime, reference);
+        if (!slotReserved) {
+            res.status(409).json({ message: 'That time slot was just booked by someone else. Please choose another.' });
+            return;
+        }
+        reservedSlotDate = bookingDate;
+        reservedSlotTime = bookingTime;
 
         const isMonthly = purchaseType === 'monthly';
         if (isMonthly) {
@@ -90,6 +112,9 @@ export default async function handler(req, res) {
                     || contractFile.originalFilename.toLowerCase().endsWith('.docx'))
                 && contractFile.size <= 10 * 1024 * 1024;
             if (!contractAccepted || !isValidContractFile) {
+                await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
+                reservedSlotDate = null;
+                reservedSlotTime = null;
                 res.status(400).json({ message: `Attach the completed ${REQUIRED_CONTRACT_FILE_NAME} to continue.` });
                 return;
             }
@@ -97,6 +122,9 @@ export default async function handler(req, res) {
 
         const yocoSecret = process.env.YOCO_SECRET_KEY;
         if (!yocoSecret) {
+            await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
+            reservedSlotDate = null;
+            reservedSlotTime = null;
             res.status(500).json({ message: 'Payment gateway not configured.' });
             return;
         }
@@ -111,6 +139,9 @@ export default async function handler(req, res) {
         if (!isMonthly) {
             originalAmountCents = SINGLE_WASH_CENTS[vehicleType];
             if (!originalAmountCents) {
+                await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
+                reservedSlotDate = null;
+                reservedSlotTime = null;
                 res.status(400).json({ message: 'Unknown vehicle type.' });
                 return;
             }
@@ -120,14 +151,23 @@ export default async function handler(req, res) {
                 const submittedCode = String(promoCode).trim().toUpperCase();
                 const status = await getSharedPromoCodeStatus(submittedCode);
                 if (status.status === 'invalid') {
+                    await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
+                    reservedSlotDate = null;
+                    reservedSlotTime = null;
                     res.status(400).json({ message: 'That promo code is not in the active promo batch.' });
                     return;
                 }
                 if (status.status === 'used') {
+                    await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
+                    reservedSlotDate = null;
+                    reservedSlotTime = null;
                     res.status(410).json({ message: 'That promo code has already been redeemed.' });
                     return;
                 }
                 if (status.status === 'reserved') {
+                    await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
+                    reservedSlotDate = null;
+                    reservedSlotTime = null;
                     res.status(409).json({ message: 'That promo code is already being used in another checkout.' });
                     return;
                 }
@@ -136,6 +176,9 @@ export default async function handler(req, res) {
                 const reserved = await reserveSharedPromoCode(status.promoCode, promoReservationId);
                 if (!reserved) {
                     promoReservationId = null;
+                    await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
+                    reservedSlotDate = null;
+                    reservedSlotTime = null;
                     res.status(409).json({ message: 'That promo code was just claimed by another checkout. Please try another code.' });
                     return;
                 }
@@ -149,13 +192,15 @@ export default async function handler(req, res) {
             // Monthly package pricing depends on a business decision (per-vehicle rate
             // card vs. quote-based fleet pricing) that isn't encoded in the booking
             // payload yet. Reject rather than guess an amount.
+            await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
+            reservedSlotDate = null;
+            reservedSlotTime = null;
             res.status(501).json({ message: 'Monthly package payments are not yet automated. Please contact the business to arrange payment.' });
             return;
         }
 
         const siteUrl = process.env.SITE_URL || 'https://sage00101.github.io/atd/';
         const idempotencyKey = crypto.randomUUID();
-        const reference = generateReferenceNumber();
 
         const yocoRes = await fetch('https://payments.yoco.com/api/checkouts', {
             method: 'POST',
@@ -199,6 +244,9 @@ export default async function handler(req, res) {
                 await releaseSharedPromoCode(reservedPromoCode, promoReservationId);
                 reservedPromoCode = null;
             }
+            await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
+            reservedSlotDate = null;
+            reservedSlotTime = null;
             console.error('Yoco error', yocoBody);
             res.status(502).json({ message: yocoBody.message || 'Could not start secure payment.' });
             return;
@@ -222,6 +270,9 @@ export default async function handler(req, res) {
     } catch (err) {
         if (reservedPromoCode && promoReservationId) {
             await releaseSharedPromoCode(reservedPromoCode, promoReservationId).catch(() => {});
+        }
+        if (reservedSlotDate && reservedSlotTime) {
+            await releaseBookingSlot(reservedSlotDate, reservedSlotTime).catch(() => {});
         }
         console.error(err);
         res.status(500).json({ message: 'Secure payment could not be started.' });

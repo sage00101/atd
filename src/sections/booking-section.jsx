@@ -27,6 +27,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''
 const PAYMENT_API_ENDPOINT = `${API_BASE_URL}/api/payments/yoco/checkout`;
 const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
+const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000; // bookings require at least 3 hours notice
 const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 15);
 const BUSINESS_ADDRESS = '2 Pinnacle Crescent, Strandfontein';
 const SINGLE_WASH_VEHICLE_KEY = 'a10tion-single-wash-vehicle-type';
@@ -397,7 +398,7 @@ export default function BookingSection() {
             setSelectedTime(null);
             return;
         }
-        if (selectedDate && selectedTime && (blockedTimes.includes(selectedTime) || slotDateTime(selectedDate, selectedTime) <= now)) {
+        if (selectedDate && selectedTime && (blockedTimes.includes(selectedTime) || slotDateTime(selectedDate, selectedTime).getTime() - now.getTime() < MIN_LEAD_TIME_MS)) {
             setSelectedTime(null);
         }
     }, [selectedDateKey, selectedTime, bookedSlots, now, todayKey]);
@@ -633,7 +634,7 @@ export default function BookingSection() {
 
                         <div className='mt-1.5 grid grid-cols-3 gap-1 sm:grid-cols-4 sm:gap-2'>
                             {bookingSlots.map((slot) => {
-                                const unavailable = blockedTimes.includes(slot.time) || Boolean(selectedDate && slotDateTime(selectedDate, slot.time) <= now);
+                                const unavailable = blockedTimes.includes(slot.time) || Boolean(selectedDate && slotDateTime(selectedDate, slot.time).getTime() - now.getTime() < MIN_LEAD_TIME_MS);
                                 const selected = selectedTime === slot.time;
                                 return (
                                     <button key={slot.time} type='button' disabled={!selectedDate || unavailable} onClick={() => setSelectedTime(slot.time)} className={`min-h-[31px] rounded-[7px] border px-0 text-[8.5px] font-semibold transition sm:min-h-[40px] sm:text-[10.5px] ${selected ? 'border-[#274633] bg-[#1d3426] text-white' : unavailable ? 'cursor-not-allowed border-line bg-canvasoft text-body/25 line-through' : !selectedDate ? 'cursor-not-allowed border-line bg-canvasoft text-body/30' : 'border-line bg-white text-ink hover:border-sage/45 hover:bg-sagelight'}`} title={slot.window}>
