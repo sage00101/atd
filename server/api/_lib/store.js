@@ -222,6 +222,12 @@ export async function markBookingConfirmed(checkoutId) {
     return confirmed;
 }
 
+/** Frees a reserved slot after a failed/abandoned payment so it goes back up for booking. */
+export async function releaseBookingSlot(bookingDate, bookingTime) {
+    if (!bookingDate || !bookingTime) return;
+    await redis.srem(dateIndexKey(bookingDate), bookingTime);
+}
+
 /** Returns { [date]: [time, ...] } for every reserved slot (pending or paid) in the given date range. */
 export async function getBookedSlotsInRange(fromDate, toDate) {
     const bookedSlots = {};

@@ -9,6 +9,7 @@ import {
     markSharedPromoCodeUsed,
     markVehiclePromoUsed,
     markWebhookProcessed,
+    releaseBookingSlot,
     releaseSharedPromoCode,
 } from '../../_lib/store.js';
 
@@ -94,6 +95,7 @@ export default async function handler(req, res) {
         if (meta.promoCodeType === 'shared-code' && promo && reservationId) {
             await releaseSharedPromoCode(promo, reservationId);
         }
+        await releaseBookingSlot(meta.bookingDate || pending?.bookingDate, meta.bookingTime || pending?.bookingTime);
         res.status(200).send('ignored');
         return;
     }
