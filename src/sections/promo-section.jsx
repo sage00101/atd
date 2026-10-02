@@ -8,7 +8,6 @@ import {
     LockKeyhole,
     RotateCcw,
     ShieldCheck,
-    Sparkles,
     X,
 } from 'lucide-react';
 
@@ -284,7 +283,6 @@ export default function PromoSection() {
 
                             <div className='relative'>
                                 <p className='flex items-center justify-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.16em] text-[#bdd4c2] sm:text-[9.5px]'>
-                                    <Sparkles className='h-3 w-3' />
                                     Private offer
                                 </p>
 
@@ -293,7 +291,7 @@ export default function PromoSection() {
                                 </h2>
 
                                 <p className='mx-auto mt-2 max-w-md text-[9.5px] leading-[1.55] text-white/65 sm:text-[11px]'>
-                                    Enter one of your private passwords to reveal its paired promo code. Copy it and use it when booking.
+                                    Enter your private password to reveal its paired promo code. Copy it and use it when booking.
                                 </p>
 
                                 {promoCode ? (

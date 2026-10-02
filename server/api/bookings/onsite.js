@@ -6,15 +6,15 @@ import { sendMonthlyContractEmail, sendReceiptEmail } from '../_lib/email.js';
 import {
     claimUniqueReferenceNumber,
     getSharedPromoCodeStatus,
+    looksLikeEmail,
     looksLikeVehicleRegistration,
-    markBookingConfirmed,
-    markSharedPromoCodeUsed,
+    normaliseEmail,
     normaliseReg,
     releaseBookingSlot,
     releaseSharedPromoCode,
     reserveBookingSlot,
     reserveSharedPromoCode,
-    savePendingBooking,
+    saveOnsiteBooking,
     MONTHLY_PACKAGE_CENTS,
     PROMO_DISCOUNT_RATE,
     SINGLE_WASH_CENTS,
@@ -29,6 +29,7 @@ const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000; // customers must book at least 3 h
 export const config = { api: { bodyParser: false } };
 
 const REQUIRED_CONTRACT_FILE_NAME = 'Supplier_Client Contract Agreement.docx';
+const ONSITE_SLOT_TTL_SECONDS = 60 * 60 * 24 * 365;
 
 function parseMultipart(req) {
     return new Promise((resolve, reject) => {
@@ -95,12 +96,17 @@ export default async function handler(req, res) {
             res.status(400).json({ message: 'Bookings require at least 3 hours notice. Please choose a later time.' });
             return;
         }
-        if (!looksLikeVehicleRegistration(customer?.registration)) {
-            res.status(400).json({ message: 'Invalid vehicle registration format.' });
+        if (!looksLikeVehicleRegistration(customer?.registration) || !looksLikeEmail(customer?.email)) {
+            res.status(400).json({ message: 'Enter a valid email address and vehicle registration.' });
+            return;
+        }
+        const isMonthly = purchaseType === 'monthly';
+        if (isMonthly && promoCode) {
+            res.status(400).json({ message: 'Promo codes are available for single washes only.' });
             return;
         }
         const reference = await claimUniqueReferenceNumber();
-        const slotReserved = await reserveBookingSlot(bookingDate, bookingTime, reference);
+        const slotReserved = await reserveBookingSlot(bookingDate, bookingTime, reference, ONSITE_SLOT_TTL_SECONDS);
         if (!slotReserved) {
             res.status(409).json({ message: 'That time slot was just booked by someone else. Please choose another.' });
             return;
@@ -108,7 +114,6 @@ export default async function handler(req, res) {
         reservedSlotDate = bookingDate;
         reservedSlotTime = bookingTime;
 
-        const isMonthly = purchaseType === 'monthly';
         let contractFileBase64 = null;
         let contractFileName = null;
         if (isMonthly) {
@@ -177,7 +182,8 @@ export default async function handler(req, res) {
                 }
 
                 promoReservationId = crypto.randomUUID();
-                const reserved = await reserveSharedPromoCode(status.promoCode, promoReservationId);
+                const promoHoldSeconds = Math.max(60 * 60, Math.ceil((slotDateTime.getTime() + 48 * 60 * 60 * 1000 - Date.now()) / 1000));
+                const reserved = await reserveSharedPromoCode(status.promoCode, promoReservationId, promoHoldSeconds);
                 if (!reserved) {
                     promoReservationId = null;
                     await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
@@ -206,10 +212,7 @@ export default async function handler(req, res) {
             amountCents = originalAmountCents; // promo codes don't apply to monthly packages
         }
 
-        // No online payment to confirm later via webhook — this booking is
-        // real the moment the slot is reserved, so claim everything now.
-        const onsiteId = `onsite_${crypto.randomUUID()}`;
-        await savePendingBooking(onsiteId, {
+        await saveOnsiteBooking(reference, {
             ...booking,
             reference,
             originalAmountCents,
@@ -221,14 +224,9 @@ export default async function handler(req, res) {
             contractFileBase64,
             contractFileName,
             paymentMethod: 'onsite',
+            customer: { ...customer, email: normaliseEmail(customer.email), registration: normaliseReg(customer.registration) },
             createdAt: new Date().toISOString(),
         });
-        await markBookingConfirmed(onsiteId);
-
-        // Redeem the promo code immediately — there's no later webhook to redeem it at.
-        if (reservedPromoCode && promoReservationId) {
-            await markSharedPromoCodeUsed(reservedPromoCode, promoReservationId);
-        }
 
         const formatZar = (cents) => `R${(cents / 100).toFixed(2)}`;
         const receipt = {
@@ -248,10 +246,13 @@ export default async function handler(req, res) {
             promoCode: appliedPromo || null,
             promoApplied: Boolean(appliedPromo && discountCents > 0),
             paymentMethod: 'onsite',
+            paymentStatus: 'unpaid',
         };
 
+        let receiptSent = false;
         try {
-            await sendReceiptEmail(receipt);
+            const result = await sendReceiptEmail(receipt);
+            receiptSent = !result?.skipped;
         } catch (err) {
             console.error('[onsite receipt email failed]', receipt.reference, err);
         }
@@ -264,7 +265,7 @@ export default async function handler(req, res) {
             }
         }
 
-        res.status(200).json({ success: true, reference, checkoutId: onsiteId });
+        res.status(200).json({ success: true, reference, receiptSent });
     } catch (err) {
         if (reservedPromoCode && promoReservationId) {
             await releaseSharedPromoCode(reservedPromoCode, promoReservationId).catch(() => {});

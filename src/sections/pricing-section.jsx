@@ -416,6 +416,11 @@ export default function PricingSection() {
                     <p className='mx-auto mt-1.5 max-w-lg text-[10px] leading-[1.5] text-body sm:text-[11.5px]'></p>
                 </div>
 
+                <aside className='mx-auto mt-3 max-w-3xl rounded-[12px] border border-[#c9d8cc] bg-[#edf4ee] px-3.5 py-3 text-left sm:mt-4 sm:px-4'>
+                    <p className='text-[9.5px] font-semibold text-ink sm:text-[10.5px]'>Prefer to pay when we arrive?</p>
+                    <p className='mt-0.5 text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>Choose on-site payment in your booking. Pay your technician by debit or credit card on our Yoco machine, or tap with Google Pay or Apple Pay. Single-wash promo codes apply to single washes only; your booking ticket will show the discounted amount due.</p>
+                </aside>
+
                 <div className='mx-auto mt-4 grid max-w-[720px] grid-cols-1 items-center gap-1.5 sm:mt-5 sm:grid-cols-[minmax(0,1fr)_auto]'>
                     <div className='grid min-w-0 grid-cols-2 gap-1.5 rounded-[14px] border border-line bg-canvasoft p-1.5'>
                         {[

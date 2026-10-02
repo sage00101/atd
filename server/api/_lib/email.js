@@ -47,7 +47,7 @@ export async function sendReceiptEmail(receipt) {
         return;
     }
 
-    await sendViaResend({
+    return sendViaResend({
         to: receipt.customerEmail,
         bcc: businessEmail,
         subject: `Booking confirmed — ${receipt.reference}`,

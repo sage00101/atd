@@ -37,11 +37,10 @@ const SINGLE_WASH_VEHICLE_KEY = 'a10tion-single-wash-vehicle-type';
 const PAYMENT_STATUS_MESSAGES = {
     success: { tone: 'success', text: 'Payment received - thank you! Your booking is confirmed and a receipt is on its way.' },
     onsite: { tone: 'info', text: 'Booking confirmed! Please have your card or phone ready to pay our technician on arrival. A receipt has been emailed to you.' },
+    onsiteEmailIssue: { tone: 'error', text: 'Booking confirmed, but the receipt email could not be sent. Please contact us with your booking reference.' },
     cancelled: { tone: 'info', text: 'Checkout was cancelled. No payment was taken - you can restart whenever you\u2019re ready.' },
     failed: { tone: 'error', text: 'The payment did not go through. Please try again or use a different card.' },
 };
-
-const REQUIRED_CONTRACT_FILE_NAME = 'Supplier_Client Contract Agreement.docx';
 
 function readSingleWashVehicle() {
     try {
@@ -448,14 +447,18 @@ export default function BookingSection() {
 
         if (isMonthly) {
             const [contractFile] = contractFiles;
+            const fileName = contractFile?.name.toLowerCase() ?? '';
             const isValidContractFile = contractFiles.length === 1
-                && contractFile?.name === REQUIRED_CONTRACT_FILE_NAME
-                && (contractFile.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                    || contractFile.name.toLowerCase().endsWith('.docx'))
+                && (contractFile?.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                    || contractFile?.type === 'application/msword'
+                    || contractFile?.type === 'application/pdf'
+                    || fileName.endsWith('.docx')
+                    || fileName.endsWith('.doc')
+                    || fileName.endsWith('.pdf'))
                 && contractFile.size <= 10 * 1024 * 1024;
 
             if (!isValidContractFile) {
-                setContractFileError(`Attach the completed ${REQUIRED_CONTRACT_FILE_NAME}. It must be a DOCX no larger than 10 MB.`);
+                setContractFileError('Attach the completed Supplier Client Contract Agreement as a Word document or PDF no larger than 10 MB.');
                 setPaymentError('The completed supplier client contract agreement is required for a monthly package.');
                 return;
             }
@@ -500,7 +503,7 @@ export default function BookingSection() {
                 }
 
                 setCheckoutOpen(false);
-                setPaymentStatus('onsite');
+                setPaymentStatus(result.receiptSent ? 'onsite' : 'onsiteEmailIssue');
                 setPaymentReference(result.reference);
                 setIsSubmitting(false);
                 return;
@@ -873,7 +876,7 @@ export default function BookingSection() {
                                                 <div className='min-w-0'>
                                                     <p className='text-[8px] font-semibold uppercase tracking-[0.11em] text-sage sm:text-[9px]'>Required package document</p>
                                                     <p className='mt-1 text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>
-                                                        Attach the completed Supplier Client Contract Agreement before continuing.
+                                                        Attach the completed Supplier Client Contract Agreement as a Word document or PDF (max 10 MB) before continuing.
                                                     </p>
                                                 </div>
                                             </div>
@@ -882,7 +885,7 @@ export default function BookingSection() {
                                                 <input
                                                     type='file'
                                                     name='contract_files'
-                                                    accept='.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                                                    accept='.doc,.docx,.pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf'
                                                     onChange={(event) => {
                                                         const [selectedFile] = Array.from(event.target.files || []);
                                                         setContractFiles(selectedFile ? [selectedFile] : []);
@@ -981,7 +984,7 @@ export default function BookingSection() {
                                     ) : (
                                         <div className='mt-2.5 flex items-start gap-2 rounded-xl bg-sagelight/65 px-3 py-2.5'>
                                             <Smartphone className='mt-0.5 size-3.5 shrink-0 text-sage' />
-                                            <p className='text-[8px] leading-[1.45] text-body sm:text-[9px]'>No payment is taken now. Your slot is reserved immediately — simply have your card or phone ready for our technician when we arrive.</p>
+                                            <p className='text-[8px] leading-[1.45] text-body sm:text-[9px]'>No payment is taken now. Your slot is reserved immediately - simply have your card or phone ready for our technician when we arrive.</p>
                                         </div>
                                     )}
 

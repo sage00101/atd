@@ -204,10 +204,10 @@ export async function getSharedPromoCodeStatus(promoCode) {
     return { status: 'available', promoCode: String(promoCode).trim().toUpperCase() };
 }
 
-export async function reserveSharedPromoCode(promoCode, reservationId) {
+export async function reserveSharedPromoCode(promoCode, reservationId, ttlSeconds = PROMO_RESERVATION_TTL_SECONDS) {
     const result = await redis.set(promoReservationKey(promoCode), reservationId, {
         nx: true,
-        ex: PROMO_RESERVATION_TTL_SECONDS,
+        ex: ttlSeconds,
     });
     return result === 'OK';
 }
@@ -251,11 +251,11 @@ export async function getBooking(checkoutId) {
 }
 
 /** Atomically claims a date/time slot. Returns false if it's already actively held by someone else. */
-export async function reserveBookingSlot(bookingDate, bookingTime, token) {
+export async function reserveBookingSlot(bookingDate, bookingTime, token, ttlSeconds = PENDING_BOOKING_TTL_SECONDS) {
     if (!bookingDate || !bookingTime) return true;
     const claimed = await redis.set(slotKey(bookingDate, bookingTime), token, {
         nx: true,
-        ex: PENDING_BOOKING_TTL_SECONDS,
+        ex: ttlSeconds,
     });
     if (claimed !== 'OK') return false;
     const key = dateIndexKey(bookingDate);
@@ -267,6 +267,23 @@ export async function reserveBookingSlot(bookingDate, bookingTime, token) {
 /** Stores the booking record once the slot is already claimed via reserveBookingSlot. */
 export async function savePendingBooking(checkoutId, booking) {
     await redis.set(bookingKey(checkoutId), { ...booking, status: 'pending' }, { ex: PENDING_BOOKING_TTL_SECONDS });
+}
+
+/** Stores an onsite booking ticket and retains the slot until its appointment has passed. */
+export async function saveOnsiteBooking(reference, booking) {
+    await redis.set(bookingKey(reference), { ...booking, status: 'confirmed_unpaid' }, { ex: CONFIRMED_BOOKING_TTL_SECONDS });
+}
+
+/** Marks an onsite ticket paid after the business confirms the card-machine transaction. */
+export async function markOnsiteBookingPaid(reference) {
+    const booking = await redis.get(bookingKey(reference));
+    if (!booking || booking.paymentMethod !== 'onsite') return null;
+    const updated = { ...booking, status: 'paid', paidAt: new Date().toISOString() };
+    await redis.set(bookingKey(reference), updated, { ex: CONFIRMED_BOOKING_TTL_SECONDS });
+    if (booking.bookingDate && booking.bookingTime) {
+        await redis.expire(slotKey(booking.bookingDate, booking.bookingTime), CONFIRMED_BOOKING_TTL_SECONDS);
+    }
+    return updated;
 }
 
 /** Marks a booking as paid once the webhook confirms it — extends the slot hold long-term. */
