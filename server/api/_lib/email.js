@@ -3,7 +3,7 @@ import { buildVehiclePromoApprovedEmailHtml } from './promo-email-template.js';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
-async function sendViaResend({ to, bcc, subject, html, replyTo }) {
+async function sendViaResend({ to, bcc, subject, html, replyTo, attachments }) {
     const apiKey = process.env.RESEND_API_KEY;
     const from = process.env.RESEND_FROM_EMAIL;
 
@@ -25,6 +25,7 @@ async function sendViaResend({ to, bcc, subject, html, replyTo }) {
             reply_to: replyTo,
             subject,
             html,
+            attachments: attachments?.length ? attachments : undefined,
         }),
     });
 
@@ -66,5 +67,35 @@ export async function sendVehiclePromoApprovedEmail({ vehicleRegistration, email
         subject: 'Your 10% single-wash discount is ready',
         html,
         replyTo: businessEmail,
+    });
+}
+
+/** Sends the customer's signed contract agreement to the business inbox only — never attached to the customer's own copy. */
+export async function sendMonthlyContractEmail({ receipt, contractFileBase64, contractFileName }) {
+    const businessEmail = process.env.BUSINESS_EMAIL;
+    if (!businessEmail) {
+        console.warn('[email] BUSINESS_EMAIL not set, skipping contract attachment send', receipt.reference);
+        return;
+    }
+    if (!contractFileBase64 || !contractFileName) return;
+
+    const html = `
+<!doctype html>
+<html>
+<body style="margin:0;padding:24px;background:#F6F7F3;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+    <p style="color:#161B18;font-size:14px;line-height:1.6;">
+        New monthly package booking — <strong>${receipt.reference}</strong><br>
+        Customer: ${receipt.customerName || 'n/a'} (${receipt.customerEmail || 'n/a'})<br>
+        Package: ${receipt.packageName || 'n/a'}${receipt.vehicleType ? ` · ${receipt.vehicleType}` : ''}<br>
+        The customer's signed supplier/client contract agreement is attached.
+    </p>
+</body>
+</html>`;
+
+    await sendViaResend({
+        to: businessEmail,
+        subject: `Monthly package contract attached — ${receipt.reference}`,
+        html,
+        attachments: [{ filename: contractFileName, content: contractFileBase64 }],
     });
 }

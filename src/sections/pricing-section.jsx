@@ -222,7 +222,7 @@ function PackageDetailsModal({ pkg, open, onClose }) {
                                     </div>
                                 ))}
                             </div>
-                            <p className='mt-2 text-[8px] leading-[1.45] text-body'>6- and 12-month contract totals are not specified in the current rate sheet and will be confirmed before payment.</p>
+                            <p className='mt-2 text-[8px] leading-[1.45] text-body'>6- and 12-month contract totals to be confirmed.</p>
                         </div>
                     )}
 
@@ -563,7 +563,7 @@ export default function PricingSection() {
                                             {contractMonths === '3' && threeMonthTotal ? (
                                                 <div className='mt-1 flex justify-between gap-3 border-t border-[#edf1ed] pt-1'><span className='text-body'>3-month contract total</span><strong className='text-ink'>{threeMonthTotal}</strong></div>
                                             ) : (
-                                                <p className='mt-1 border-t border-[#edf1ed] pt-1 leading-[1.45] text-body'>Total for {contractMonths} months: to be confirmed. The rate sheet does not provide this contract total.</p>
+                                                <p className='mt-1 border-t border-[#edf1ed] pt-1 leading-[1.45] text-body'>Total for {contractMonths} months: to be confirmed.</p>
                                             )}
                                         </div>
                                     );

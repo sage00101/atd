@@ -35,127 +35,6 @@ const GOOGLE_BUSINESS_URL =
     import.meta.env.VITE_GOOGLE_BUSINESS_URL || '';
 
 
-const fallbackReviews = [
-    {
-        id: 'naledi-k',
-        initial: 'N',
-        name: 'Naledi K.',
-        date: '2 weeks ago',
-        quote: 'Booked the Signature Detail for a work trip send-off. They arrived on time with everything needed and the paint genuinely looked wet afterwards.',
-        rating: 5,
-        photo: '',
-    },
-    {
-        id: 'ryan-p',
-        initial: 'R',
-        name: 'Ryan P.',
-        date: '1 month ago',
-        quote: "First mobile detailer I've used that actually hand-washes. No swirl marks anywhere, and the interior smelled properly clean, not just perfumed.",
-        rating: 5,
-        photo: '',
-    },
-    {
-        id: 'aisha-m',
-        initial: 'A',
-        name: 'Aisha M.',
-        date: '6 weeks ago',
-        quote: "Booked Full Reconditioning on a car I'd neglected for two years. Headlights look new and the engine bay is spotless. Worth every rand.",
-        rating: 5,
-        photo: '',
-    },
-];
-
-
-const demoReviews = [
-    {
-        id: 'demo-01',
-        initial: 'D',
-        name: 'Demo Client 01',
-        date: 'Demo review',
-        quote: 'Temporary review for checking the second page of the review slider and drag navigation.',
-        rating: 5,
-        photo: '',
-    },
-    {
-        id: 'demo-02',
-        initial: 'D',
-        name: 'Demo Client 02',
-        date: 'Demo review',
-        quote: 'Temporary development content used to test the review carousel on desktop and mobile.',
-        rating: 5,
-        photo: '',
-    },
-    {
-        id: 'demo-03',
-        initial: 'D',
-        name: 'Demo Client 03',
-        date: 'Demo review',
-        quote: 'This temporary review confirms that three reviews are displayed together on each page.',
-        rating: 4,
-        photo: '',
-    },
-    {
-        id: 'demo-04',
-        initial: 'D',
-        name: 'Demo Client 04',
-        date: 'Demo review',
-        quote: 'Testing swipe-left navigation between groups of customer reviews on smaller screens.',
-        rating: 5,
-        photo: '',
-    },
-    {
-        id: 'demo-05',
-        initial: 'D',
-        name: 'Demo Client 05',
-        date: 'Demo review',
-        quote: 'Temporary review for testing click-and-drag behaviour with a mouse on desktop.',
-        rating: 5,
-        photo: '',
-    },
-    {
-        id: 'demo-06',
-        initial: 'D',
-        name: 'Demo Client 06',
-        date: 'Demo review',
-        quote: 'Development-only content for checking pagination, arrows and responsive card layouts.',
-        rating: 5,
-        photo: '',
-    },
-    {
-        id: 'demo-07',
-        initial: 'D',
-        name: 'Demo Client 07',
-        date: 'Demo review',
-        quote: 'Another temporary review to demonstrate the maximum-page behaviour.',
-        rating: 5,
-        photo: '',
-    },
-    {
-        id: 'demo-08',
-        initial: 'D',
-        name: 'Demo Client 08',
-        date: 'Demo review',
-        quote: 'Temporary review used to check that page four can be reached by arrow, swipe or drag.',
-        rating: 4,
-        photo: '',
-    },
-    {
-        id: 'demo-09',
-        initial: 'D',
-        name: 'Demo Client 09',
-        date: 'Demo review',
-        quote: 'Development-only content confirming that the twelve-review maximum displays correctly.',
-        rating: 5,
-        photo: '',
-    },
-];
-
-
-const initialReviews = import.meta.env.DEV
-    ? [...fallbackReviews, ...demoReviews].slice(0, MAX_REVIEWS)
-    : fallbackReviews;
-
-
 const ratingValues = {
     ONE: 1,
     TWO: 2,
@@ -378,7 +257,8 @@ export default function ReviewsSection() {
         lastY: 0,
     });
 
-    const [reviews, setReviews] = useState(initialReviews);
+    const [reviews, setReviews] = useState([]);
+    const [reviewsStatus, setReviewsStatus] = useState('loading'); // 'loading' | 'loaded' | 'empty' | 'error'
     const [currentPage, setCurrentPage] = useState(0);
     const [direction, setDirection] = useState('next');
     const [dragOffset, setDragOffset] = useState(0);
@@ -386,8 +266,8 @@ export default function ReviewsSection() {
     const [showGestureHint, setShowGestureHint] = useState(true);
 
     const [reviewSummary, setReviewSummary] = useState({
-        averageRating: 5,
-        totalReviewCount: initialReviews.length,
+        averageRating: 0,
+        totalReviewCount: 0,
         isLive: false,
     });
 
@@ -412,7 +292,10 @@ export default function ReviewsSection() {
                     }
                 );
 
-                if (!response.ok) return;
+                if (!response.ok) {
+                    if (active) setReviewsStatus('error');
+                    return;
+                }
 
                 const result = await response.json();
 
@@ -421,9 +304,15 @@ export default function ReviewsSection() {
                     .filter((review) => review.quote.trim())
                     .slice(0, MAX_REVIEWS);
 
-                if (!active || liveReviews.length === 0) return;
+                if (!active) return;
+
+                if (liveReviews.length === 0) {
+                    setReviewsStatus('empty');
+                    return;
+                }
 
                 setReviews(liveReviews);
+                setReviewsStatus('loaded');
                 setCurrentPage(0);
 
                 const average =
@@ -441,8 +330,8 @@ export default function ReviewsSection() {
                     isLive: true,
                 });
             } catch (error) {
-                if (error?.name !== 'AbortError') {
-                    // Keep fallback/demo content until live Google reviews are connected.
+                if (error?.name !== 'AbortError' && active) {
+                    setReviewsStatus('error');
                 }
             }
         };
@@ -698,28 +587,30 @@ export default function ReviewsSection() {
                         What clients notice first
                     </h2>
 
-                    <div className='mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-full border border-[#cbdacd] bg-white/80 px-3 py-1.5 shadow-sm sm:mt-4 sm:px-4 sm:py-2'>
-                        <p className='font-display text-[18px] font-medium text-ink sm:text-[21px]'>
-                            {reviewSummary.averageRating.toFixed(1)}
-                        </p>
+                    {reviewsStatus === 'loaded' && (
+                        <div className='mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-full border border-[#cbdacd] bg-white/80 px-3 py-1.5 shadow-sm sm:mt-4 sm:px-4 sm:py-2'>
+                            <p className='font-display text-[18px] font-medium text-ink sm:text-[21px]'>
+                                {reviewSummary.averageRating.toFixed(1)}
+                            </p>
 
-                        <Stars
-                            count={Math.round(
-                                reviewSummary.averageRating
-                            )}
-                        />
-
-                        <span className='text-[8.5px] text-body sm:text-[10px]'>
-                            {reviewSummary.totalReviewCount} Google reviews
-                        </span>
-
-                        {reviewSummary.isLive && (
-                            <CheckCircle2
-                                className='h-3 w-3 text-sage'
-                                aria-label='Live Google review data'
+                            <Stars
+                                count={Math.round(
+                                    reviewSummary.averageRating
+                                )}
                             />
-                        )}
-                    </div>
+
+                            <span className='text-[8.5px] text-body sm:text-[10px]'>
+                                {reviewSummary.totalReviewCount} Google reviews
+                            </span>
+
+                            {reviewSummary.isLive && (
+                                <CheckCircle2
+                                    className='h-3 w-3 text-sage'
+                                    aria-label='Live Google review data'
+                                />
+                            )}
+                        </div>
+                    )}
                 </div>
 
 
@@ -731,6 +622,20 @@ export default function ReviewsSection() {
                     Vertical phone scrolling remains enabled.
                 ================================================= */}
 
+                {reviewsStatus === 'loading' && (
+                    <p className='mt-6 text-center text-[10px] text-body sm:text-[11px]'>
+                        Loading reviews from Google…
+                    </p>
+                )}
+
+                {(reviewsStatus === 'empty' || reviewsStatus === 'error') && (
+                    <p className='mt-6 text-center text-[10px] text-body sm:text-[11px]'>
+                        No Google reviews to show just yet.
+                    </p>
+                )}
+
+                {reviewsStatus === 'loaded' && (
+                <>
                 <div className='relative mt-4 sm:mt-6'>
                     <div
                         className={`
@@ -908,6 +813,8 @@ export default function ReviewsSection() {
                         )}
                     </div>
                 )}
+                </>
+                )}
 
 
                 <div
@@ -921,7 +828,7 @@ export default function ReviewsSection() {
                         </p>
 
                         <h3 className='mt-1 font-display text-[17px] font-medium leading-tight sm:text-[23px]'>
-                            Had your vehicle detailed by us?
+                            Had your vehicle washed by us?
                         </h3>
 
                         <p className='mx-auto mt-1 max-w-md text-[8.5px] leading-[1.5] text-white/65 sm:mx-0 sm:text-[10px]'>

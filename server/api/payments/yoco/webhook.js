@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { applyCors } from '../../_lib/cors.js';
-import { sendReceiptEmail } from '../../_lib/email.js';
+import { sendMonthlyContractEmail, sendReceiptEmail } from '../../_lib/email.js';
 import {
     getBooking,
     getVehiclePromo,
@@ -136,6 +136,7 @@ export default async function handler(req, res) {
         amountZar: formatZar(amountCents),
         promoCode: promo || null,
         promoApplied: Boolean(promo && discountCents > 0),
+        paymentMethod: 'online',
         yocoRef: checkoutId || event.id,
     };
 
@@ -143,6 +144,18 @@ export default async function handler(req, res) {
         await sendReceiptEmail(receipt);
     } catch (err) {
         console.error('[receipt email failed]', receipt.reference, err);
+    }
+
+    if (pending?.contractFileBase64 && pending?.contractFileName) {
+        try {
+            await sendMonthlyContractEmail({
+                receipt,
+                contractFileBase64: pending.contractFileBase64,
+                contractFileName: pending.contractFileName,
+            });
+        } catch (err) {
+            console.error('[contract attachment email failed]', receipt.reference, err);
+        }
     }
 
     // Keep the slot durably blocked (booking stays, just flipped to "paid").

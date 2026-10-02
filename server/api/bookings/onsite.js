@@ -1,11 +1,14 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import { IncomingForm } from 'formidable';
-import { applyCors } from '../../_lib/cors.js';
+import { applyCors } from '../_lib/cors.js';
+import { sendMonthlyContractEmail, sendReceiptEmail } from '../_lib/email.js';
 import {
     claimUniqueReferenceNumber,
     getSharedPromoCodeStatus,
     looksLikeVehicleRegistration,
+    markBookingConfirmed,
+    markSharedPromoCodeUsed,
     normaliseReg,
     releaseBookingSlot,
     releaseSharedPromoCode,
@@ -15,7 +18,7 @@ import {
     MONTHLY_PACKAGE_CENTS,
     PROMO_DISCOUNT_RATE,
     SINGLE_WASH_CENTS,
-} from '../../_lib/store.js';
+} from '../_lib/store.js';
 
 // Business operates in South Africa (UTC+2, no DST) — anchor the quoted
 // booking date/time to that fixed offset regardless of the server's own TZ.
@@ -37,8 +40,11 @@ function parseMultipart(req) {
     });
 }
 
-// POST /api/payments/yoco/checkout
-// multipart: field "booking" (JSON string) + optional contract_files (monthly only)
+// POST /api/bookings/onsite
+// Reserves a real appointment slot with no online payment collected — the
+// customer pays the business directly on the day (Yoco card machine, tap to
+// pay, or Google/Apple Pay from their phone). Mirrors the validation and
+// pricing logic in /api/payments/yoco/checkout.js, minus the Yoco call.
 export default async function handler(req, res) {
     if (applyCors(req, res)) return;
     if (req.method !== 'POST') {
@@ -127,16 +133,7 @@ export default async function handler(req, res) {
             contractFileName = contractFile.originalFilename;
         }
 
-        const yocoSecret = process.env.YOCO_SECRET_KEY;
-        if (!yocoSecret) {
-            await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
-            reservedSlotDate = null;
-            reservedSlotTime = null;
-            res.status(500).json({ message: 'Payment gateway not configured.' });
-            return;
-        }
-
-        // --- Amount calculation (server is the only source of truth for price) ---
+        // --- Amount calculation (quoted for the receipt; no money moves online) ---
         let originalAmountCents;
         let amountCents;
         let discountCents = 0;
@@ -209,61 +206,10 @@ export default async function handler(req, res) {
             amountCents = originalAmountCents; // promo codes don't apply to monthly packages
         }
 
-        const siteUrl = process.env.SITE_URL || 'https://sage00101.github.io/atd/';
-        const idempotencyKey = crypto.randomUUID();
-
-        const yocoRes = await fetch('https://payments.yoco.com/api/checkouts', {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${yocoSecret}`,
-                'Content-Type': 'application/json',
-                'Idempotency-Key': idempotencyKey,
-            },
-            body: JSON.stringify({
-                amount: amountCents,
-                currency: 'ZAR',
-                subtotalAmount: originalAmountCents,
-                totalDiscount: discountCents || undefined,
-                successUrl: `${siteUrl}?payment=success&ref=${reference}#booking`,
-                cancelUrl: `${siteUrl}?payment=cancelled#booking`,
-                failureUrl: `${siteUrl}?payment=failed#booking`,
-                metadata: {
-                    reference,
-                    packageId,
-                    packageName,
-                    purchaseType,
-                    vehicleType: vehicleType || '',
-                    bookingDate,
-                    bookingTime,
-                    registration: normaliseReg(customer.registration),
-                    promoCode: appliedPromo || '',
-                    promoCodeType: appliedPromoType || '',
-                    promoReservationId: promoReservationId || '',
-                    originalAmountCents,
-                    discountCents,
-                    customerEmail: customer.email,
-                    customerMobile: customer.mobile,
-                    customerName: `${customer.firstName} ${customer.surname}`.trim(),
-                },
-            }),
-        });
-
-        const yocoBody = await yocoRes.json().catch(() => ({}));
-        if (!yocoRes.ok || !yocoBody.redirectUrl) {
-            if (reservedPromoCode && promoReservationId) {
-                await releaseSharedPromoCode(reservedPromoCode, promoReservationId);
-                reservedPromoCode = null;
-            }
-            await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
-            reservedSlotDate = null;
-            reservedSlotTime = null;
-            console.error('Yoco error', yocoBody);
-            res.status(502).json({ message: yocoBody.message || 'Could not start secure payment.' });
-            return;
-        }
-
-        // Store pending booking until the webhook confirms payment.
-        await savePendingBooking(yocoBody.id, {
+        // No online payment to confirm later via webhook — this booking is
+        // real the moment the slot is reserved, so claim everything now.
+        const onsiteId = `onsite_${crypto.randomUUID()}`;
+        await savePendingBooking(onsiteId, {
             ...booking,
             reference,
             originalAmountCents,
@@ -274,11 +220,51 @@ export default async function handler(req, res) {
             promoReservationId,
             contractFileBase64,
             contractFileName,
-            yocoCheckoutId: yocoBody.id,
+            paymentMethod: 'onsite',
             createdAt: new Date().toISOString(),
         });
+        await markBookingConfirmed(onsiteId);
 
-        res.status(200).json({ redirectUrl: yocoBody.redirectUrl, checkoutId: yocoBody.id, reference });
+        // Redeem the promo code immediately — there's no later webhook to redeem it at.
+        if (reservedPromoCode && promoReservationId) {
+            await markSharedPromoCodeUsed(reservedPromoCode, promoReservationId);
+        }
+
+        const formatZar = (cents) => `R${(cents / 100).toFixed(2)}`;
+        const receipt = {
+            reference,
+            bookingDate,
+            bookingTime,
+            packageName,
+            vehicleType: vehicleType || '',
+            registration: normaliseReg(customer.registration),
+            customerName: `${customer.firstName} ${customer.surname}`.trim(),
+            customerEmail: customer.email,
+            customerMobile: customer.mobile,
+            address: customer.address,
+            originalAmountZar: formatZar(originalAmountCents),
+            discountZar: discountCents > 0 ? formatZar(discountCents) : null,
+            amountZar: formatZar(amountCents),
+            promoCode: appliedPromo || null,
+            promoApplied: Boolean(appliedPromo && discountCents > 0),
+            paymentMethod: 'onsite',
+        };
+
+        try {
+            await sendReceiptEmail(receipt);
+        } catch (err) {
+            console.error('[onsite receipt email failed]', receipt.reference, err);
+        }
+
+        if (contractFileBase64 && contractFileName) {
+            try {
+                await sendMonthlyContractEmail({ receipt, contractFileBase64, contractFileName });
+            } catch (err) {
+                console.error('[onsite contract attachment email failed]', receipt.reference, err);
+            }
+        }
+
+        res.status(200).json({ success: true, reference, checkoutId: onsiteId });
     } catch (err) {
         if (reservedPromoCode && promoReservationId) {
             await releaseSharedPromoCode(reservedPromoCode, promoReservationId).catch(() => {});
@@ -287,6 +273,6 @@ export default async function handler(req, res) {
             await releaseBookingSlot(reservedSlotDate, reservedSlotTime).catch(() => {});
         }
         console.error(err);
-        res.status(500).json({ message: 'Secure payment could not be started.' });
+        res.status(500).json({ message: 'Booking could not be confirmed. Please try again.' });
     }
 }

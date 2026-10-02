@@ -32,7 +32,7 @@ const faqGroups = [
 
     {
         title: 'Services',
-        icon: CreditCard,
+        icon: BadgePercent,
         questions: [
             {
                 question: 'What is included in every wash?',
@@ -86,7 +86,7 @@ const faqGroups = [
 
     {
         title: 'Booking & Payments',
-        icon: BadgePercent,
+        icon: CreditCard,
         questions: [
             {
                 question: 'How do I book?',

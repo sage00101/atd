@@ -14,6 +14,7 @@ import {
     Package,
     RefreshCw,
     ShieldCheck,
+    Smartphone,
     Sun,
     Tag,
     X,
@@ -25,6 +26,7 @@ import VehiclePromoModal from '../components/vehicle-promo-modal';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const PAYMENT_API_ENDPOINT = `${API_BASE_URL}/api/payments/yoco/checkout`;
+const ONSITE_API_ENDPOINT = `${API_BASE_URL}/api/bookings/onsite`;
 const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
 const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000; // bookings require at least 3 hours notice
@@ -34,6 +36,7 @@ const SINGLE_WASH_VEHICLE_KEY = 'a10tion-single-wash-vehicle-type';
 
 const PAYMENT_STATUS_MESSAGES = {
     success: { tone: 'success', text: 'Payment received - thank you! Your booking is confirmed and a receipt is on its way.' },
+    onsite: { tone: 'info', text: 'Booking confirmed! Please have your card or phone ready to pay our technician on arrival. A receipt has been emailed to you.' },
     cancelled: { tone: 'info', text: 'Checkout was cancelled. No payment was taken - you can restart whenever you\u2019re ready.' },
     failed: { tone: 'error', text: 'The payment did not go through. Please try again or use a different card.' },
 };
@@ -201,6 +204,7 @@ export default function BookingSection() {
     const [contractFiles, setContractFiles] = useState([]);
     const [contractFileError, setContractFileError] = useState('');
     const [serviceAreaAccepted, setServiceAreaAccepted] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState('online');
     const [customer, setCustomer] = useState({
         firstName: '',
         surname: '',
@@ -484,6 +488,24 @@ export default function BookingSection() {
             formData.append('booking', JSON.stringify(bookingPayload));
             if (isMonthly) contractFiles.forEach((file) => formData.append('contract_files', file, file.name));
 
+            if (paymentMethod === 'onsite') {
+                const response = await fetch(ONSITE_API_ENDPOINT, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || 'Booking could not be confirmed.');
+                }
+
+                setCheckoutOpen(false);
+                setPaymentStatus('onsite');
+                setPaymentReference(result.reference);
+                setIsSubmitting(false);
+                return;
+            }
+
             const response = await fetch(PAYMENT_API_ENDPOINT, {
                 method: 'POST',
                 body: formData,
@@ -525,7 +547,7 @@ export default function BookingSection() {
                     >
                         <span className='flex-1'>
                             {PAYMENT_STATUS_MESSAGES[paymentStatus].text}
-                            {paymentStatus === 'success' && paymentReference && (
+                            {(paymentStatus === 'success' || paymentStatus === 'onsite') && paymentReference && (
                                 <span className='mt-1 block font-semibold'>Reference: {paymentReference}</span>
                             )}
                         </span>
@@ -920,10 +942,48 @@ export default function BookingSection() {
                                         </label>
                                     </div>
 
-                                    <div className='mt-2.5 flex items-start gap-2 rounded-xl bg-sagelight/65 px-3 py-2.5'>
-                                        <ShieldCheck className='mt-0.5 size-3.5 shrink-0 text-sage' />
-                                        <p className='text-[8px] leading-[1.45] text-body sm:text-[9px]'>Yoco handles card details securely. A10tion To Detail stores only the booking/order details needed to provide the service and reconcile payment.</p>
+                                    <div className='mt-3'>
+                                        <span className='mb-1.5 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>How would you like to pay?</span>
+                                        <div className='grid gap-2 sm:grid-cols-2'>
+                                            <button
+                                                type='button'
+                                                onClick={() => setPaymentMethod('online')}
+                                                aria-pressed={paymentMethod === 'online'}
+                                                className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${paymentMethod === 'online' ? 'border-[#294633] bg-[#eaf2eb] shadow-[0_8px_20px_-16px_rgba(20,26,22,.5)]' : 'border-line bg-white/80 hover:border-sage/40'}`}
+                                            >
+                                                <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${paymentMethod === 'online' ? 'bg-[#294633] text-white' : 'bg-sagelight text-sagedeep'}`}><CreditCard className='size-3.5' /></span>
+                                                <span className='min-w-0'>
+                                                    <span className='block text-[9.5px] font-semibold text-ink sm:text-[10.5px]'>Pay securely online now</span>
+                                                    <span className='mt-0.5 block text-[8px] leading-[1.4] text-body sm:text-[8.5px]'>Yoco secure checkout, right after you confirm your details.</span>
+                                                </span>
+                                            </button>
+
+                                            <button
+                                                type='button'
+                                                onClick={() => setPaymentMethod('onsite')}
+                                                aria-pressed={paymentMethod === 'onsite'}
+                                                className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${paymentMethod === 'onsite' ? 'border-[#294633] bg-[#eaf2eb] shadow-[0_8px_20px_-16px_rgba(20,26,22,.5)]' : 'border-line bg-white/80 hover:border-sage/40'}`}
+                                            >
+                                                <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${paymentMethod === 'onsite' ? 'bg-[#294633] text-white' : 'bg-sagelight text-sagedeep'}`}><Smartphone className='size-3.5' /></span>
+                                                <span className='min-w-0'>
+                                                    <span className='block text-[9.5px] font-semibold text-ink sm:text-[10.5px]'>Pay on-site on the day</span>
+                                                    <span className='mt-0.5 block text-[8px] leading-[1.4] text-body sm:text-[8.5px]'>Card machine (tap, chip &amp; PIN) or Google Pay / Apple Pay from your phone.</span>
+                                                </span>
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    {paymentMethod === 'online' ? (
+                                        <div className='mt-2.5 flex items-start gap-2 rounded-xl bg-sagelight/65 px-3 py-2.5'>
+                                            <ShieldCheck className='mt-0.5 size-3.5 shrink-0 text-sage' />
+                                            <p className='text-[8px] leading-[1.45] text-body sm:text-[9px]'>Yoco handles card details securely. A10tion To Detail stores only the booking/order details needed to provide the service and reconcile payment.</p>
+                                        </div>
+                                    ) : (
+                                        <div className='mt-2.5 flex items-start gap-2 rounded-xl bg-sagelight/65 px-3 py-2.5'>
+                                            <Smartphone className='mt-0.5 size-3.5 shrink-0 text-sage' />
+                                            <p className='text-[8px] leading-[1.45] text-body sm:text-[9px]'>No payment is taken now. Your slot is reserved immediately — simply have your card or phone ready for our technician when we arrive.</p>
+                                        </div>
+                                    )}
 
                                     <div className='sticky bottom-0 z-20 -mx-4 mt-3 shrink-0 border-t border-[#dfe6e0] bg-[#f7f8f5]/95 px-4 pb-[max(4px,env(safe-area-inset-bottom))] pt-3 backdrop-blur-md sm:-mx-7 sm:px-7 lg:-mx-10 lg:px-10 xl:-mx-14 xl:px-14'>
                                         {paymentError && (
@@ -938,8 +998,10 @@ export default function BookingSection() {
                                             className='group flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 text-[10px] font-semibold text-white shadow-[0_10px_25px_-15px_rgba(20,26,22,.8)] transition hover:-translate-y-px hover:bg-[#18231d] disabled:cursor-wait disabled:opacity-60 sm:min-h-[49px] sm:text-[11px]'
                                         >
                                             {isSubmitting
-                                                ? <><LoaderCircle className='size-3.5 animate-spin' /> Preparing secure payment…</>
-                                                : <>Continue to secure payment <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' /></>}
+                                                ? <><LoaderCircle className='size-3.5 animate-spin' /> {paymentMethod === 'onsite' ? 'Confirming your booking…' : 'Preparing secure payment…'}</>
+                                                : paymentMethod === 'onsite'
+                                                  ? <>Confirm booking <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' /></>
+                                                  : <>Continue to secure payment <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' /></>}
                                         </button>
                                     </div>
                                 </form>

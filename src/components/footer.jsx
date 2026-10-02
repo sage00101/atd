@@ -19,8 +19,8 @@ const TERMS_URL = `${import.meta.env.BASE_URL}terms.html`;
 
 const navLinks = [
     { label: 'Home', href: '#home' },
-    { label: 'Packages', href: '#pricing' },
     { label: 'Gallery', href: '#gallery' },
+    { label: 'Packages', href: '#pricing' },
     { label: 'Booking', href: '#booking' },
     { label: 'Reviews', href: '#reviews' },
     { label: 'FAQ', href: '#faq' },
@@ -41,16 +41,6 @@ const socialLinks = [
         label: 'Instagram',
         href: import.meta.env.VITE_INSTAGRAM_URL || 'https://www.instagram.com/a10tiontodetail?igsi=MWc0bWFuNmw4ODV4dA%3D%3D&utm_source=qr',
         icon: Instagram,
-    },
-    {
-        label: 'Facebook',
-        href: import.meta.env.VITE_FACEBOOK_URL || 'https://www.facebook.com/',
-        icon: Facebook,
-    },
-    {
-        label: 'TikTok',
-        href: import.meta.env.VITE_TIKTOK_URL || 'https://www.tiktok.com/',
-        icon: Music2,
     },
 ];
 

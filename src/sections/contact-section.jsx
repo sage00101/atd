@@ -166,6 +166,8 @@ export default function ContactSection() {
                         <div className='relative mt-4 grid grid-cols-2 gap-2 border-t border-white/12 pt-4 sm:mt-5 sm:pt-5 lg:grid-cols-1'>
                             <a
                                 href={`mailto:${SUPPORT_EMAIL}`}
+                                target='_blank'
+                                rel='noreferrer'
                                 className='flex min-w-0 items-center justify-center gap-2 rounded-xl bg-white/[0.07] px-2.5 py-2.5 text-[8.5px] text-white/80 transition hover:bg-white/12 hover:text-white sm:text-[10px] lg:justify-start'
                             >
                                 <Mail className='h-3.5 w-3.5 shrink-0 text-[#bcd3c1]' />

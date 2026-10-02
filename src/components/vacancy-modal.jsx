@@ -202,7 +202,7 @@ export default function VacancyModal({ open, onClose }) {
                             </div>
 
                             <div className='mt-3 grid gap-3 sm:grid-cols-2 sm:gap-4'>
-                                <label className='block min-w-0'><span className='mb-1 block text-[9px] font-semibold text-[#28352e] sm:text-[10px]'>Role of interest</span><select className={fieldClassName} name='role' defaultValue='' required><option value='' disabled>Select a role</option><option>Detailing specialist</option><option>Detailing assistant</option><option>Customer support</option><option>Open to the right fit</option></select></label>
+                                <label className='block min-w-0'><span className='mb-1 block text-[9px] font-semibold text-[#28352e] sm:text-[10px]'>Role of interest</span><input className={fieldClassName} type='text' name='role' placeholder='' required /></label>
                                 <label className='block min-w-0'><span className='mb-1 block text-[9px] font-semibold text-[#28352e] sm:text-[10px]'>Availability</span><select className={fieldClassName} name='availability' defaultValue='' required><option value='' disabled>When can you start?</option><option>Immediately</option><option>Within 2 weeks</option><option>Within 1 month</option><option>Just exploring</option></select></label>
                             </div>
 

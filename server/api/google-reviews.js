@@ -1,5 +1,5 @@
-import { applyCors } from '../_lib/cors.js';
-import { getCachedGoogleReviews, setCachedGoogleReviews } from '../_lib/store.js';
+import { applyCors } from './_lib/cors.js';
+import { getCachedGoogleReviews, setCachedGoogleReviews } from './_lib/store.js';
 
 const SERPAPI_ENDPOINT = 'https://serpapi.com/search';
 
