@@ -35,6 +35,8 @@ export const packageGroups = {
                     ['Minibus / Van', 'R2 050,00'],
                 ],
                 threeMonthPrices: ['R3 300,00', 'R4 500,00', 'R6 000,00'],
+                sixMonthPrices: ['R6 600,00', 'R9 000,00', 'R12 000,00'],
+                twelveMonthPrices: ['R13 200,00', 'R18 000,00', 'R24 000,00'],
                 monthlyNote: 'Save R150 per month',
                 details: [
                     '2 washes per month',
@@ -55,6 +57,8 @@ export const packageGroups = {
                     ['Minibus / Van', 'R4 100,00'],
                 ],
                 threeMonthPrices: ['R7 200,00', 'R9 600,00', 'R12 600,00'],
+                sixMonthPrices: ['R14 400,00', 'R19 200,00', 'R25 200,00'],
+                twelveMonthPrices: ['R28 800,00', 'R38 400,00', 'R50 400,00'],
                 monthlyNote: 'Save R300 per month',
                 details: [
                     '4 washes per month',

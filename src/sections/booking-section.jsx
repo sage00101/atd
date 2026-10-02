@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import useReveal from '../hooks/use-reveal';
 import VehiclePromoModal from '../components/vehicle-promo-modal';
+import { packageGroups } from '../data/pricing';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const PAYMENT_API_ENDPOINT = `${API_BASE_URL}/api/payments/yoco/checkout`;
@@ -407,6 +408,14 @@ export default function BookingSection() {
     }, [selectedDateKey, selectedTime, bookedSlots, now, todayKey]);
 
     const selectedPackageName = packageNames[selectedPackage] || 'Single Wash';
+    const selectedMonthlyTotal = (() => {
+        if (!isMonthly || !selectedContract || !selectedVehicleType) return '';
+        const pkg = Object.values(packageGroups).flatMap((group) => group.packages).find((item) => item.id === selectedPackage);
+        const vehicleIndex = pkg?.monthlyPrices?.findIndex(([vehicle]) => vehicle === selectedVehicleType) ?? -1;
+        const term = selectedContract.match(/^(3|6|12)-months$/)?.[1];
+        const priceList = term === '3' ? pkg?.threeMonthPrices : term === '6' ? pkg?.sixMonthPrices : term === '12' ? pkg?.twelveMonthPrices : null;
+        return vehicleIndex >= 0 ? priceList?.[vehicleIndex] || '' : '';
+    })();
     const isMonthly = purchaseType === 'monthly';
     const missingSelection = !selectedDate
         ? 'Choose a date to continue'
@@ -785,6 +794,7 @@ export default function BookingSection() {
                                     <div className='min-w-0'>
                                         <p className='text-[8px] font-semibold uppercase tracking-[0.11em] text-sage'>Monthly package selected</p>
                                         <p className='mt-1 truncate text-[11px] font-semibold text-ink sm:text-[12px]'>{selectedPackageName}</p>
+                                        {selectedMonthlyTotal && <p className='mt-1 text-[10px] font-semibold text-sagedeep'>{selectedContract?.replace('-', ' ').replace('months', 'month')} total: {selectedMonthlyTotal}</p>}
                                     </div>
                                     <div className='rounded-xl border border-sage/15 bg-white/65 px-3 py-2 text-left sm:text-right'>
                                         <p className='text-[8px] font-medium text-body'>Appointment</p>
