@@ -55,7 +55,7 @@ const faqGroups = [
                     'Yes, engine bay clean out is included in full service. No high-pressure on engine electrics.'
             },
             {
-                question: 'Do you do ceramic coating, detailing, buff &amp; polish?',
+                question: 'Do you do ceramic coating, car wash, buff &amp; polish?',
                 answer:
                     'Yes - on request for dealerships and private clients. Quote based on vehicle.'
             },

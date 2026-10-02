@@ -25,8 +25,6 @@ const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000; // customers must book at least 3 h
 // Do not pre-parse the multipart body — formidable needs the raw stream.
 export const config = { api: { bodyParser: false } };
 
-const REQUIRED_CONTRACT_FILE_NAME = 'Supplier_Client Contract Agreement.docx';
-
 function parseMultipart(req) {
     return new Promise((resolve, reject) => {
         const form = new IncomingForm({ multiples: true, maxFileSize: 10 * 1024 * 1024 });
@@ -110,16 +108,20 @@ export default async function handler(req, res) {
                 ? (Array.isArray(files.contract_files) ? files.contract_files : [files.contract_files])
                 : [];
             const [contractFile] = contractFiles;
+            const contractFileName = contractFile?.originalFilename.toLowerCase() ?? '';
             const isValidContractFile = contractFiles.length === 1
-                && contractFile?.originalFilename === REQUIRED_CONTRACT_FILE_NAME
-                && (contractFile.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                    || contractFile.originalFilename.toLowerCase().endsWith('.docx'))
+                && (contractFile?.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                    || contractFile?.mimetype === 'application/msword'
+                    || contractFile?.mimetype === 'application/pdf'
+                    || contractFileName.endsWith('.docx')
+                    || contractFileName.endsWith('.doc')
+                    || contractFileName.endsWith('.pdf'))
                 && contractFile.size <= 10 * 1024 * 1024;
             if (!contractAccepted || !isValidContractFile) {
                 await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
                 reservedSlotDate = null;
                 reservedSlotTime = null;
-                res.status(400).json({ message: `Attach the completed ${REQUIRED_CONTRACT_FILE_NAME} to continue.` });
+                res.status(400).json({ message: 'Attach the completed Supplier Client Contract Agreement as a Word document or PDF no larger than 10 MB.' });
                 return;
             }
             const fileBuffer = await fs.readFile(contractFile.filepath);
