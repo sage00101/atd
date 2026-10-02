@@ -212,17 +212,28 @@ function PackageDetailsModal({ pkg, open, onClose }) {
                     )}
 
                     {hasPackagePricing && Array.isArray(pkg.threeMonthPrices) && (
-                        <div className='mt-3 rounded-[11px] border border-[#dce8de] bg-white p-3'>
-                            <p className='text-[8px] font-semibold uppercase tracking-[0.1em] text-sage sm:text-[9px]'>3-month contract totals</p>
-                            <div className='mt-2 space-y-1.5'>
-                                {pkg.monthlyPrices.map(([vehicle], index) => (
-                                    <div key={vehicle} className='flex items-center justify-between gap-3 text-[9px] sm:text-[10px]'>
-                                        <span className='text-body'>{vehicle}</span>
-                                        <span className='font-semibold text-ink'>{pkg.threeMonthPrices[index]}</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <p className='mt-2 text-[8px] leading-[1.45] text-body'>6- and 12-month contract totals to be confirmed.</p>
+                        <div className='mt-3 space-y-3'>
+                            {[
+                                ['3-month contract totals', pkg.threeMonthPrices],
+                                ['6-month contract totals', pkg.sixMonthPrices],
+                                ['12-month contract totals', pkg.twelveMonthPrices],
+                            ].map(([label, totals]) => (
+                                <div key={label} className='rounded-[11px] border border-[#dce8de] bg-white p-3'>
+                                    <p className='text-[8px] font-semibold uppercase tracking-[0.1em] text-sage sm:text-[9px]'>{label}</p>
+                                    {Array.isArray(totals) ? (
+                                        <div className='mt-2 space-y-1.5'>
+                                            {pkg.monthlyPrices.map(([vehicle], index) => (
+                                                <div key={vehicle} className='flex items-center justify-between gap-3 text-[9px] sm:text-[10px]'>
+                                                    <span className='text-body'>{vehicle}</span>
+                                                    <span className='font-semibold text-ink'>{totals[index]}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className='mt-2 text-[8px] leading-[1.45] text-body'>To be confirmed.</p>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     )}
 
@@ -557,12 +568,17 @@ export default function PricingSection() {
                                 {selectedPackageVehicle && contractMonths && Array.isArray(pendingPackage.monthlyPrices) && (() => {
                                     const vehicleIndex = pendingPackage.monthlyPrices.findIndex(([vehicle]) => vehicle === selectedPackageVehicle);
                                     const monthlyPrice = vehicleIndex >= 0 ? pendingPackage.monthlyPrices[vehicleIndex][1] : '';
-                                    const threeMonthTotal = pendingPackage.threeMonthPrices?.[vehicleIndex];
+                                    const totalsByMonths = {
+                                        3: pendingPackage.threeMonthPrices,
+                                        6: pendingPackage.sixMonthPrices,
+                                        12: pendingPackage.twelveMonthPrices,
+                                    };
+                                    const contractTotal = totalsByMonths[contractMonths]?.[vehicleIndex];
                                     return (
                                         <div className='rounded-[9px] border border-[#dce8de] bg-white px-3 py-2 text-[9px] sm:text-[10px]'>
                                             <div className='flex justify-between gap-3'><span className='text-body'>Monthly rate</span><strong className='text-ink'>{monthlyPrice}</strong></div>
-                                            {contractMonths === '3' && threeMonthTotal ? (
-                                                <div className='mt-1 flex justify-between gap-3 border-t border-[#edf1ed] pt-1'><span className='text-body'>3-month contract total</span><strong className='text-ink'>{threeMonthTotal}</strong></div>
+                                            {contractTotal ? (
+                                                <div className='mt-1 flex justify-between gap-3 border-t border-[#edf1ed] pt-1'><span className='text-body'>{contractMonths}-month contract total</span><strong className='text-ink'>{contractTotal}</strong></div>
                                             ) : (
                                                 <p className='mt-1 border-t border-[#edf1ed] pt-1 leading-[1.45] text-body'>Total for {contractMonths} months: to be confirmed.</p>
                                             )}
