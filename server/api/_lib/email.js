@@ -2,6 +2,7 @@ import { buildReceiptEmailHtml } from './email-template.js';
 import { buildVehiclePromoApprovedEmailHtml } from './promo-email-template.js';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
+const BOOKINGS_EMAIL = 'bookings@a10tion.co.za';
 
 async function sendViaResend({ to, bcc, subject, html, replyTo, attachments }) {
     const apiKey = process.env.RESEND_API_KEY;
@@ -40,7 +41,7 @@ async function sendViaResend({ to, bcc, subject, html, replyTo, attachments }) {
 /** Sends the branded booking-confirmation receipt to the customer, bcc'd to the business inbox. */
 export async function sendReceiptEmail(receipt) {
     const html = buildReceiptEmailHtml(receipt);
-    const businessEmail = process.env.BUSINESS_EMAIL;
+    const businessEmail = process.env.BUSINESS_EMAIL || BOOKINGS_EMAIL;
 
     if (!receipt.customerEmail) {
         console.warn('[email] no customer email on receipt, skipping send', receipt.reference);
@@ -72,11 +73,7 @@ export async function sendVehiclePromoApprovedEmail({ vehicleRegistration, email
 
 /** Sends the customer's signed contract agreement to the business inbox only — never attached to the customer's own copy. */
 export async function sendMonthlyContractEmail({ receipt, contractFileBase64, contractFileName }) {
-    const businessEmail = process.env.BUSINESS_EMAIL;
-    if (!businessEmail) {
-        console.warn('[email] BUSINESS_EMAIL not set, skipping contract attachment send', receipt.reference);
-        return;
-    }
+    const businessEmail = process.env.BUSINESS_EMAIL || BOOKINGS_EMAIL;
     if (!contractFileBase64 || !contractFileName) return;
 
     const html = `

@@ -794,25 +794,25 @@ export default function BookingSection() {
                                     </div>
                                 </div>
 
-                                <form className='mt-4 flex flex-1 flex-col' onSubmit={beginSecurePayment}>
-                                    <div className='grid grid-cols-1 gap-2.5 sm:grid-cols-2'>
-                                        <label>
+                                <form className='mt-4 flex flex-1 flex-col text-left' onSubmit={beginSecurePayment}>
+                                    <div className='grid grid-cols-2 gap-x-2.5 gap-y-3 sm:gap-x-3.5 sm:gap-y-3.5'>
+                                        <label className='block text-left'>
                                             <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>First name</span>
                                             <input className={fieldClassName} name='firstName' value={customer.firstName} onChange={updateCustomer} autoComplete='given-name' required />
                                         </label>
-                                        <label>
+                                        <label className='block text-left'>
                                             <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Surname</span>
                                             <input className={fieldClassName} name='surname' value={customer.surname} onChange={updateCustomer} autoComplete='family-name' required />
                                         </label>
-                                        <label>
+                                        <label className='block text-left'>
                                             <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Cell number</span>
                                             <input className={fieldClassName} type='tel' name='mobile' value={customer.mobile} onChange={updateCustomer} autoComplete='tel' required />
                                         </label>
-                                        <label>
+                                        <label className='block text-left'>
                                             <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Email address</span>
                                             <input className={fieldClassName} type='email' name='email' value={customer.email} onChange={updateCustomer} autoComplete='email' required />
                                         </label>
-                                        <label>
+                                        <label className='block text-left'>
                                             <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Confirm email address</span>
                                             <input
                                                 className={`${fieldClassName} ${emailMismatch ? 'border-red-300 focus:border-red-400' : ''}`}
@@ -828,18 +828,18 @@ export default function BookingSection() {
                                                 <span className='mt-1 block text-[8px] font-medium text-red-600 sm:text-[9px]'>Email addresses don't match.</span>
                                             )}
                                         </label>
-                                        <label>
+                                        <label className='block text-left'>
                                             <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Vehicle</span>
                                             <input className={fieldClassName} name='vehicle' value={customer.vehicle} onChange={updateCustomer} placeholder='Make, model and colour' required />
                                         </label>
-                                        <label>
+                                        <label className='col-span-2 block text-left sm:col-span-1'>
                                             <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Registration number</span>
                                             <input className={`${fieldClassName} uppercase`} name='registration' value={customer.registration} onChange={updateCustomer} placeholder='e.g. CA 123-456' autoCapitalize='characters' required />
                                         </label>
                                     </div>
 
                                     {!isMonthly && (
-                                        <label className='mt-2.5 block'>
+                                        <label className='mt-3.5 block text-left'>
                                             <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Promo code <span className='font-normal text-body/55'>(optional)</span></span>
                                             <input
                                                 className={`${fieldClassName} uppercase`}
@@ -854,12 +854,12 @@ export default function BookingSection() {
                                         </label>
                                     )}
 
-                                    <label className='mt-2.5 block'>
+                                    <label className='mt-3.5 block text-left'>
                                         <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Service address</span>
                                         <textarea className={`${fieldClassName} min-h-[54px] resize-none py-2 sm:min-h-[62px]`} name='address' value={customer.address} onChange={updateCustomer} placeholder='Street address and suburb' rows={2} required />
                                     </label>
 
-                                    <label className='mt-2.5 block'>
+                                    <label className='mt-3.5 block text-left'>
                                         <span className='mb-1 flex justify-between text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>
                                             <span>Booking message / request <span className='font-normal text-body/55'>(optional)</span></span>
                                             <span className='font-normal text-body/50'>{customer.notes.length}/300</span>
@@ -933,19 +933,19 @@ export default function BookingSection() {
                                         </div>
                                     )}
 
-                                    <div className='mt-2.5 grid gap-2'>
-                                        <label className='flex items-start gap-2 rounded-xl border border-line bg-white/80 px-3 py-2.5'>
+                                    <div className='mt-3.5 grid gap-2.5'>
+                                        <label className='flex items-start gap-2 rounded-xl border border-line bg-white/80 px-3 py-2.5 text-left'>
                                             <input type='checkbox' checked={serviceAreaAccepted} onChange={(event) => setServiceAreaAccepted(event.target.checked)} className='mt-0.5 accent-[#365943]' required />
                                             <span className='text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>I understand the standard service radius is approximately {SERVICE_RADIUS_KM} km from {BUSINESS_ADDRESS}, and outside-area requests are subject to confirmation and possible travel charges.</span>
                                         </label>
 
-                                        <label className='flex items-start gap-2 rounded-xl border border-line bg-white/80 px-3 py-2.5'>
+                                        <label className='flex items-start gap-2 rounded-xl border border-line bg-white/80 px-3 py-2.5 text-left'>
                                             <input type='checkbox' checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className='mt-0.5 accent-[#365943]' required />
                                             <span className='text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>I agree to the <a href={`${import.meta.env.BASE_URL}terms.html`} target='_blank' rel='noreferrer' className='font-semibold text-sagedeep underline underline-offset-2'>Terms &amp; Conditions</a> and acknowledge the booking/cancellation rules.</span>
                                         </label>
                                     </div>
 
-                                    <div className='mt-3'>
+                                    <div className='mt-4'>
                                         <span className='mb-1.5 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>How would you like to pay?</span>
                                         <div className='grid gap-2 sm:grid-cols-2'>
                                             <button

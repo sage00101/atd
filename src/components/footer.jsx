@@ -215,11 +215,10 @@ export default function Footer({ onOpenVacancies }) {
                                     className='
                                         box-border inline-flex !h-8 !w-8 !min-h-0
                                         !min-w-0 flex-none appearance-none items-center
-                                        justify-center rounded-full border border-[#cedbd1]
-                                        bg-gradient-to-br from-white to-[#f3f7f4]
-                                        !p-0 leading-none text-sage transition duration-200
-                                        hover:border-transparent hover:from-[#1d3426]
-                                        hover:to-[#78977f] hover:text-white
+                                        justify-center rounded-full border border-transparent
+                                        bg-gradient-to-br from-[#1d3426] to-[#78977f]
+                                        !p-0 leading-none text-white transition duration-200
+                                        hover:-translate-y-0.5
                                     '
                                 >
                                     <span className='pointer-events-none inline-flex h-full w-full items-center justify-center'>

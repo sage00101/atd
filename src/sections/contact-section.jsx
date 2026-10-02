@@ -16,7 +16,7 @@ import {
 import useReveal from '../hooks/use-reveal';
 
 
-const SUPPORT_EMAIL = 'info@a10tion.co.za';
+const SUPPORT_EMAIL = 'support@a10tion.co.za';
 const SUPPORT_PHONE = '0733069217';
 // wa.me requires international format with no leading 0 (South Africa = +27).
 const SUPPORT_WHATSAPP_NUMBER = `27${SUPPORT_PHONE.replace(/^0/, '')}`;
