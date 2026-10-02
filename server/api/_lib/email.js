@@ -65,7 +65,7 @@ export async function sendVehiclePromoApprovedEmail({ vehicleRegistration, email
     await sendViaResend({
         to: email,
         bcc: businessEmail,
-        subject: 'Your 10% single-wash discount is ready',
+        subject: 'Your 50% single-wash discount is ready',
         html,
         replyTo: businessEmail,
     });

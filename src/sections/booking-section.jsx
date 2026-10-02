@@ -850,7 +850,7 @@ export default function BookingSection() {
                                                 autoCapitalize='characters'
                                                 autoComplete='off'
                                             />
-                                            <span className='mt-1 block text-[8px] leading-[1.45] text-body/65 sm:text-[9px]'>An active code takes 10% off this single wash. Each code can be redeemed once.</span>
+                                            <span className='mt-1 block text-[8px] leading-[1.45] text-body/65 sm:text-[9px]'>An active code takes 50% off this single wash. Each code can be redeemed once.</span>
                                         </label>
                                     )}
 

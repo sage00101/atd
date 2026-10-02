@@ -186,7 +186,7 @@ export default function VehiclePromoModal({
             setStatus('success');
 
             setMessage(
-                'Registration received. A10tion To Detail will issue a unique one-time 10% promo code linked to this registration. The code can only be used once, after a successful single-wash purchase.'
+                'Registration received. A10tion To Detail will issue a unique one-time 50% promo code linked to this registration. The code can only be used once, after a successful single-wash purchase.'
             );
         } catch (error) {
             setStatus('error');
@@ -360,7 +360,7 @@ export default function VehiclePromoModal({
                                 lg:leading-[1.7]
                             '
                         >
-                            Once approved, you receive a unique one-time 10% promo code linked to this registration for eligible single washes only. The code is invalidated after a successful purchase.
+                            Once approved, you receive a unique one-time 50% promo code linked to this registration for eligible single washes only. The code is invalidated after a successful purchase.
                         </p>
                     </div>
 
@@ -379,7 +379,7 @@ export default function VehiclePromoModal({
                         {[
                             'Submit your client and vehicle details.',
                             'A10tion issues a unique one-time promo code linked to your registration.',
-                            'Enter the code at checkout for 10% off a single wash (code expires after purchase).',
+                            'Enter the code at checkout for 50% off a single wash (code expires after purchase).',
                         ].map((step, index) => (
                             <div
                                 key={step}

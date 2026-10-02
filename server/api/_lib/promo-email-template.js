@@ -14,7 +14,7 @@ function escapeHtml(value) {
     })[char]);
 }
 
-/** Email confirming a vehicle's registration number now works as a 10%-off single-wash promo code. */
+/** Email confirming a vehicle's registration number now works as a 50%-off single-wash promo code. */
 export function buildVehiclePromoApprovedEmailHtml({ vehicleRegistration }) {
     return `
 <!doctype html>
@@ -27,7 +27,7 @@ export function buildVehiclePromoApprovedEmailHtml({ vehicleRegistration }) {
                     <tr>
                         <td style="background:${BRAND.sagedeep};padding:28px 32px;">
                             <p style="margin:0;color:#c4d8c9;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;">A10tion To Detail</p>
-                            <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:600;">Your 10% single-wash discount is ready</h1>
+                            <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:600;">Your 50% single-wash discount is ready</h1>
                         </td>
                     </tr>
                     <tr>
@@ -41,7 +41,7 @@ export function buildVehiclePromoApprovedEmailHtml({ vehicleRegistration }) {
                                 <p style="margin:4px 0 0;color:${BRAND.ink};font-size:22px;font-weight:700;letter-spacing:.06em;">${escapeHtml(vehicleRegistration)}</p>
                             </div>
                             <p style="margin:0;color:${BRAND.body};font-size:12.5px;line-height:1.6;">
-                                Just enter this vehicle's registration number as usual when booking a single wash and the 10% discount is applied automatically.
+                                Just enter this vehicle's registration number as usual when booking a single wash and the 50% discount is applied automatically.
                                 It can only be used once and becomes invalid immediately after a successful purchase.
                             </p>
                         </td>

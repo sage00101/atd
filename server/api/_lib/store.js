@@ -53,7 +53,7 @@ export const MONTHLY_PACKAGE_CENTS = {
     },
 };
 
-export const PROMO_DISCOUNT_RATE = 0.1; // 10%
+export const PROMO_DISCOUNT_RATE = 0.5; // 50%
 
 export function normaliseReg(value) {
     return String(value || '').trim().toUpperCase().replace(/[\s-]/g, '');

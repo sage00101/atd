@@ -36,7 +36,7 @@ export function buildReceiptEmailHtml(receipt) {
         row('Customer', receipt.customerName),
         row('Contact', [receipt.customerEmail, receipt.customerMobile].filter(Boolean).join(' · ')),
         row('Service address', receipt.address),
-        row('Promo code used', receipt.promoApplied ? `Yes — ${receipt.promoCode} (10% off)` : 'No'),
+        row('Promo code used', receipt.promoApplied ? `Yes — ${receipt.promoCode} (50% off)` : 'No'),
         row('Subtotal', receipt.discountZar ? receipt.originalAmountZar : ''),
         row('Discount', receipt.discountZar ? `-${receipt.discountZar}` : ''),
         row(isOnsiteUnpaid ? 'Amount due on-site' : 'Amount paid', receipt.amountZar),

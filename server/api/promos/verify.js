@@ -34,7 +34,7 @@ export default async function handler(req, res) {
 
     res.status(200).json({
         valid: true,
-        discountPercent: 10,
-        message: 'This vehicle qualifies for a 10% single-wash discount, applied securely at checkout. It becomes invalid after a successful purchase.',
+        discountPercent: 50,
+        message: 'This vehicle qualifies for a 50% single-wash discount, applied securely at checkout. It becomes invalid after a successful purchase.',
     });
 }

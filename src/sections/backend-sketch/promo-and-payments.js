@@ -40,7 +40,7 @@ const SINGLE_WASH_CENTS = {
   'Minibus / Van': 110000,
 };
 
-const PROMO_DISCOUNT_RATE = 0.1; // 10%
+const PROMO_DISCOUNT_RATE = 0.5; // 50%
 
 function normaliseReg(value) {
   return String(value || '').trim().toUpperCase().replace(/[\s-]/g, '');
@@ -119,8 +119,8 @@ router.post('/promos/verify', express.json(), (req, res) => {
 
   return res.json({
     valid: true,
-    discountPercent: 10,
-    message: 'Promo verified. A 10% single-wash discount will be applied securely at checkout. The code becomes invalid after a successful purchase.',
+    discountPercent: 50,
+    message: 'Promo verified. A 50% single-wash discount will be applied securely at checkout. The code becomes invalid after a successful purchase.',
   });
 });
 
