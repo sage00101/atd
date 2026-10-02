@@ -195,6 +195,13 @@ export default function Footer({ onOpenVacancies }) {
                                 {link.label}
                             </a>
                         ))}
+                        <button
+                            type='button'
+                            onClick={() => window.dispatchEvent(new Event('a10tion-open-cookie-settings'))}
+                            className='text-[8.5px] font-medium text-[#29332c]/70 transition hover:text-[#1d3426] sm:text-[9.5px]'
+                        >
+                            Cookie settings
+                        </button>
                     </div>
 
                     <div className='flex items-center justify-between gap-3 sm:justify-end'>

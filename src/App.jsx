@@ -4,6 +4,7 @@ import LenisScroll from './components/lenis-scroll';
 import Navbar from './components/navbar';
 import Footer from './components/footer';
 import VacancyModal from './components/vacancy-modal';
+import CookieConsent from './components/cookie-consent';
 import HeroSection from './sections/hero-section';
 import AboutSection from './sections/about-section';
 import PricingSection from './sections/pricing-section';
@@ -37,6 +38,7 @@ export default function App() {
                 open={vacanciesOpen}
                 onClose={() => setVacanciesOpen(false)}
             />
+            <CookieConsent />
         </>
     );
 }

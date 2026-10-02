@@ -136,10 +136,10 @@ export async function getSharedPromoBatchForAdmin() {
     const batch = await getSharedPromoBatch();
     if (!batch) return { batchId: null, updatedAt: null, pairs: [] };
 
-    const pairs = await Promise.all(batch.pairs.map(async (pair) => ({
-        ...pair,
-        used: Boolean(await redis.get(promoUsedKey(pair.promoCode))),
-    })));
+    const pairs = await Promise.all(batch.pairs.map(async (pair) => {
+        const usedRecord = await redis.get(promoUsedKey(pair.promoCode));
+        return { ...pair, used: Boolean(usedRecord), usedAt: usedRecord?.usedAt || null };
+    }));
     return { ...batch, pairs };
 }
 
