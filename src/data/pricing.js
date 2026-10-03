@@ -8,7 +8,6 @@ export const singleWashPrices = [
     ['Sedan / Hatchback', 'R650,00'],
     ['SUV / Bakkie', 'R850,00'],
     ['Minibus / Van', 'R1 100,00'],
-    ['Live payment test wash', 'R10,00'],
 ];
 
 export const threeMonthPrepayPrices = [
