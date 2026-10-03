@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import { IncomingForm } from 'formidable';
 import { applyCors } from '../_lib/cors.js';
-import { sendMonthlyContractEmail, sendReceiptEmail } from '../_lib/email.js';
+import { sendReceiptEmail } from '../_lib/email.js';
 import {
     claimUniqueReferenceNumber,
     getSharedPromoCodeStatus,
@@ -254,18 +254,13 @@ export default async function handler(req, res) {
 
         let receiptSent = false;
         try {
-            const result = await sendReceiptEmail(receipt);
+            const contractAttachment = contractFileBase64 && contractFileName
+                ? { filename: contractFileName, content: contractFileBase64 }
+                : null;
+            const result = await sendReceiptEmail(receipt, contractAttachment);
             receiptSent = !result?.skipped;
         } catch (err) {
             console.error('[onsite receipt email failed]', receipt.reference, err);
-        }
-
-        if (contractFileBase64 && contractFileName) {
-            try {
-                await sendMonthlyContractEmail({ receipt, contractFileBase64, contractFileName });
-            } catch (err) {
-                console.error('[onsite contract attachment email failed]', receipt.reference, err);
-            }
         }
 
         res.status(200).json({ success: true, reference, receiptSent });

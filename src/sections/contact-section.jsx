@@ -18,6 +18,8 @@ import useReveal from '../hooks/use-reveal';
 
 const SUPPORT_EMAIL = 'support@a10tion.co.za';
 const SUPPORT_PHONE = '0733069217';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const CONTACT_API_ENDPOINT = `${API_BASE_URL}/api/contact`;
 // wa.me requires international format with no leading 0 (South Africa = +27).
 const SUPPORT_WHATSAPP_NUMBER = `27${SUPPORT_PHONE.replace(/^0/, '')}`;
 
@@ -40,6 +42,8 @@ export default function ContactSection() {
     const sectionRef = useReveal();
     const [issueType, setIssueType] = useState('');
     const [mobileFormOpen, setMobileFormOpen] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submissionStatus, setSubmissionStatus] = useState(null);
 
 
     const chooseSupportType = (type) => {
@@ -47,35 +51,36 @@ export default function ContactSection() {
         setMobileFormOpen(true);
     };
 
-    const handleSubmit = (event) => {
+    const handleSubmit = async (event) => {
         event.preventDefault();
 
-        const formData = new FormData(event.currentTarget);
-        const name = formData.get('name')?.toString().trim() || '';
-        const email = formData.get('email')?.toString().trim() || '';
-        const reference =
-            formData.get('reference')?.toString().trim() || 'Not provided';
-        const message = formData.get('message')?.toString().trim() || '';
+        const form = event.currentTarget;
+        const formData = new FormData(form);
+        const payload = Object.fromEntries(formData.entries());
+        setIsSubmitting(true);
+        setSubmissionStatus(null);
 
-        const subject = encodeURIComponent(
-            `[Website support] ${issueType || 'General support'}${
-                reference !== 'Not provided' ? ` - ${reference}` : ''
-            }`
-        );
-        const body = encodeURIComponent(
-            [
-                `Support category: ${issueType || 'General support'}`,
-                `Name: ${name}`,
-                `Email: ${email}`,
-                `Booking / payment reference: ${reference}`,
-                '',
-                'Issue:',
-                message,
-            ].join('\n')
-        );
+        try {
+            const response = await fetch(CONTACT_API_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Your message could not be sent. Please try again.');
+            }
 
-        window.location.href =
-            `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
+            form.reset();
+            setSubmissionStatus({ tone: 'success', message: 'Your message has been sent to our support team.' });
+        } catch (error) {
+            setSubmissionStatus({
+                tone: 'error',
+                message: error instanceof Error ? error.message : 'Your message could not be sent. Please try again.',
+            });
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
 
@@ -252,6 +257,7 @@ export default function ContactSection() {
                                     autoComplete='name'
                                     placeholder='Your full name'
                                     className={inputClassName}
+                                        maxLength={120}
                                     required
                                 />
                             </label>
@@ -266,6 +272,7 @@ export default function ContactSection() {
                                     autoComplete='email'
                                     placeholder='you@example.com'
                                     className={inputClassName}
+                                        maxLength={254}
                                     required
                                 />
                             </label>
@@ -305,6 +312,7 @@ export default function ContactSection() {
                                     type='text'
                                     placeholder='Booking/payment ref.'
                                     className={inputClassName}
+                                    maxLength={120}
                                 />
                             </label>
 
@@ -317,6 +325,7 @@ export default function ContactSection() {
                                     rows={4}
                                     placeholder='Describe the problem and what you were trying to do...'
                                     className={`${inputClassName} min-h-[92px] resize-y sm:min-h-[104px]`}
+                                    maxLength={4000}
                                     required
                                 />
                             </label>
@@ -329,8 +338,18 @@ export default function ContactSection() {
                                 </p>
                             </div>
 
+                            {submissionStatus && (
+                                <p
+                                    className={`col-span-2 rounded-xl px-3 py-2.5 text-left text-[10px] leading-[1.5] ${submissionStatus.tone === 'success' ? 'border border-[#d5e5d8] bg-[#f0f7f1] text-[#294532]' : 'border border-red-200 bg-red-50 text-red-700'}`}
+                                    role={submissionStatus.tone === 'error' ? 'alert' : 'status'}
+                                >
+                                    {submissionStatus.message}
+                                </p>
+                            )}
+
                             <button
                                 type='submit'
+                                disabled={isSubmitting}
                                 className='
                                     inline-flex min-h-[39px] items-center
                                     justify-center gap-2 rounded-xl bg-[#17271d]
@@ -338,9 +357,10 @@ export default function ContactSection() {
                                     transition hover:-translate-y-0.5 hover:bg-[#294532]
                                     focus:outline-none focus:ring-2 focus:ring-sage/25
                                     col-span-2 sm:min-h-[43px] sm:text-[11.5px]
+                                    disabled:cursor-wait disabled:opacity-70
                                 '
                             >
-                                Send support request
+                                {isSubmitting ? 'Sending message…' : 'Send support request'}
                                 <Send className='h-3.5 w-3.5' />
                             </button>
                         </form>

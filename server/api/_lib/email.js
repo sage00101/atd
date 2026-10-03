@@ -1,8 +1,10 @@
 import { buildReceiptEmailHtml } from './email-template.js';
 import { buildVehiclePromoApprovedEmailHtml } from './promo-email-template.js';
+import { buildSupportEmailHtml } from './support-email-template.js';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const BOOKINGS_EMAIL = 'bookings@a10tion.co.za';
+const SUPPORT_EMAIL = 'support@a10tion.co.za';
 
 async function sendViaResend({ to, bcc, subject, html, replyTo, attachments }) {
     const apiKey = process.env.RESEND_API_KEY;
@@ -38,8 +40,8 @@ async function sendViaResend({ to, bcc, subject, html, replyTo, attachments }) {
     return response.json();
 }
 
-/** Sends the branded booking-confirmation receipt to the customer, bcc'd to the business inbox. */
-export async function sendReceiptEmail(receipt) {
+/** Sends booking receipts to the customer and business; optional contract attachments go only to the business. */
+export async function sendReceiptEmail(receipt, contractAttachment = null) {
     const html = buildReceiptEmailHtml(receipt);
     const subject = `Booking confirmed — ${receipt.reference}`;
 
@@ -49,6 +51,7 @@ export async function sendReceiptEmail(receipt) {
         subject: `${subject} (business copy: ${receipt.customerName || receipt.customerEmail || 'customer'})`,
         html,
         replyTo: receipt.customerEmail || undefined,
+        attachments: contractAttachment ? [contractAttachment] : undefined,
     })];
 
     if (receipt.customerEmail) {
@@ -84,28 +87,13 @@ export async function sendVehiclePromoApprovedEmail({ vehicleRegistration, email
     });
 }
 
-/** Sends the customer's signed contract agreement to the business inbox only — never attached to the customer's own copy. */
-export async function sendMonthlyContractEmail({ receipt, contractFileBase64, contractFileName }) {
-    const businessEmail = BOOKINGS_EMAIL;
-    if (!contractFileBase64 || !contractFileName) return;
-
-    const html = `
-<!doctype html>
-<html>
-<body style="margin:0;padding:24px;background:#F6F7F3;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
-    <p style="color:#161B18;font-size:14px;line-height:1.6;">
-        New monthly package booking — <strong>${receipt.reference}</strong><br>
-        Customer: ${receipt.customerName || 'n/a'} (${receipt.customerEmail || 'n/a'})<br>
-        Package: ${receipt.packageName || 'n/a'}${receipt.vehicleType ? ` · ${receipt.vehicleType}` : ''}<br>
-        The customer's signed supplier/client contract agreement is attached.
-    </p>
-</body>
-</html>`;
-
-    await sendViaResend({
-        to: businessEmail,
-        subject: `Monthly package contract attached — ${receipt.reference}`,
-        html,
-        attachments: [{ filename: contractFileName, content: contractFileBase64 }],
+export async function sendSupportRequestEmail(request) {
+    const subject = `[Website support] ${request.issueType}${request.reference ? ` - ${request.reference}` : ''}`;
+    return sendViaResend({
+        to: SUPPORT_EMAIL,
+        subject,
+        html: buildSupportEmailHtml(request),
+        replyTo: request.email,
     });
 }
+

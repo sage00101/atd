@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { applyCors } from '../../_lib/cors.js';
-import { sendMonthlyContractEmail, sendReceiptEmail } from '../../_lib/email.js';
+import { sendReceiptEmail } from '../../_lib/email.js';
 import {
     getBooking,
     getVehiclePromo,
@@ -104,6 +104,26 @@ export default async function handler(req, res) {
         return;
     }
 
+    const payment = event.payload;
+    if (
+        !pending
+        || payment?.type !== 'payment'
+        || payment?.status !== 'succeeded'
+        || payment?.currency !== 'ZAR'
+        || Number(payment?.amount) !== Number(pending.amountCents)
+    ) {
+        console.error('[payment confirmation rejected]', {
+            checkoutId,
+            pendingFound: Boolean(pending),
+            paymentType: payment?.type,
+            paymentStatus: payment?.status,
+            currency: payment?.currency,
+            amount: payment?.amount,
+        });
+        res.status(200).send('ignored');
+        return;
+    }
+
     // Redeem a shared code or vehicle promo only after payment is confirmed.
     const promo = meta.promoCode || pending?.appliedPromo;
     const promoCodeType = meta.promoCodeType || pending?.appliedPromoType;
@@ -141,21 +161,12 @@ export default async function handler(req, res) {
     };
 
     try {
-        await sendReceiptEmail(receipt);
+        const contractAttachment = pending?.contractFileBase64 && pending?.contractFileName
+            ? { filename: pending.contractFileName, content: pending.contractFileBase64 }
+            : null;
+        await sendReceiptEmail(receipt, contractAttachment);
     } catch (err) {
         console.error('[receipt email failed]', receipt.reference, err);
-    }
-
-    if (pending?.contractFileBase64 && pending?.contractFileName) {
-        try {
-            await sendMonthlyContractEmail({
-                receipt,
-                contractFileBase64: pending.contractFileBase64,
-                contractFileName: pending.contractFileName,
-            });
-        } catch (err) {
-            console.error('[contract attachment email failed]', receipt.reference, err);
-        }
     }
 
     // Keep the slot durably blocked (booking stays, just flipped to "paid").

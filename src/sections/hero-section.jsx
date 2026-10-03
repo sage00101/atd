@@ -201,7 +201,7 @@ export default function HeroSection() {
                     <img
                         src={HERO_LOGO}
                         alt="A10tion To Detail — car wash and fleet care"
-                        className="mx-auto mt-3 h-auto w-[clamp(9.75rem,42vw,12rem)] object-contain drop-shadow-[0_14px_28px_rgba(0,0,0,.6)]"
+                        className="mx-auto mt-3 h-auto w-[clamp(12rem,68vw,17rem)] object-contain drop-shadow-[0_14px_28px_rgba(0,0,0,.6)]"
                         draggable={false}
                     />
 
