@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowRight, Building2, CarFront, Check, Clock3, X } from 'lucide-react';
+import { ArrowRight, Building2, CarFront, Clock3, X } from 'lucide-react';
 import { packageGroups, singleWashPrices, threeMonthPrepayPrices } from '../data/pricing';
 
 const tabs = [
@@ -10,46 +10,49 @@ const tabs = [
     { id: 'prepay', label: '3-month prepay', shortLabel: 'Prepay', icon: Clock3 },
 ];
 
-function PriceRows({ rows, heading = 'Per month' }) {
-    return (
-        <div className='overflow-hidden rounded-xl border border-[#e1e9e3] bg-white'>
-            <div className='grid grid-cols-[1fr_auto] border-b border-[#e1e9e3] bg-[#f2f7f3] px-3 py-2 text-[10px] font-semibold uppercase text-[#54705b]'>
-                <span>Vehicle</span>
-                <span>{heading}</span>
-            </div>
-            {rows.map(([vehicle, price]) => (
-                <div key={vehicle} className='grid grid-cols-[1fr_auto] gap-3 border-b border-[#edf1ed] px-3 py-2.5 text-[12px] last:border-0 sm:text-[13px]'>
-                    <span className='text-[#59655d]'>{vehicle}</span>
-                    <span className='font-semibold tabular-nums text-[#17241c]'>{price}</span>
-                </div>
-            ))}
-        </div>
-    );
-}
-
 function MonthlyPackageCard({ groupLabel, pkg }) {
     return (
-        <article className='overflow-hidden rounded-[14px] border border-[#dce6de] bg-white'>
-            <div className='relative h-20 bg-[#1e3128] sm:h-36'>
-                <img src={pkg.image} alt={pkg.imageAlt} className='h-full w-full object-cover opacity-85' loading='lazy' decoding='async' />
-                <div className='absolute inset-0 bg-gradient-to-t from-[#102017]/85 via-transparent to-transparent' />
-                <span className='absolute bottom-3 left-3 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-semibold text-[#1e3128]'>{pkg.badge}</span>
-                <span className='absolute right-3 top-3 rounded-full bg-[#18271e]/80 px-2.5 py-1 text-[10px] font-semibold text-white'>{groupLabel}</span>
+        <article className='overflow-hidden rounded-[12px] border border-[#dce6de] bg-white'>
+            <div className='flex flex-wrap items-start justify-between gap-2 border-b border-[#e7ede8] px-3.5 py-3 sm:px-4'>
+                <div>
+                    <p className='text-[9px] font-semibold uppercase tracking-[0.1em] text-[#6a806f]'>{groupLabel} · {pkg.washes}</p>
+                    <h4 className='mt-0.5 font-display text-[16px] font-semibold text-[#18231c] sm:text-[18px]'>{pkg.title}</h4>
+                </div>
+                <span className='rounded-full bg-[#edf3ee] px-2.5 py-1 text-[9px] font-semibold text-[#31553c]'>{pkg.monthlyNote}</span>
             </div>
-            <div className='p-3 sm:p-4'>
-                <h3 className='font-display text-[17px] font-semibold text-[#18231c] sm:text-[20px]'>{pkg.title}</h3>
-                <p className='mt-0.5 text-[12px] font-medium text-[#506856]'>{pkg.washes}</p>
-                <div className='mt-2.5'><PriceRows rows={pkg.monthlyPrices} /></div>
-                <p className='mt-2 text-[11px] font-semibold text-[#34563f]'>{pkg.monthlyNote}</p>
-                <ul className='mt-2.5 grid gap-1.5'>
-                    {pkg.details.map((detail) => (
-                        <li key={detail} className='flex items-start gap-2 text-[11px] leading-[1.45] text-[#59655d]'>
-                            <Check className='mt-0.5 size-3.5 shrink-0 text-[#4d7958]' />
-                            <span>{detail}</span>
-                        </li>
-                    ))}
-                </ul>
-                {pkg.packageNote && <p className='mt-3 rounded-lg bg-[#f3f6f3] px-3 py-2 text-[11px] leading-[1.45] text-[#53635a]'>{pkg.packageNote}</p>}
+
+            <div className='hidden sm:block'>
+                <div className='grid grid-cols-[minmax(150px,1fr)_repeat(3,minmax(110px,auto))] gap-3 border-b border-[#e7ede8] bg-[#f7f9f7] px-4 py-2 text-[9px] font-semibold uppercase tracking-[0.06em] text-[#64756a]'>
+                    <span>Vehicle</span><span>Per month</span><span>6-month total</span><span>12-month total</span>
+                </div>
+                {pkg.monthlyPrices.map(([vehicle, monthlyPrice], index) => (
+                    <div key={vehicle} className='grid grid-cols-[minmax(150px,1fr)_repeat(3,minmax(110px,auto))] gap-3 border-b border-[#edf1ed] px-4 py-3 text-[12px] last:border-0'>
+                        <span className='text-[#59655d]'>{vehicle}</span>
+                        <span className='font-semibold tabular-nums text-[#18231c]'>{monthlyPrice}</span>
+                        <span className='font-semibold tabular-nums text-[#18231c]'>{pkg.sixMonthPrices?.[index] ?? 'To be confirmed'}</span>
+                        <span className='font-semibold tabular-nums text-[#18231c]'>{pkg.twelveMonthPrices?.[index] ?? 'To be confirmed'}</span>
+                    </div>
+                ))}
+            </div>
+
+            <div className='divide-y divide-[#edf1ed] sm:hidden'>
+                {pkg.monthlyPrices.map(([vehicle, monthlyPrice], index) => (
+                    <div key={vehicle} className='px-3.5 py-3'>
+                        <h5 className='text-[12px] font-semibold text-[#18231c]'>{vehicle}</h5>
+                        <div className='mt-2 grid grid-cols-3 gap-2'>
+                            {[
+                                ['Per month', monthlyPrice],
+                                ['6 months', pkg.sixMonthPrices?.[index] ?? 'To be confirmed'],
+                                ['12 months', pkg.twelveMonthPrices?.[index] ?? 'To be confirmed'],
+                            ].map(([label, price]) => (
+                                <div key={label} className='min-w-0'>
+                                    <p className='text-[8px] font-medium text-[#718076]'>{label}</p>
+                                    <p className='mt-0.5 break-words text-[10px] font-semibold tabular-nums leading-tight text-[#18231c]'>{price}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
             </div>
         </article>
     );
@@ -140,11 +143,11 @@ export default function PriceListModal({ open, onClose }) {
                             <div className='mb-4 flex flex-wrap items-end justify-between gap-2'>
                                 <div>
                                     <h3 className='font-display text-[20px] font-semibold text-[#18231c] sm:text-[24px]'>{activeGroup.label}</h3>
-                                    <p className='mt-1 text-[12px] text-[#59655d]'>Monthly rates by vehicle type. Contract durations: 3, 6, or 12 months.</p>
+                                    <p className='mt-1 text-[12px] text-[#59655d]'>Monthly rates and 6- or 12-month contract totals by vehicle.</p>
                                 </div>
                                 {activeTab === 'business' && <span className='rounded-full bg-[#eaf2eb] px-3 py-1.5 text-[10px] font-semibold text-[#31553c]'>Minimum 3 vehicles · same premises</span>}
                             </div>
-                            <div className='grid items-start gap-3 sm:grid-cols-2 sm:gap-4'>
+                            <div className='mx-auto grid max-w-5xl items-start gap-3 sm:gap-4 xl:grid-cols-2'>
                                 {activeGroup.packages.map((pkg) => <MonthlyPackageCard key={pkg.id} groupLabel={activeGroup.label} pkg={pkg} />)}
                             </div>
                             <p className='mt-4 text-[11px] leading-[1.5] text-[#69766e]'>Monthly package pricing is shown per month. Confirm the vehicle mix and service address before booking.</p>

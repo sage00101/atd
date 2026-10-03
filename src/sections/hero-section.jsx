@@ -192,7 +192,7 @@ export default function HeroSection() {
                 </div>
 
                 <div className="hero-panel-enter relative bg-[#05100a] px-5 pb-6 pt-5 text-center">
-                    <h1 className="font-display text-[clamp(1.9rem,8vw,2.5rem)] font-extrabold leading-[1.02] tracking-tight text-white">
+                    <h1 className="font-display text-[clamp(1.7rem,7vw,2.15rem)] font-extrabold leading-[1.02] tracking-tight text-white">
                         Hello &amp;
                         <br />
                         welcome to
@@ -201,7 +201,7 @@ export default function HeroSection() {
                     <img
                         src={HERO_LOGO}
                         alt="A10tion To Detail — car wash and fleet care"
-                        className="mx-auto mt-3 h-auto w-[clamp(8.5rem,36vw,10.5rem)] object-contain drop-shadow-[0_14px_28px_rgba(0,0,0,.6)]"
+                        className="mx-auto mt-3 h-auto w-[clamp(9.75rem,42vw,12rem)] object-contain drop-shadow-[0_14px_28px_rgba(0,0,0,.6)]"
                         draggable={false}
                     />
 
@@ -240,7 +240,7 @@ export default function HeroSection() {
                             Mobile car care
                         </div>
 
-                        <h1 className="mt-6 font-display text-[clamp(2.5rem,4vw,3.75rem)] font-extrabold leading-[0.98] tracking-tight text-white">
+                        <h1 className="mt-6 font-display text-[clamp(2.1rem,3.2vw,3.1rem)] font-extrabold leading-[0.98] tracking-tight text-white">
                             Hello &amp;
                             <br />
                             welcome to
@@ -249,7 +249,7 @@ export default function HeroSection() {
                         <img
                             src={HERO_LOGO}
                             alt="A10tion To Detail — car wash and fleet care"
-                            className="mt-7 h-auto w-[clamp(16rem,21vw,21rem)] object-contain"
+                            className="mt-7 h-auto w-[clamp(18rem,25vw,24rem)] object-contain drop-shadow-[0_14px_28px_rgba(0,0,0,.45)]"
                             draggable={false}
                         />
 
