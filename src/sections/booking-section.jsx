@@ -34,6 +34,16 @@ const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000; // bookings require at least 3 hour
 const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 15);
 const BUSINESS_ADDRESS = '2 Pinnacle Crescent, Strandfontein';
 const SINGLE_WASH_VEHICLE_KEY = 'a10tion-single-wash-vehicle-type';
+const MAX_CONTRACT_FILE_BYTES = 10 * 1024 * 1024;
+
+function isAllowedContractFile(file) {
+    if (!file || file.size > MAX_CONTRACT_FILE_BYTES) return false;
+    const fileName = String(file.name || '').trim().toLowerCase();
+    return file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        || file.type === 'application/pdf'
+        || fileName.endsWith('.docx')
+        || fileName.endsWith('.pdf');
+}
 
 const PAYMENT_STATUS_MESSAGES = {
     success: { tone: 'success', text: 'Payment received - thank you! Your booking is confirmed and a receipt is on its way.' },
@@ -456,19 +466,11 @@ export default function BookingSection() {
 
         if (isMonthly) {
             const [contractFile] = contractFiles;
-            const fileName = contractFile?.name.toLowerCase() ?? '';
-            const isValidContractFile = contractFiles.length === 1
-                && (contractFile?.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                    || contractFile?.type === 'application/msword'
-                    || contractFile?.type === 'application/pdf'
-                    || fileName.endsWith('.docx')
-                    || fileName.endsWith('.doc')
-                    || fileName.endsWith('.pdf'))
-                && contractFile.size <= 10 * 1024 * 1024;
+            const isValidContractFile = contractFiles.length === 1 && isAllowedContractFile(contractFile);
 
             if (!isValidContractFile) {
-                setContractFileError('Attach the completed Supplier Client Contract Agreement as a Word document or PDF no larger than 10 MB.');
-                setPaymentError('The completed supplier client contract agreement is required for a monthly package.');
+                setContractFileError('Upload a PDF or DOCX file no larger than 10 MB. The filename does not matter.');
+                setPaymentError('A completed monthly contract document is required.');
                 return;
             }
         }
@@ -884,9 +886,9 @@ export default function BookingSection() {
                                                     <Package className='size-4' />
                                                 </div>
                                                 <div className='min-w-0'>
-                                                    <p className='text-[8px] font-semibold uppercase tracking-[0.11em] text-sage sm:text-[9px]'>Required package document</p>
+                                                    <p className='text-[8px] font-semibold uppercase tracking-[0.11em] text-sage sm:text-[9px]'>Signed contract document</p>
                                                     <p className='mt-1 text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>
-                                                        Attach the completed Supplier Client Contract Agreement as a Word document or PDF (max 10 MB) before continuing.
+                                                        Upload your completed contract as a PDF or DOCX (max 10 MB). The filename does not matter.
                                                     </p>
                                                 </div>
                                             </div>
@@ -895,10 +897,23 @@ export default function BookingSection() {
                                                 <input
                                                     type='file'
                                                     name='contract_files'
-                                                    accept='.doc,.docx,.pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf'
+                                                    accept='.docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf'
                                                     onChange={(event) => {
                                                         const [selectedFile] = Array.from(event.target.files || []);
-                                                        setContractFiles(selectedFile ? [selectedFile] : []);
+                                                        if (!selectedFile) {
+                                                            setContractFiles([]);
+                                                            setContractFileError('');
+                                                            setPaymentError('');
+                                                            return;
+                                                        }
+                                                        if (!isAllowedContractFile(selectedFile)) {
+                                                            setContractFiles([]);
+                                                            setContractFileError('Upload a PDF or DOCX file no larger than 10 MB. The filename does not matter.');
+                                                            setPaymentError('Please choose a valid PDF or DOCX contract file no larger than 10 MB.');
+                                                            event.target.value = '';
+                                                            return;
+                                                        }
+                                                        setContractFiles([selectedFile]);
                                                         setContractFileError('');
                                                         setPaymentError('');
                                                     }}
@@ -938,7 +953,7 @@ export default function BookingSection() {
 
                                             <label className='mt-3 flex items-start gap-2 text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>
                                                 <input type='checkbox' checked={contractAccepted} onChange={(event) => setContractAccepted(event.target.checked)} className='mt-0.5 accent-[#365943]' required />
-                                                <span>I confirm that I have reviewed the terms and completed and attached the Supplier Client Contract Agreement for my selected {selectedContract?.replace('-', ' ')} duration.</span>
+                                                <span>I confirm that I have reviewed the terms and attached my completed contract document for the selected {selectedContract?.replace('-', ' ')} duration.</span>
                                             </label>
                                         </div>
                                     )}
