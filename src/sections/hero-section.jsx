@@ -167,7 +167,7 @@ export default function HeroSection() {
             ===================================================== */}
 
             <div className="lg:hidden">
-                <div className="relative h-[40svh] min-h-[290px] w-full overflow-hidden">
+                <div className="relative h-[45svh] min-h-[320px] w-full overflow-hidden">
                     <picture>
                         <img
                             src={HERO_IMAGE_MOBILE}
@@ -192,7 +192,7 @@ export default function HeroSection() {
                 </div>
 
                 <div className="hero-panel-enter relative bg-[#05100a] px-5 pb-6 pt-5 text-center">
-                    <h1 className="font-display text-[clamp(1.7rem,7vw,2.15rem)] font-extrabold leading-[1.02] tracking-tight text-white">
+                    <h1 className="font-display text-[clamp(1.5rem,6vw,1.9rem)] font-extrabold leading-[1.02] tracking-tight text-white">
                         Hello &amp;
                         <br />
                         welcome to
@@ -231,7 +231,7 @@ export default function HeroSection() {
             ===================================================== */}
 
             <div className="hidden h-[80svh] min-h-[560px] max-h-[760px] lg:flex">
-                <div className="relative z-10 flex w-[46%] flex-col justify-center gap-0 bg-[#05100a] px-12 py-10 xl:w-[44%] xl:px-16">
+                <div className="relative z-10 flex w-[42%] flex-col justify-center gap-0 bg-[#05100a] px-12 py-10 xl:w-[40%] xl:px-16">
                     <div className="pointer-events-none absolute -left-20 top-1/3 h-72 w-72 rounded-full bg-[#52755f]/10 blur-[100px]" />
 
                     <div className="hero-panel-enter relative">
@@ -240,7 +240,7 @@ export default function HeroSection() {
                             Mobile car care
                         </div>
 
-                        <h1 className="mt-6 font-display text-[clamp(2.1rem,3.2vw,3.1rem)] font-extrabold leading-[0.98] tracking-tight text-white">
+                        <h1 className="mt-6 font-display text-[clamp(1.8rem,2.7vw,2.6rem)] font-extrabold leading-[0.98] tracking-tight text-white">
                             Hello &amp;
                             <br />
                             welcome to
@@ -269,7 +269,7 @@ export default function HeroSection() {
                     </div>
                 </div>
 
-                <div className="relative w-[54%] overflow-hidden xl:w-[56%]">
+                <div className="relative w-[58%] overflow-hidden xl:w-[60%]">
                     <img
                         src={HERO_IMAGE_DESKTOP}
                         alt="A10tion To Detail — freshly detailed hatchback on a coastal Cape Town road"

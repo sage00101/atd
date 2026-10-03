@@ -525,7 +525,7 @@ export default function PricingSection() {
                         </div>
 
                         <div className='p-3.5 sm:p-5'>
-                            <p className='text-[9.5px] leading-[1.5] text-body sm:text-[10.5px]'>Choose how many months you want your washes for. Review, complete and attach all required documents when making your purchase.</p>
+                            <p className='text-[9.5px] leading-[1.5] text-body sm:text-[10.5px]'>Choose your contract length and vehicle. Review the terms, then upload your completed, signed contract during checkout.</p>
 
                             {Array.isArray(pendingPackage.monthlyPrices) && (
                                 <div className={`mt-3 rounded-[12px] border border-line bg-[#fafcfb] p-3 ${contractPrompted && !selectedPackageVehicle ? 'ring-2 ring-sage/30 ring-offset-2' : ''}`}>
@@ -594,7 +594,7 @@ export default function PricingSection() {
                                 </ul>
                                 <label className='flex items-start gap-2 text-[8.5px] leading-[1.45] text-body sm:text-[9.5px]'>
                                     <input type='checkbox' checked={contractDownloaded} readOnly disabled className='mt-0.5 accent-[#365943] disabled:opacity-100' />
-                                    <span>I have downloaded these documents and will review, complete and attach all of them during checkout.</span>
+                                    <span>I have downloaded the contract template and reviewed the Terms and Conditions. I will upload one completed, signed contract during checkout.</span>
                                 </label>
                             </div>
 

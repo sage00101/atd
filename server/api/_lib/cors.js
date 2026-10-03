@@ -1,8 +1,10 @@
 // Shared CORS handling for all API routes. Only the configured GitHub Pages
 // origin (or localhost during development) may call this API.
 const DEFAULT_ALLOWED_ORIGINS = [
+    'https://a10tion.co.za',
     'https://sage00101.github.io',
     'http://localhost:5173',
+    'http://127.0.0.1:5173',
 ];
 
 function getAllowedOrigins() {

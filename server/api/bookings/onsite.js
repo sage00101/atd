@@ -120,14 +120,14 @@ export default async function handler(req, res) {
                 ? (Array.isArray(files.contract_files) ? files.contract_files : [files.contract_files])
                 : [];
             const [contractFile] = contractFiles;
-            const contractFileName = contractFile?.originalFilename.toLowerCase() ?? '';
+            const uploadedContractFileName = contractFile?.originalFilename?.toLowerCase() ?? '';
             const isValidContractFile = contractFiles.length === 1
                 && (contractFile?.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
                     || contractFile?.mimetype === 'application/msword'
                     || contractFile?.mimetype === 'application/pdf'
-                    || contractFileName.endsWith('.docx')
-                    || contractFileName.endsWith('.doc')
-                    || contractFileName.endsWith('.pdf'))
+                    || uploadedContractFileName.endsWith('.docx')
+                    || uploadedContractFileName.endsWith('.doc')
+                    || uploadedContractFileName.endsWith('.pdf'))
                 && contractFile.size <= 10 * 1024 * 1024;
             if (!contractAccepted || !isValidContractFile) {
                 await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
