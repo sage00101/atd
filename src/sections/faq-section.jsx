@@ -91,7 +91,7 @@ const faqGroups = [
             {
                 question: 'How do I book?',
                 answer:
-                    'Website – booking@a10tion.co.za For fleet: give us list of regs and address.',
+                    'Website – bookings@a10tion.co.za For fleet: give us list of regs and address.',
             },
             {
                 question: 'What are your banking details?',

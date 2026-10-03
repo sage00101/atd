@@ -41,39 +41,52 @@ async function sendViaResend({ to, bcc, subject, html, replyTo, attachments }) {
 /** Sends the branded booking-confirmation receipt to the customer, bcc'd to the business inbox. */
 export async function sendReceiptEmail(receipt) {
     const html = buildReceiptEmailHtml(receipt);
-    const businessEmail = process.env.BUSINESS_EMAIL || BOOKINGS_EMAIL;
+    const subject = `Booking confirmed — ${receipt.reference}`;
 
-    if (!receipt.customerEmail) {
-        console.warn('[email] no customer email on receipt, skipping send', receipt.reference);
-        return;
+    // Separate direct send so the business copy never depends on bcc or on the customer send succeeding.
+    const jobs = [sendViaResend({
+        to: BOOKINGS_EMAIL,
+        subject: `${subject} (business copy: ${receipt.customerName || receipt.customerEmail || 'customer'})`,
+        html,
+        replyTo: receipt.customerEmail || undefined,
+    })];
+
+    if (receipt.customerEmail) {
+        jobs.unshift(sendViaResend({
+            to: receipt.customerEmail,
+            subject,
+            html,
+            replyTo: BOOKINGS_EMAIL,
+        }));
+    } else {
+        console.warn('[email] no customer email on receipt, sending business copy only', receipt.reference);
     }
 
-    return sendViaResend({
-        to: receipt.customerEmail,
-        bcc: businessEmail,
-        subject: `Booking confirmed — ${receipt.reference}`,
-        html,
-        replyTo: businessEmail,
-    });
+    const results = await Promise.allSettled(jobs);
+    const failed = results.find((r) => r.status === 'rejected');
+    if (failed) {
+        results.filter((r) => r.status === 'rejected').forEach((r) => console.error('[receipt email failed]', receipt.reference, r.reason));
+        if (results.every((r) => r.status === 'rejected')) throw failed.reason;
+    }
+
+    return results.find((r) => r.status === 'fulfilled')?.value;
 }
 
 /** Emails a newly approved customer confirming their vehicle registration now works as a promo code. */
 export async function sendVehiclePromoApprovedEmail({ vehicleRegistration, email }) {
     const html = buildVehiclePromoApprovedEmailHtml({ vehicleRegistration });
-    const businessEmail = process.env.BUSINESS_EMAIL;
-
     await sendViaResend({
         to: email,
-        bcc: businessEmail,
+        bcc: BOOKINGS_EMAIL,
         subject: 'Your 50% single-wash discount is ready',
         html,
-        replyTo: businessEmail,
+        replyTo: BOOKINGS_EMAIL,
     });
 }
 
 /** Sends the customer's signed contract agreement to the business inbox only — never attached to the customer's own copy. */
 export async function sendMonthlyContractEmail({ receipt, contractFileBase64, contractFileName }) {
-    const businessEmail = process.env.BUSINESS_EMAIL || BOOKINGS_EMAIL;
+    const businessEmail = BOOKINGS_EMAIL;
     if (!contractFileBase64 || !contractFileName) return;
 
     const html = `
