@@ -27,6 +27,7 @@ export const SINGLE_WASH_CENTS = {
     'Sedan / Hatchback': 65000,
     'SUV / Bakkie': 85000,
     'Minibus / Van': 110000,
+    'Live payment test wash': 1000,
 };
 
 // Mirrors the monthly rate cards in src/data/pricing.js — first-installment amount charged at booking.
