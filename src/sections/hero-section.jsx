@@ -6,7 +6,7 @@ import {
     Mail,
     MapPin,
 } from 'lucide-react';
-import heroLogo from '../assets/logos/hero-logo.svg';
+import heroLogo from '../assets/logos/hero-logo.png';
 import heroImageDesktop from '../assets/images/hero-desktop.jpg';
 import heroImageMobile from '../assets/images/hero-mobile.jpg';
 import PriceListModal from '../components/price-list-modal';

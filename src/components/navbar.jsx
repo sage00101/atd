@@ -5,7 +5,7 @@ import {
     X,
     ArrowUpRight,
 } from 'lucide-react';
-import navLogo from '../assets/logos/nav-logo.svg';
+import navLogo from '../assets/logos/hero-logo.png';
 import navLogoClose from '../assets/logos/nav-logo-close.svg';
 
 
