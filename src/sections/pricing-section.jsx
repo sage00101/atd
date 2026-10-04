@@ -214,12 +214,15 @@ function PackageDetailsModal({ pkg, open, onClose }) {
                     {hasPackagePricing && Array.isArray(pkg.threeMonthPrices) && (
                         <div className='mt-3 space-y-3'>
                             {[
-                                ['3-month contract totals', pkg.threeMonthPrices],
-                                ['6-month contract totals', pkg.sixMonthPrices],
-                                ['12-month contract totals', pkg.twelveMonthPrices],
-                            ].map(([label, totals]) => (
+                                ['3-month contract totals', pkg.threeMonthPrices, pkg.threeMonthNote],
+                                ['6-month contract totals', pkg.sixMonthPrices, null],
+                                ['12-month contract totals', pkg.twelveMonthPrices, null],
+                            ].map(([label, totals, note]) => (
                                 <div key={label} className='rounded-[11px] border border-[#dce8de] bg-white p-3'>
-                                    <p className='text-[8px] font-semibold uppercase tracking-[0.1em] text-sage sm:text-[9px]'>{label}</p>
+                                    <div className='flex flex-wrap items-center justify-between gap-2'>
+                                        <p className='text-[8px] font-semibold uppercase tracking-[0.1em] text-sage sm:text-[9px]'>{label}</p>
+                                        {note && <span className='rounded-full bg-sagelight px-2 py-1 text-[8px] font-semibold text-sagedeep'>{note}</span>}
+                                    </div>
                                     {Array.isArray(totals) ? (
                                         <div className='mt-2 space-y-1.5'>
                                             {pkg.monthlyPrices.map(([vehicle], index) => (
