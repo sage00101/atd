@@ -682,7 +682,7 @@ export default function BookingSection() {
                         <div className='mt-2 flex items-start gap-2 rounded-[10px] border border-amber-200/80 bg-amber-50 px-2.5 py-2 sm:px-3 sm:py-2.5' role='note'>
                             <Clock3 className='mt-0.5 size-3.5 shrink-0 text-amber-700' aria-hidden='true' />
                             <p className='text-[10px] leading-[1.45] text-amber-950 sm:text-[11px]'>
-                                <span className='font-semibold'>Public holidays:</span> Hours may differ
+                                <span className='font-semibold'>Public holidays:</span> For weekend and public holiday availability, kindly email us at bookings@a10tion.co.za for a quotation
                             </p>
                         </div>
 
