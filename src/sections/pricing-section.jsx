@@ -215,8 +215,8 @@ function PackageDetailsModal({ pkg, open, onClose }) {
                         <div className='mt-3 space-y-3'>
                             {[
                                 ['3-month contract totals', pkg.threeMonthPrices, pkg.threeMonthNote],
-                                ['6-month contract totals', pkg.sixMonthPrices, null],
-                                ['12-month contract totals', pkg.twelveMonthPrices, null],
+                                ['6-month contract totals', pkg.sixMonthPrices, pkg.sixMonthNote ?? null],
+                                ['12-month contract totals', pkg.twelveMonthPrices, pkg.twelveMonthNote ?? null],
                             ].map(([label, totals, note]) => (
                                 <div key={label} className='rounded-[11px] border border-[#dce8de] bg-white p-3'>
                                     <div className='flex flex-wrap items-center justify-between gap-2'>
