@@ -12,57 +12,65 @@ const tabs = [
 
 function MonthlyPackageCard({ groupLabel, pkg }) {
     const savingsBadges = [
-        pkg.sixMonthNote ? { label: '6 months', value: pkg.sixMonthNote } : null,
-        pkg.twelveMonthNote ? { label: '12 months', value: pkg.twelveMonthNote } : null,
+        pkg.sixMonthNote ? { label: '6 month', value: pkg.sixMonthNote } : null,
+        pkg.twelveMonthNote ? { label: '12 month', value: pkg.twelveMonthNote } : null,
     ].filter(Boolean);
 
     return (
-        <article className='overflow-hidden rounded-[12px] border border-[#dce6de] bg-white'>
-            <div className='flex flex-wrap items-start justify-between gap-2 border-b border-[#e7ede8] px-3.5 py-3 sm:px-4'>
-                <div>
-                    <p className='text-[9px] font-semibold uppercase tracking-[0.1em] text-[#6a806f]'>{groupLabel} · {pkg.washes}</p>
-                    <h4 className='mt-0.5 font-display text-[16px] font-semibold text-[#18231c] sm:text-[18px]'>{pkg.title}</h4>
+        <article className='overflow-hidden rounded-[16px] border border-[#dfe9e1] bg-white shadow-[0_20px_60px_-35px_rgba(15,28,20,0.75)]'>
+            <div className='border-b border-[#e7ede8] bg-gradient-to-br from-[#f9fbf9] to-[#f2f8f3] px-3.5 py-3 sm:px-4'>
+                <div className='flex items-start justify-between gap-3'>
+                    <div className='min-w-0'>
+                        <p className='text-[8px] font-semibold uppercase tracking-[0.12em] text-[#6a806f] sm:text-[9px]'>{groupLabel} · {pkg.washes}</p>
+                        <h4 className='mt-1 font-display text-[17px] font-semibold text-[#18231c] sm:text-[20px]'>{pkg.title}</h4>
+                    </div>
+                    <span className='rounded-full bg-[#eaf2eb] px-2.5 py-1 text-[8px] font-bold text-[#31553c] shadow-[inset_0_0_0_1px_rgba(49,85,60,0.08)] sm:text-[9px]'>{pkg.monthlyNote}</span>
                 </div>
-                <span className='rounded-full bg-[#edf3ee] px-2.5 py-1 text-[9px] font-semibold text-[#31553c]'>{pkg.monthlyNote}</span>
+
+                {savingsBadges.length > 0 && (
+                    <div className='mt-2.5 flex flex-wrap gap-1.5'>
+                        {savingsBadges.map(({ label, value }) => (
+                            <span key={label} className='rounded-full border border-[#d5e5d8] bg-[#f4faf4] px-2 py-1 text-[7.5px] font-semibold text-[#31553c] sm:text-[8px]'>
+                                {label}: {value}
+                            </span>
+                        ))}
+                    </div>
+                )}
             </div>
 
-            {savingsBadges.length > 0 && (
-                <div className='flex flex-wrap gap-1.5 border-b border-[#e7ede8] bg-[#f8faf8] px-3.5 py-2 sm:px-4'>
-                    {savingsBadges.map(({ label, value }) => (
-                        <span key={label} className='rounded-full bg-[#eaf2eb] px-2 py-1 text-[8px] font-semibold text-[#31553c]'>
-                            {label}: {value}
-                        </span>
-                    ))}
-                </div>
-            )}
-
             <div className='hidden sm:block'>
-                <div className='grid grid-cols-[minmax(150px,1fr)_repeat(3,minmax(110px,auto))] gap-3 border-b border-[#e7ede8] bg-[#f7f9f7] px-4 py-2 text-[9px] font-semibold uppercase tracking-[0.06em] text-[#64756a]'>
-                    <span>Vehicle</span><span>Per month</span><span>6-month total</span><span>12-month total</span>
+                <div className='grid grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(100px,0.8fr))] gap-3 border-b border-[#e7ede8] bg-[#f5f8f5] px-4 py-2.5 text-[8px] font-semibold uppercase tracking-[0.08em] text-[#64756a]'>
+                    <span>Vehicle</span>
+                    <span className='text-center'>Per month</span>
+                    <span className='text-center'>6-month</span>
+                    <span className='text-center'>12-month</span>
                 </div>
                 {pkg.monthlyPrices.map(([vehicle, monthlyPrice], index) => (
-                    <div key={vehicle} className='grid grid-cols-[minmax(150px,1fr)_repeat(3,minmax(110px,auto))] gap-3 border-b border-[#edf1ed] px-4 py-3 text-[12px] last:border-0'>
+                    <div key={vehicle} className='grid grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(100px,0.8fr))] gap-3 border-b border-[#edf1ed] px-4 py-3 text-[12px] last:border-0'>
                         <span className='text-[#59655d]'>{vehicle}</span>
-                        <span className='font-semibold tabular-nums text-[#18231c]'>{monthlyPrice}</span>
-                        <span className='font-semibold tabular-nums text-[#18231c]'>{pkg.sixMonthPrices?.[index] ?? 'To be confirmed'}</span>
-                        <span className='font-semibold tabular-nums text-[#18231c]'>{pkg.twelveMonthPrices?.[index] ?? 'To be confirmed'}</span>
+                        <span className='text-center font-semibold tabular-nums text-[#18231c]'>{monthlyPrice}</span>
+                        <span className='text-center font-semibold tabular-nums text-[#18231c]'>{pkg.sixMonthPrices?.[index] ?? '—'}</span>
+                        <span className='text-center font-semibold tabular-nums text-[#18231c]'>{pkg.twelveMonthPrices?.[index] ?? '—'}</span>
                     </div>
                 ))}
             </div>
 
-            <div className='divide-y divide-[#edf1ed] sm:hidden'>
+            <div className='sm:hidden'>
                 {pkg.monthlyPrices.map(([vehicle, monthlyPrice], index) => (
-                    <div key={vehicle} className='px-3.5 py-3'>
-                        <h5 className='text-[12px] font-semibold text-[#18231c]'>{vehicle}</h5>
-                        <div className='mt-2 grid grid-cols-3 gap-2'>
+                    <div key={vehicle} className='border-b border-[#edf1ed] px-3.5 py-3 last:border-0'>
+                        <div className='flex items-center justify-between gap-3'>
+                            <h5 className='text-[12px] font-semibold text-[#18231c]'>{vehicle}</h5>
+                            <span className='rounded-full bg-[#eef4ef] px-2 py-0.5 text-[8px] font-semibold text-[#31553c]'>{monthlyPrice}</span>
+                        </div>
+                        <div className='mt-2 grid grid-cols-3 gap-1.5'>
                             {[
                                 ['Per month', monthlyPrice],
-                                ['6 months', pkg.sixMonthPrices?.[index] ?? 'To be confirmed'],
-                                ['12 months', pkg.twelveMonthPrices?.[index] ?? 'To be confirmed'],
+                                ['6 mth', pkg.sixMonthPrices?.[index] ?? '—'],
+                                ['12 mth', pkg.twelveMonthPrices?.[index] ?? '—'],
                             ].map(([label, price]) => (
-                                <div key={label} className='min-w-0'>
-                                    <p className='text-[8px] font-medium text-[#718076]'>{label}</p>
-                                    <p className='mt-0.5 break-words text-[10px] font-semibold tabular-nums leading-tight text-[#18231c]'>{price}</p>
+                                <div key={label} className='rounded-[8px] bg-[#f4f7f4] px-2 py-1.5'>
+                                    <p className='text-[7px] font-medium uppercase tracking-[0.08em] text-[#718076]'>{label}</p>
+                                    <p className='mt-1 break-words text-[9px] font-semibold tabular-nums leading-tight text-[#18231c]'>{price}</p>
                                 </div>
                             ))}
                         </div>
@@ -115,19 +123,18 @@ export default function PriceListModal({ open, onClose }) {
                     <p className='mt-1 max-w-2xl text-[11px] leading-[1.4] text-white/70 sm:mt-1.5 sm:text-[13px] sm:leading-[1.5]'>Compare once-off and monthly options by vehicle size.</p>
                 </header>
 
-                <nav className='shrink-0 border-b border-[#dfe7e0] bg-white p-1.5 sm:px-5 sm:py-2.5' aria-label='Price list categories'>
-                    <div className='grid grid-cols-4 gap-1 sm:gap-1.5'>
+                <nav className='shrink-0 border-b border-[#dfe7e0] bg-white/90 p-2 backdrop-blur-sm sm:px-5 sm:py-2.5' aria-label='Price list categories'>
+                    <div className='grid grid-cols-2 gap-1.5 sm:grid-cols-4 sm:gap-2'>
                         {tabs.map(({ id, label, shortLabel, icon: Icon }) => (
-                            <button key={id} type='button' onClick={() => setActiveTab(id)} aria-pressed={activeTab === id} className={`flex min-h-9 min-w-0 items-center justify-center gap-1 rounded-[7px] px-1 text-[9px] font-semibold leading-tight transition sm:min-h-10 sm:gap-2 sm:rounded-[8px] sm:px-2.5 sm:text-[11px] ${activeTab === id ? 'bg-[#1e3128] text-white' : 'text-[#526158] hover:bg-[#edf3ee]'}`}>
+                            <button key={id} type='button' onClick={() => setActiveTab(id)} aria-pressed={activeTab === id} className={`flex min-h-10 items-center justify-center gap-1.5 rounded-[9px] px-2 text-[9px] font-semibold leading-tight transition sm:min-h-11 sm:gap-2 sm:rounded-[10px] sm:px-2.5 sm:text-[10.5px] ${activeTab === id ? 'bg-[#1e3128] text-white shadow-[0_14px_28px_-18px_rgba(19,35,28,0.95)] ring-1 ring-[#274635]' : 'bg-[#f3f6f3] text-[#526158] hover:bg-[#eaf2eb]'}`}>
                                 <Icon className={`size-3.5 shrink-0 ${activeTab === id ? 'text-[#a9c9b0]' : 'text-[#54705b]'}`} />
-                                <span className='sm:hidden'>{shortLabel}</span>
-                                <span className='hidden sm:inline'>{label}</span>
+                                <span>{label}</span>
                             </button>
                         ))}
                     </div>
                 </nav>
 
-                <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-6' style={{ scrollbarWidth: 'thin' }}>
+                <div className='min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[radial-gradient(circle_at_top,_rgba(193,219,199,0.22),_transparent_40%)] p-3 sm:p-6' style={{ scrollbarWidth: 'thin' }}>
                     {activeTab === 'single' && (
                         <div className='mx-auto max-w-3xl'>
                             <div className='mb-3 sm:mb-4'>
@@ -165,7 +172,7 @@ export default function PriceListModal({ open, onClose }) {
                             <div className='mx-auto grid max-w-5xl items-start gap-3 sm:gap-4 xl:grid-cols-2'>
                                 {activeGroup.packages.map((pkg) => <MonthlyPackageCard key={pkg.id} groupLabel={activeGroup.label} pkg={pkg} />)}
                             </div>
-                            <p className='mt-4 text-[11px] leading-[1.5] text-[#69766e]'>Monthly package pricing is shown per month. Confirm the vehicle mix and service address before booking.</p>
+                            <p className='mt-4 text-center text-[11px] leading-[1.5] text-[#69766e] sm:text-left'>Monthly package pricing is shown per month. Confirm the vehicle mix and service address before booking.</p>
                         </div>
                     )}
 
