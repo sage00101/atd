@@ -11,6 +11,11 @@ const tabs = [
 ];
 
 function MonthlyPackageCard({ groupLabel, pkg }) {
+    const savingsBadges = [
+        pkg.sixMonthNote ? { label: '6 months', value: pkg.sixMonthNote } : null,
+        pkg.twelveMonthNote ? { label: '12 months', value: pkg.twelveMonthNote } : null,
+    ].filter(Boolean);
+
     return (
         <article className='overflow-hidden rounded-[12px] border border-[#dce6de] bg-white'>
             <div className='flex flex-wrap items-start justify-between gap-2 border-b border-[#e7ede8] px-3.5 py-3 sm:px-4'>
@@ -20,6 +25,16 @@ function MonthlyPackageCard({ groupLabel, pkg }) {
                 </div>
                 <span className='rounded-full bg-[#edf3ee] px-2.5 py-1 text-[9px] font-semibold text-[#31553c]'>{pkg.monthlyNote}</span>
             </div>
+
+            {savingsBadges.length > 0 && (
+                <div className='flex flex-wrap gap-1.5 border-b border-[#e7ede8] bg-[#f8faf8] px-3.5 py-2 sm:px-4'>
+                    {savingsBadges.map(({ label, value }) => (
+                        <span key={label} className='rounded-full bg-[#eaf2eb] px-2 py-1 text-[8px] font-semibold text-[#31553c]'>
+                            {label}: {value}
+                        </span>
+                    ))}
+                </div>
+            )}
 
             <div className='hidden sm:block'>
                 <div className='grid grid-cols-[minmax(150px,1fr)_repeat(3,minmax(110px,auto))] gap-3 border-b border-[#e7ede8] bg-[#f7f9f7] px-4 py-2 text-[9px] font-semibold uppercase tracking-[0.06em] text-[#64756a]'>
