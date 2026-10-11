@@ -930,7 +930,7 @@ export default function BookingSection() {
                                             <span>Booking message / request <span className='font-normal text-body/55'>(optional)</span></span>
                                             <span className='font-normal text-body/50'>{customer.notes.length}/300</span>
                                         </span>
-                                        <textarea className={`${fieldClassName} min-h-[54px] resize-none py-2 sm:min-h-[62px]`} name='notes' value={customer.notes} onChange={updateCustomer} placeholder={`Outside ${SERVICE_RADIUS_KM} km? Add your travel request here.`} maxLength={300} rows={2} />
+                                        <textarea className={`${fieldClassName} min-h-[54px] resize-none py-2 sm:min-h-[62px]`} name='notes' value={customer.notes} onChange={updateCustomer} placeholder={`Outside ${SERVICE_RADIUS_KM} km or cannot find or pin your exact location? Add your travel request here.`} maxLength={300} rows={2} />
                                     </label>
 
                                     {isMonthly && (
