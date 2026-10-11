@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import { IncomingForm } from 'formidable';
 import { applyCors } from '../_lib/cors.js';
 import { sendReceiptEmail } from '../_lib/email.js';
+import { getServiceAreaError } from '../_lib/service-area.js';
 import {
     claimUniqueReferenceNumber,
     getSharedPromoCodeStatus,
@@ -69,6 +70,7 @@ export default async function handler(req, res) {
         }
 
         const {
+            serviceLocation,
             purchaseType,
             packageId,
             packageName,
@@ -84,6 +86,11 @@ export default async function handler(req, res) {
 
         if (!serviceAreaAccepted || !termsAccepted) {
             res.status(400).json({ message: 'Required confirmations missing.' });
+            return;
+        }
+        const serviceAreaError = getServiceAreaError(serviceLocation, customer?.address);
+        if (serviceAreaError) {
+            res.status(400).json({ message: serviceAreaError });
             return;
         }
         if (!bookingDate || !bookingTime) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ArrowRight,
     CalendarClock,
@@ -24,6 +24,9 @@ import {
 import useReveal from '../hooks/use-reveal';
 import VehiclePromoModal from '../components/vehicle-promo-modal';
 import { packageGroups } from '../data/pricing';
+import { getDistanceFromServiceCenter } from '../utils/service-area';
+
+const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const PAYMENT_API_ENDPOINT = `${API_BASE_URL}/api/payments/yoco/checkout`;
@@ -214,6 +217,7 @@ export default function BookingSection() {
     const [contractFiles, setContractFiles] = useState([]);
     const [contractFileError, setContractFileError] = useState('');
     const [serviceAreaAccepted, setServiceAreaAccepted] = useState(false);
+    const [serviceLocation, setServiceLocation] = useState(null);
     const [paymentMethod, setPaymentMethod] = useState('online');
     const [customer, setCustomer] = useState({
         firstName: '',
@@ -439,7 +443,30 @@ export default function BookingSection() {
 
     const updateCustomer = (event) => {
         const { name, value } = event.target;
+        if (name === 'address') {
+            setCustomer((current) => ({ ...current, address: value }));
+            setServiceLocation(null);
+            setPaymentError('');
+            return;
+        }
         setCustomer((current) => ({ ...current, [name]: value }));
+    };
+
+    const updateAddress = (address) => updateCustomer({ target: { name: 'address', value: address } });
+
+    const serviceDistanceKm = getDistanceFromServiceCenter(serviceLocation);
+    const serviceLocationAllowed = serviceDistanceKm !== null && serviceDistanceKm <= SERVICE_RADIUS_KM;
+    const serviceAddressValid = serviceLocationAllowed && customer.address.trim().length > 0;
+
+    const updateServiceLocation = (location) => {
+        setServiceLocation(location);
+        const distanceKm = getDistanceFromServiceCenter(location);
+        if (distanceKm !== null && distanceKm > SERVICE_RADIUS_KM) {
+            setCustomer((current) => ({ ...current, address: '' }));
+            setPaymentError(`That location is ${distanceKm.toFixed(1)} km away, outside our ${SERVICE_RADIUS_KM} km service area. The address was cleared. Enter an in-area address and choose an in-area pin to continue.`);
+            return;
+        }
+        setPaymentError('');
     };
 
     const emailMismatch = confirmEmail.length > 0
@@ -448,6 +475,13 @@ export default function BookingSection() {
     const beginSecurePayment = async (event) => {
         event.preventDefault();
         if (missingSelection || isSubmitting) return;
+
+        if (!serviceLocationAllowed) {
+            setPaymentError(serviceLocation
+                ? `This address is outside our ${SERVICE_RADIUS_KM} km service area. Please contact us before booking.`
+                : 'Pin your service location on the map to check the service area before continuing.');
+            return;
+        }
 
         if (!looksLikeVehicleRegistration(customer.registration)) {
             setPaymentError('Please enter a valid-looking vehicle registration number (e.g. CA 123-456 or GP 12 AB C).');
@@ -489,6 +523,7 @@ export default function BookingSection() {
                     bookingTime: selectedTime,
                     serviceDurationMinutes: 90,
                     travelBufferMinutes: 60,
+                    serviceLocation,
                     promoCode: purchaseType === 'single' && promoCode.trim() ? promoCode.trim().toUpperCase() : null,
                     serviceAreaAccepted,
                     termsAccepted,
@@ -866,10 +901,26 @@ export default function BookingSection() {
                                         </label>
                                     )}
 
-                                    <label className='mt-3.5 block text-left'>
-                                        <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Service address</span>
-                                        <textarea className={`${fieldClassName} min-h-[54px] resize-none py-2 sm:min-h-[62px]`} name='address' value={customer.address} onChange={updateCustomer} placeholder='Street address and suburb' rows={2} required />
-                                    </label>
+                                    <Suspense fallback={<div className='mt-3 h-[220px] animate-pulse rounded-xl border border-line bg-[#f0f2ef] sm:h-[260px]' aria-label='Loading service area map' />}>
+                                        <ServiceAreaPicker
+                                            address={customer.address}
+                                            onAddressChange={updateAddress}
+                                            location={serviceLocation}
+                                            onLocationChange={updateServiceLocation}
+                                            radiusKm={SERVICE_RADIUS_KM}
+                                            addressInvalid={serviceDistanceKm !== null && !serviceLocationAllowed}
+                                        />
+                                    </Suspense>
+                                    <p
+                                        className={`mt-2 rounded-lg px-3 py-2 text-[8.5px] leading-[1.5] sm:text-[9px] ${serviceDistanceKm === null ? 'bg-[#f0f2ef] text-body' : serviceLocationAllowed ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}
+                                        role={serviceDistanceKm !== null && !serviceLocationAllowed ? 'alert' : 'status'}
+                                    >
+                                        {serviceDistanceKm === null
+                                            ? 'Choose your service location on the map to continue.'
+                                            : serviceLocationAllowed
+                                              ? `In service area · ${serviceDistanceKm.toFixed(1)} km from ${BUSINESS_ADDRESS}.`
+                                              : `Outside service area · ${serviceDistanceKm.toFixed(1)} km away. The limit is ${SERVICE_RADIUS_KM} km; please contact us before booking.`}
+                                    </p>
 
                                     <label className='mt-3.5 block text-left'>
                                         <span className='mb-1 flex justify-between text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>
@@ -1022,7 +1073,7 @@ export default function BookingSection() {
 
                                         <button
                                             type='submit'
-                                            disabled={isSubmitting}
+                                            disabled={isSubmitting || !serviceAddressValid}
                                             className='group flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 text-[10px] font-semibold text-white shadow-[0_10px_25px_-15px_rgba(20,26,22,.8)] transition hover:-translate-y-px hover:bg-[#18231d] disabled:cursor-wait disabled:opacity-60 sm:min-h-[49px] sm:text-[11px]'
                                         >
                                             {isSubmitting
