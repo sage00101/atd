@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { LocateFixed, MapPin } from 'lucide-react';
-import { SERVICE_AREA_CENTER } from '../utils/service-area';
+import { getDistanceFromServiceCenter, SERVICE_AREA_CENTER } from '../utils/service-area';
 
 function formatAddress(properties) {
     const street = [properties.housenumber, properties.street || properties.name]
@@ -24,7 +24,11 @@ export default function ServiceAreaPicker({ address, onAddressChange, location, 
     const markerRef = useRef(null);
     const onLocationChangeRef = useRef(onLocationChange);
     const onAddressChangeRef = useRef(onAddressChange);
+    const reverseGeocodeControllerRef = useRef(null);
+    const reverseGeocodeRequestRef = useRef(0);
     const [locationError, setLocationError] = useState('');
+    const [addressLookupLoading, setAddressLookupLoading] = useState(false);
+    const [addressLookupError, setAddressLookupError] = useState('');
     const [addressSuggestions, setAddressSuggestions] = useState([]);
     const [addressSearchOpen, setAddressSearchOpen] = useState(false);
     const [addressSearchLoading, setAddressSearchLoading] = useState(false);
@@ -92,6 +96,48 @@ export default function ServiceAreaPicker({ address, onAddressChange, location, 
         };
     }, [address, addressSearchOpen]);
 
+    const resolvePinnedAddress = async (latitude, longitude) => {
+        reverseGeocodeControllerRef.current?.abort();
+        const controller = new AbortController();
+        reverseGeocodeControllerRef.current = controller;
+        const requestId = ++reverseGeocodeRequestRef.current;
+        const selectedLocation = { latitude, longitude };
+
+        setAddressSearchOpen(false);
+        setAddressSuggestions([]);
+        setAddressSearchError('');
+        setAddressLookupError('');
+        setAddressLookupLoading(true);
+        onAddressChangeRef.current('', true);
+        onLocationChangeRef.current(selectedLocation);
+
+        try {
+            const endpoint = new URL('https://photon.komoot.io/reverse');
+            endpoint.searchParams.set('lat', String(latitude));
+            endpoint.searchParams.set('lon', String(longitude));
+            endpoint.searchParams.set('lang', 'en');
+            const response = await fetch(endpoint, { signal: controller.signal });
+            if (!response.ok) throw new Error('Address lookup failed.');
+            const result = await response.json();
+            const label = result.features?.[0]?.properties
+                ? formatAddress(result.features[0].properties)
+                : '';
+
+            if (!label) throw new Error('No address found for this pin.');
+            const distanceKm = getDistanceFromServiceCenter(selectedLocation);
+            if (distanceKm !== null && distanceKm > radiusKm) return;
+            if (requestId === reverseGeocodeRequestRef.current) {
+                onAddressChangeRef.current(label, true);
+            }
+        } catch (error) {
+            if (error.name !== 'AbortError' && requestId === reverseGeocodeRequestRef.current) {
+                setAddressLookupError('No address was found for this pin. Search for the address above or adjust the pin.');
+            }
+        } finally {
+            if (requestId === reverseGeocodeRequestRef.current) setAddressLookupLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (!mapElementRef.current || mapRef.current) return undefined;
 
@@ -116,14 +162,12 @@ export default function ServiceAreaPicker({ address, onAddressChange, location, 
             fillOpacity: 1,
         }).addTo(map).bindTooltip('2 Pinnacle Crescent');
 
-        const setLocation = (latitude, longitude) => {
-            onLocationChangeRef.current({ latitude, longitude });
-        };
-        map.on('click', (event) => setLocation(event.latlng.lat, event.latlng.lng));
+        map.on('click', (event) => resolvePinnedAddress(event.latlng.lat, event.latlng.lng));
         mapRef.current = map;
         map.invalidateSize();
 
         return () => {
+            reverseGeocodeControllerRef.current?.abort();
             map.remove();
             mapRef.current = null;
         };
@@ -160,7 +204,7 @@ export default function ServiceAreaPicker({ address, onAddressChange, location, 
         navigator.geolocation.getCurrentPosition(
             ({ coords }) => {
                 const point = [coords.latitude, coords.longitude];
-                onLocationChangeRef.current({ latitude: coords.latitude, longitude: coords.longitude });
+                resolvePinnedAddress(coords.latitude, coords.longitude);
                 mapRef.current?.setView(point, 15);
             },
             () => setLocationError('Could not access your location. Select a point on the map instead.'),
@@ -173,7 +217,10 @@ export default function ServiceAreaPicker({ address, onAddressChange, location, 
         setAddressSearchOpen(false);
         setAddressSuggestions([]);
         setAddressSearchError('');
-        onAddressChangeRef.current(suggestion.label);
+        reverseGeocodeControllerRef.current?.abort();
+        setAddressLookupLoading(false);
+        setAddressLookupError('');
+        onAddressChangeRef.current(suggestion.label, true);
         onLocationChangeRef.current({ latitude: suggestion.latitude, longitude: suggestion.longitude });
         mapRef.current?.setView(point, 16);
     };
@@ -208,6 +255,9 @@ export default function ServiceAreaPicker({ address, onAddressChange, location, 
                             name='address'
                             value={address}
                             onChange={(event) => {
+                                reverseGeocodeControllerRef.current?.abort();
+                                setAddressLookupLoading(false);
+                                setAddressLookupError('');
                                 onAddressChangeRef.current(event.target.value);
                                 setAddressSearchOpen(true);
                             }}
@@ -255,6 +305,8 @@ export default function ServiceAreaPicker({ address, onAddressChange, location, 
                         <LocateFixed className='size-3.5' /> Use my location
                     </button>
                 </div>
+                {addressLookupLoading && <p className='pt-2 text-[8px] text-body' role='status'>Finding the address for this pin...</p>}
+                {addressLookupError && <p className='pt-2 text-[8px] text-red-700' role='alert'>{addressLookupError}</p>}
                 {locationError && <p className='pt-2 text-[8px] text-red-700' role='status'>{locationError}</p>}
             </div>
             <div ref={mapElementRef} className='h-[220px] w-full sm:h-[260px]' aria-label='Map to select the service location' />

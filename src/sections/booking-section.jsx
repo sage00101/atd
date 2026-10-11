@@ -444,15 +444,19 @@ export default function BookingSection() {
     const updateCustomer = (event) => {
         const { name, value } = event.target;
         if (name === 'address') {
-            setCustomer((current) => ({ ...current, address: value }));
-            setServiceLocation(null);
-            setPaymentError('');
+            updateAddress(value);
             return;
         }
         setCustomer((current) => ({ ...current, [name]: value }));
     };
 
-    const updateAddress = (address) => updateCustomer({ target: { name: 'address', value: address } });
+    const updateAddress = (address, preserveServiceLocation = false) => {
+        setCustomer((current) => ({ ...current, address }));
+        if (!preserveServiceLocation) {
+            setServiceLocation(null);
+            setPaymentError('');
+        }
+    };
 
     const serviceDistanceKm = getDistanceFromServiceCenter(serviceLocation);
     const serviceLocationAllowed = serviceDistanceKm !== null && serviceDistanceKm <= SERVICE_RADIUS_KM;
