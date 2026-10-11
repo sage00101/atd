@@ -3,7 +3,7 @@ export const SERVICE_AREA_CENTER = {
     longitude: 18.4625,
 };
 
-export function getServiceAreaResult(location, radiusKm = Number(process.env.SERVICE_RADIUS_KM || 15)) {
+export function getServiceAreaResult(location, radiusKm = Number(process.env.SERVICE_RADIUS_KM || 10)) {
     const latitude = Number(location?.latitude);
     const longitude = Number(location?.longitude);
     if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90
@@ -33,7 +33,7 @@ export function getServiceAreaError(location, address) {
         return 'Set your service location on the map before continuing.';
     }
     if (!result.withinRadius) {
-        return `This location is ${result.distanceKm.toFixed(1)} km away, outside our ${result.radiusKm} km service area. Please contact us before booking.`;
+        return 'This location is outside our service coverage. Please contact us before booking.';
     }
     return null;
 }

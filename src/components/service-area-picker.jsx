@@ -312,7 +312,7 @@ export default function ServiceAreaPicker({ address, onAddressChange, location, 
             <div ref={mapElementRef} className='h-[220px] w-full sm:h-[260px]' aria-label='Map to select the service location' />
             <div className='flex items-start gap-2 border-t border-line bg-[#f8faf8] px-3 py-2 text-[8px] leading-[1.5] text-body sm:text-[8.5px]'>
                 <MapPin className='mt-0.5 size-3 shrink-0 text-sage' />
-                <span>Tap the map to place the pin at the address above. The shaded circle is the {radiusKm} km service area.</span>
+                <span>Tap the map to place the pin at the address above. The shaded circle shows the service coverage area.</span>
             </div>
         </div>
     );

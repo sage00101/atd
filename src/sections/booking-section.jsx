@@ -34,7 +34,7 @@ const ONSITE_API_ENDPOINT = `${API_BASE_URL}/api/bookings/onsite`;
 const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
 const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000; // bookings require at least 3 hours notice
-const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 15);
+const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 10);
 const SINGLE_WASH_VEHICLE_KEY = 'a10tion-single-wash-vehicle-type';
 const MAX_CONTRACT_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -466,7 +466,7 @@ export default function BookingSection() {
         const distanceKm = getDistanceFromServiceCenter(location);
         if (distanceKm !== null && distanceKm > SERVICE_RADIUS_KM) {
             setCustomer((current) => ({ ...current, address: '' }));
-            setPaymentError(`That location is ${distanceKm.toFixed(1)} km away, outside our ${SERVICE_RADIUS_KM} km service area. The address was cleared. Enter an in-area address and choose an in-area pin to continue.`);
+            setPaymentError(`That location is outside our service coverage. The address was cleared. Enter an in-area address and choose an in-area pin to continue.`);
             return;
         }
         setPaymentError('');
@@ -481,7 +481,7 @@ export default function BookingSection() {
 
         if (!serviceLocationAllowed) {
             setPaymentError(serviceLocation
-                ? `This address is outside our ${SERVICE_RADIUS_KM} km service area. Please contact us before booking.`
+                ? 'This address is outside our service coverage. Please contact us before booking.'
                 : 'Pin your service location on the map to check the service area before continuing.');
             return;
         }
@@ -922,7 +922,7 @@ export default function BookingSection() {
                                             ? 'Choose your service location on the map to continue.'
                                             : serviceLocationAllowed
                                               ? `In service area · ${serviceDistanceKm.toFixed(1)} km from ${SERVICE_AREA_NAME}.`
-                                              : `Outside service area · ${serviceDistanceKm.toFixed(1)} km away. The limit is ${SERVICE_RADIUS_KM} km; please contact us before booking.`}
+                                              : `Outside service coverage · ${serviceDistanceKm.toFixed(1)} km away. Please contact us before booking.`}
                                     </p>
 
                                     <label className='mt-3.5 block text-left'>
@@ -930,7 +930,7 @@ export default function BookingSection() {
                                             <span>Booking message / request <span className='font-normal text-body/55'>(optional)</span></span>
                                             <span className='font-normal text-body/50'>{customer.notes.length}/300</span>
                                         </span>
-                                        <textarea className={`${fieldClassName} min-h-[54px] resize-none py-2 sm:min-h-[62px]`} name='notes' value={customer.notes} onChange={updateCustomer} placeholder={`Outside ${SERVICE_RADIUS_KM} km or cannot find or pin your exact location? Add your travel request here.`} maxLength={300} rows={2} />
+                                        <textarea className={`${fieldClassName} min-h-[54px] resize-none py-2 sm:min-h-[62px]`} name='notes' value={customer.notes} onChange={updateCustomer} placeholder='Outside our standard coverage or cannot find your exact location? Add your travel request here.' maxLength={300} rows={2} />
                                     </label>
 
                                     {isMonthly && (
@@ -1015,7 +1015,7 @@ export default function BookingSection() {
                                     <div className='mt-3.5 grid gap-2.5'>
                                         <label className='flex items-start gap-2 rounded-xl border border-line bg-white/80 px-3 py-2.5 text-left'>
                                             <input type='checkbox' checked={serviceAreaAccepted} onChange={(event) => setServiceAreaAccepted(event.target.checked)} className='mt-0.5 accent-[#365943]' required />
-                                            <span className='text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>I understand the {SERVICE_RADIUS_KM} km service radius is centered near {SERVICE_AREA_NAME}, not at the business address. Locations outside this area cannot be booked.</span>
+                                            <span className='text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>I understand the standard service coverage is centered near {SERVICE_AREA_NAME}, not at the business address. Locations outside this area cannot be booked.</span>
                                         </label>
 
                                         <label className='flex items-start gap-2 rounded-xl border border-line bg-white/80 px-3 py-2.5 text-left'>
