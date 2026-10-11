@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { LocateFixed, MapPin } from 'lucide-react';
-import { getDistanceFromServiceCenter, SERVICE_AREA_CENTER } from '../utils/service-area';
+import { BUSINESS_LOCATION, getDistanceFromServiceCenter, SERVICE_AREA_CENTER } from '../utils/service-area';
 
 function formatAddress(properties) {
     const street = [properties.housenumber, properties.street || properties.name]
@@ -154,13 +154,13 @@ export default function ServiceAreaPicker({ address, onAddressChange, location, 
             fillOpacity: 0.12,
             weight: 2,
         }).addTo(map);
-        L.circleMarker([SERVICE_AREA_CENTER.latitude, SERVICE_AREA_CENTER.longitude], {
+        L.circleMarker([BUSINESS_LOCATION.latitude, BUSINESS_LOCATION.longitude], {
             radius: 5,
             color: '#fff',
             weight: 2,
-            fillColor: '#294633',
+            fillColor: '#c74d35',
             fillOpacity: 1,
-        }).addTo(map).bindTooltip('2 Pinnacle Crescent');
+        }).addTo(map).bindTooltip('2 Pinnacle Crescent, Strandfontein');
 
         map.on('click', (event) => resolvePinnedAddress(event.latlng.lat, event.latlng.lng));
         mapRef.current = map;

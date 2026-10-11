@@ -24,7 +24,7 @@ import {
 import useReveal from '../hooks/use-reveal';
 import VehiclePromoModal from '../components/vehicle-promo-modal';
 import { packageGroups } from '../data/pricing';
-import { getDistanceFromServiceCenter } from '../utils/service-area';
+import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
 
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 
@@ -35,7 +35,6 @@ const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
 const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000; // bookings require at least 3 hours notice
 const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 15);
-const BUSINESS_ADDRESS = '2 Pinnacle Crescent, Strandfontein';
 const SINGLE_WASH_VEHICLE_KEY = 'a10tion-single-wash-vehicle-type';
 const MAX_CONTRACT_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -627,8 +626,8 @@ export default function BookingSection() {
                             <div className='flex items-start gap-2'>
                                 <MapPin className='mt-0.5 size-4 shrink-0 text-sagedeep' />
                                 <div>
-                                    <p className='text-[9px] font-bold uppercase tracking-[0.12em] text-sage sm:text-[10px]'>Mobile service radius</p>
-                                    <p className='mt-1 text-[9.5px] leading-[1.5] text-body sm:text-[10.5px]'>Approximately <strong>{SERVICE_RADIUS_KM} km</strong> from {BUSINESS_ADDRESS}. For addresses beyond the standard radius, include a request in your booking message or enquire through the contact form before purchasing.</p>
+                                    <p className='text-[9px] font-bold uppercase tracking-[0.12em] text-sage sm:text-[10px]'>Mobile Service Coverage</p>
+                                    <p className='mt-1 text-[9.5px] leading-[1.5] text-body sm:text-[10.5px]'>Deep Southern Suburbs. From Muizenberg South towards the CBD. Outside areas are welcome to email us at <a href='mailto:info@a10tion.co.za' className='font-semibold underline underline-offset-2'>{'info@a10tion.co.za'}</a> for quotations and bookings</p>
                                 </div>
                             </div>
 
@@ -922,7 +921,7 @@ export default function BookingSection() {
                                         {serviceDistanceKm === null
                                             ? 'Choose your service location on the map to continue.'
                                             : serviceLocationAllowed
-                                              ? `In service area · ${serviceDistanceKm.toFixed(1)} km from ${BUSINESS_ADDRESS}.`
+                                              ? `In service area · ${serviceDistanceKm.toFixed(1)} km from ${SERVICE_AREA_NAME}.`
                                               : `Outside service area · ${serviceDistanceKm.toFixed(1)} km away. The limit is ${SERVICE_RADIUS_KM} km; please contact us before booking.`}
                                     </p>
 
@@ -1016,7 +1015,7 @@ export default function BookingSection() {
                                     <div className='mt-3.5 grid gap-2.5'>
                                         <label className='flex items-start gap-2 rounded-xl border border-line bg-white/80 px-3 py-2.5 text-left'>
                                             <input type='checkbox' checked={serviceAreaAccepted} onChange={(event) => setServiceAreaAccepted(event.target.checked)} className='mt-0.5 accent-[#365943]' required />
-                                            <span className='text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>I understand the standard service radius is approximately {SERVICE_RADIUS_KM} km from {BUSINESS_ADDRESS}, and outside-area requests are subject to confirmation and possible travel charges.</span>
+                                            <span className='text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>I understand the {SERVICE_RADIUS_KM} km service radius is centered near {SERVICE_AREA_NAME}, not at the business address. Locations outside this area cannot be booked.</span>
                                         </label>
 
                                         <label className='flex items-start gap-2 rounded-xl border border-line bg-white/80 px-3 py-2.5 text-left'>

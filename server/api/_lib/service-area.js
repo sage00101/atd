@@ -1,6 +1,6 @@
 export const SERVICE_AREA_CENTER = {
-    latitude: -34.0700025,
-    longitude: 18.5591036,
+    latitude: -33.9847222,
+    longitude: 18.4625,
 };
 
 export function getServiceAreaResult(location, radiusKm = Number(process.env.SERVICE_RADIUS_KM || 15)) {
