@@ -3,7 +3,7 @@ export const SERVICE_AREA_CENTER = {
     longitude: 18.4625,
 };
 
-export function getServiceAreaResult(location, radiusKm = Number(process.env.SERVICE_RADIUS_KM || 10)) {
+export function getServiceAreaResult(location, radiusKm = Number(process.env.SERVICE_RADIUS_KM || 7)) {
     const latitude = Number(location?.latitude);
     const longitude = Number(location?.longitude);
     if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90

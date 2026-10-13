@@ -34,7 +34,7 @@ const ONSITE_API_ENDPOINT = `${API_BASE_URL}/api/bookings/onsite`;
 const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
 const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000; // bookings require at least 3 hours notice
-const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 10);
+const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 7);
 const SINGLE_WASH_VEHICLE_KEY = 'a10tion-single-wash-vehicle-type';
 const MAX_CONTRACT_FILE_BYTES = 10 * 1024 * 1024;
 
