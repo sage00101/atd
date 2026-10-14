@@ -33,92 +33,116 @@ const adminPage = `<!doctype html>
 <title>Calendar Manager | A10tion To Detail</title>
 <style>
   :root {
-    --bg:#f2f5f1;
+    --bg:#f4f7f5;
     --panel:#fff;
-    --panel-soft:#edf3ee;
-    --line:#d9e2db;
-    --ink:#16251d;
-    --muted:#586d61;
-    --sage:#294633;
-    --sage-soft:#dceae0;
-    --sage-ink:#1a2a20;
-    --danger:#b63737;
-    --danger-soft:#f7e4e4;
-    --accent:#c1dec7;
-    --shadow:0 20px 40px -28px rgba(18,26,21,.35);
+    --panel-soft:#edf3ef;
+    --line:#dce5df;
+    --ink:#192820;
+    --muted:#68776e;
+    --sage:#24513a;
+    --sage-soft:#e3efe7;
+    --sage-ink:#1a3828;
+    --danger:#a73737;
+    --danger-soft:#f9e9e8;
+    --blue:#26718a;
+    --blue-soft:#e5f1f5;
+    --shadow:0 18px 48px -34px rgba(18,34,25,.42);
   }
 
   .login-overlay {
-    position: fixed; inset: 0; background: rgba(11, 17, 15, 0.72); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 20;
+    position: fixed; inset: 0; background: rgba(14,24,18,.62); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 20; backdrop-filter: blur(5px);
   }
   .login-card {
-    width: min(440px, 100%); background: white; border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); padding: 26px 22px;
+    width: min(420px, 100%); background: white; border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 28px;
   }
-  .login-card h2 { margin: 0 0 8px; font-size: 28px; }
-  .login-card p { margin: 0 0 18px; color: var(--muted); line-height: 1.6; }
+  .login-card h2 { margin: 0 0 7px; font-size: 23px; }
+  .login-card p { margin: 0 0 20px; color: var(--muted); line-height: 1.55; font-size: 14px; }
   .login-form { display: grid; gap: 12px; }
-  .login-form input { width: 100%; padding: 12px 13px; border-radius: 10px; border: 1px solid var(--line); font-size: 14px; }
-  .login-actions { display: flex; gap: 10px; margin-top: 6px; }
+  .login-form input { width: 100%; padding: 12px 13px; border-radius: 7px; border: 1px solid var(--line); font-size: 14px; }
+  .login-actions { display: flex; gap: 9px; margin-top: 3px; }
   .login-actions button { flex: 1; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font-family: Arial, Helvetica, sans-serif; }
-  body { padding: 28px 16px 48px; }
-  .shell { max-width: 1180px; margin: 0 auto; }
-  .topbar {
-    background: linear-gradient(135deg, #101d15, #1d3428 54%, #2b4b3a 100%);
-    color: white; border-radius: 18px 18px 0 0; padding: 26px 28px; box-shadow: var(--shadow);
-  }
-  .eyebrow { margin: 0; font-size: 12px; letter-spacing: .15em; text-transform: uppercase; color: #bfd0bf; }
-  .heading { margin: 10px 0 0; font-size: clamp(28px, 3vw, 42px); }
-  .sub { margin: 10px 0 0; max-width: 760px; font-size: 14px; line-height: 1.6; color: rgba(255,255,255,.78); }
-  .panel {
-    background: var(--panel); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 18px 18px; padding: 22px 24px 24px; box-shadow: var(--shadow);
-  }
-  .toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
-  .toolbar input { flex: 1 1 260px; min-width: 200px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); font-size: 14px; }
-  .button-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font-family: "Avenir Next", "Segoe UI", sans-serif; }
+  body { padding: 26px 24px 52px; }
+  .shell { max-width: 1240px; margin: 0 auto; }
+  .topbar { padding: 0 0 22px; border-bottom: 1px solid var(--line); }
+  .brand-line { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .eyebrow { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--sage); }
+  .live-mark { display:inline-flex; align-items:center; gap:7px; color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; }
+  .live-mark::before { content:""; width:7px; height:7px; border-radius:50%; background:#2e9b64; box-shadow:0 0 0 3px #dcefe4; }
+  .heading { margin: 17px 0 0; font-size: 31px; font-weight: 650; line-height: 1.15; }
+  .sub { margin: 7px 0 0; max-width: 680px; font-size: 14px; line-height: 1.55; color: var(--muted); }
+  .panel { padding: 20px 0 0; }
+  .toolbar { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; padding-bottom: 17px; border-bottom: 1px solid var(--line); }
+  .toolbar input { flex: 1 1 230px; max-width: 310px; min-width: 190px; padding: 10px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel); font-size: 13px; }
+  .button-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content:space-between; align-items:center; padding: 15px 0 14px; }
+  .view-controls, .batch-controls { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   button {
-    appearance: none; border: 0; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: 700; transition: transform .15s ease, opacity .15s ease;
+    appearance: none; border: 0; border-radius: 7px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 650; transition: background .15s ease, border-color .15s ease, color .15s ease;
   }
-  button:hover { transform: translateY(-1px); }
-  button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
-  .primary { background: var(--sage); color: white; padding: 12px 16px; }
-  .secondary { background: var(--panel-soft); color: var(--sage-ink); padding: 12px 16px; }
-  .ghost { background: #f8faf9; color: var(--ink); border: 1px solid var(--line); padding: 10px 12px; }
-  .legend { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 20px; color: var(--muted); font-size: 12px; }
-  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 999px; background: #f6faf7; border:1px solid var(--line); }
-  .dot { width: 10px; height: 10px; border-radius: 50%; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(218px, 1fr)); gap: 12px; }
-  .date-card {
-    background: #f9fbfa; border:1px solid var(--line); border-radius: 14px; padding: 12px; }
-  .date-head { display:flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
-  .date-name { font-weight: 700; font-size: 14px; }
-  .date-meta { font-size: 11px; color: var(--muted); }
-  .slot-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+  button:hover { border-color:#adc2b4; }
+  button:focus-visible, summary:focus-visible, input:focus-visible { outline:3px solid rgba(46,133,83,.24); outline-offset:2px; }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  .primary { background: var(--sage); color: white; padding: 10px 14px; }
+  .primary:hover { background:#183c29; }
+  .secondary { background: var(--panel); color: var(--sage-ink); border:1px solid var(--line); padding: 9px 12px; }
+  .ghost { background: transparent; color: var(--muted); border: 1px solid transparent; padding: 9px 11px; }
+  .view-controls { padding:3px; border:1px solid var(--line); border-radius:8px; background:#eaf0ec; }
+  .view-button { padding:7px 11px; background:transparent; color:var(--muted); }
+  .view-button[aria-pressed="true"] { background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(20,38,28,.12); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 3px 0 12px; color: var(--muted); font-size: 11px; }
+  .legend-item { display: inline-flex; align-items: center; gap: 7px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .grid { display: flex; flex-direction:column; gap: 7px; }
+  .date-card { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .day-card[open] { border-color:#bdcec3; box-shadow:0 5px 18px rgba(23,47,32,.05); }
+  .day-summary { display:grid; grid-template-columns:minmax(190px,1fr) auto 15px; align-items:center; gap:20px; min-height:66px; padding:12px 16px; cursor:pointer; list-style:none; }
+  .day-summary::-webkit-details-marker { display:none; }
+  .day-summary::marker { content:""; }
+  .day-heading { display:flex; align-items:baseline; gap:10px; min-width:0; }
+  .date-name { font-weight:700; font-size:14px; }
+  .date-meta { font-size:11px; color:var(--muted); }
+  .day-counts { display:flex; align-items:center; gap:13px; color:var(--muted); font-size:11px; white-space:nowrap; }
+  .count-open { color:var(--sage); }
+  .count-booked { color:var(--blue); }
+  .day-chevron { width:8px; height:8px; border-right:1.5px solid #78877e; border-bottom:1.5px solid #78877e; transform:rotate(45deg); transition:transform .16s ease; }
+  .day-card[open] .day-chevron { transform:rotate(225deg); }
+  .day-content { padding:0 16px 15px; }
+  .day-rule { height:1px; margin:0 0 13px; background:var(--line); }
+  .slot-grid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px; }
   .slot {
-    display:flex; align-items:center; justify-content:space-between; gap: 8px; width:100%; border-radius: 10px; border: 1px solid var(--line); background: white; padding: 8px 9px; font-size: 12px; color: var(--ink);
+    display:flex; align-items:center; justify-content:space-between; gap: 8px; min-width:0; width:100%; min-height:42px; border-radius:7px; border:1px solid var(--line); background:#fbfcfb; padding:8px 10px; font-size:12px; color:var(--ink);
   }
-  .slot.blocked { background: var(--danger-soft); border-color: #e7b2b2; color: #7b2121; }
-  .slot.blocked .state-flag { background: var(--danger); }
-  .slot.booked { background: #e4f1f5; border-color: #9bc7d6; color: #174e63; }
-  .slot.booked .slot-status { color: #174e63; }
-  .slot-status { font-size: 10px; color: var(--muted); }
-  .state-flag { width: 8px; height: 8px; border-radius: 50%; background: #9cb4a4; }
-  .date-actions { display:flex; gap:8px; margin-top:12px; }
-  .date-actions button { flex:1; padding: 8px 10px; border-radius: 8px; font-size: 11px; }
-  .status { min-height: 24px; margin-top: 16px; font-size: 13px; color: var(--sage-ink); }
+  .slot:hover { background:#f1f6f2; }
+  .slot.blocked { background:var(--danger-soft); border-color:#e9c5c2; color:#792f2d; }
+  .slot.booked { background:var(--blue-soft); border-color:#c2dce5; color:#18566b; }
+  .slot[aria-disabled="true"] { cursor:not-allowed; }
+  .slot-status { font-size:10px; color:var(--muted); }
+  .slot.blocked .slot-status { color:#9a3c37; }
+  .slot.booked .slot-status { color:#18566b; }
+  .date-actions { display:flex; justify-content:flex-end; gap:7px; margin-top:11px; }
+  .date-actions button { padding:7px 10px; font-size:11px; }
+  .status { min-height: 20px; margin: 12px 0 0; font-size: 12px; color: var(--sage-ink); }
   .status.error { color: var(--danger); }
   .status.ok { color: #166e3d; }
-  .summary { margin-top: 16px; padding: 12px 14px; background: var(--panel-soft); border:1px solid var(--line); border-radius: 12px; font-size: 12px; color: var(--muted); white-space: pre-wrap; }
-  @media (max-width: 620px) { body { padding: 14px 10px 32px; } .panel { padding: 18px 14px 20px; } .toolbar { flex-direction: column; align-items: stretch; } .button-row { display:grid; grid-template-columns:1fr; } }
+  .summary { margin: 9px 0 0; color:var(--muted); font-size:11px; line-height:1.5; white-space:pre-wrap; }
+  .history { margin-top:20px; border-top:1px solid var(--line); padding:15px 2px 0; max-height:165px; overflow:auto; font-size:11px; color:var(--muted); }
+  .month-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:8px; }
+  .month-day { display:grid; gap:10px; min-height:86px; padding:11px 12px; text-align:left; background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+  .month-day-label { font-size:11px; font-weight:700; color:var(--ink); }
+  .month-bar { height:5px; overflow:hidden; border-radius:4px; background:#edf2ee; }
+  .month-bar-fill { display:block; height:100%; border-radius:4px; background:linear-gradient(90deg,#69a681,#b45e58); }
+  .month-day-meta { color:var(--muted); font-size:10px; }
+  @media (max-width: 760px) { body { padding:20px 16px 36px; } .day-summary { grid-template-columns:minmax(160px,1fr) 15px; gap:10px; } .day-counts { grid-column:1; grid-row:2; flex-wrap:wrap; gap:10px; } .day-chevron { grid-column:2; grid-row:1 / span 2; } .slot-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (max-width: 520px) { body { padding:16px 11px 28px; } .heading { font-size:27px; } .toolbar { display:grid; grid-template-columns:1fr 1fr; } .toolbar input { grid-column:1 / -1; max-width:none; width:100%; } .toolbar button { width:100%; } .button-row { align-items:stretch; gap:9px; } .view-controls, .batch-controls { width:100%; } .view-controls button { flex:1; padding-inline:6px; } .batch-controls button { flex:1 1 auto; } .day-summary { padding:11px 12px; } .day-content { padding:0 11px 12px; } .month-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 </style>
 </head>
 <body>
 <div class="shell">
   <header class="topbar">
-    <p class="eyebrow">A10tion To Detail · Admin</p>
+    <div class="brand-line"><p class="eyebrow">A10tion To Detail / Operations</p><span class="live-mark">Live schedule</span></div>
     <h1 class="heading">Calendar manager</h1>
-    <p class="sub">Block or reopen any timeslot in real time. These updates feed directly into the public booking calendar and refresh the availability used by the live website.</p>
+    <p class="sub">Manage appointment availability and customer bookings.</p>
   </header>
   <main class="panel">
     <div class="toolbar">
@@ -128,20 +152,24 @@ const adminPage = `<!doctype html>
       <button id="save" class="primary" type="button">Save changes</button>
     </div>
     <div class="button-row">
-      <button id="viewWeek" class="secondary" type="button">Week view</button>
-      <button id="view30" class="secondary" type="button">30-day view</button>
-      <button id="viewMonth" class="secondary" type="button">Month overview</button>
+      <div class="view-controls" role="group" aria-label="Calendar view">
+        <button id="viewWeek" class="view-button" data-view="week" aria-pressed="false" type="button">Week</button>
+        <button id="view30" class="view-button" data-view="30" aria-pressed="true" type="button">30 days</button>
+        <button id="viewMonth" class="view-button" data-view="month" aria-pressed="false" type="button">Overview</button>
+      </div>
+      <div class="batch-controls">
       <button id="blockNext30" class="secondary" type="button">Block next 30 days</button>
       <button id="clearNext30" class="ghost" type="button">Clear next 30 days</button>
       <button id="exportCsv" class="ghost" type="button">Export CSV</button>
+      </div>
     </div>
     <div class="legend">
-      <span class="chip"><span class="dot" style="background:#9cb4a4"></span>Available</span>
-      <span class="chip"><span class="dot" style="background:#b63737"></span>Blocked</span>
-      <span class="chip"><span class="dot" style="background:#287b99"></span>Booked</span>
+      <span class="legend-item"><span class="dot" style="background:#6b9f7b"></span>Available</span>
+      <span class="legend-item"><span class="dot" style="background:#b34e48"></span>Blocked</span>
+      <span class="legend-item"><span class="dot" style="background:#287b99"></span>Booked</span>
     </div>
     <div id="calendar" class="grid"></div>
-    <div id="history" style="margin-top:18px;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#f8faf8;max-height:180px;overflow:auto;font-size:12px;color:var(--muted)"></div>
+    <div id="history" class="history"></div>
     <p id="status" class="status" role="status"></p>
     <pre id="summary" class="summary"></pre>
   </main>
@@ -168,7 +196,7 @@ const adminPage = `<!doctype html>
   const summaryNode = document.getElementById('summary');
   const historyNode = document.getElementById('history');
   const loginOverlay = document.getElementById('loginOverlay');
-  const state = { blockedSlots: {}, bookedSlots: {}, history: [], viewMode: '30', isDragging: false, dragCache: new Set() };
+  const state = { blockedSlots: {}, bookedSlots: {}, history: [], viewMode: '30', isDragging: false, dragCache: new Set(), openDates: new Set(), initializedOpenDate: false };
 
   function setStatus(message, tone = '') {
     statusNode.textContent = message;
@@ -241,7 +269,7 @@ const adminPage = `<!doctype html>
       });
     });
 
-    const csv = rows.map((row) => row.map((cell) => '"' + String(cell).replace(/"/g, '""') + '"').join(',')).join('\n');
+    const csv = rows.map((row) => row.map((cell) => '"' + String(cell).replace(/"/g, '""') + '"').join(',')).join('\\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -287,13 +315,20 @@ const adminPage = `<!doctype html>
       const occupiedCount = new Set([...blocked, ...booked]).size;
       const percent = Math.min((occupiedCount / slots.length) * 100, 100);
       const label = blocked.size + ' blocked · ' + booked.size + ' booked';
-      return '<button type="button" data-date="' + date + '" class="date-card" style="padding:10px 8px; border:1px solid var(--line); border-radius:10px; background:linear-gradient(180deg, rgba(39,74,52,.10), rgba(39,74,52,.02)); min-height:86px; text-align:left; cursor:pointer;" title="' + label + '"><div style="font-size:10px; font-weight:700; color:var(--muted);">' + formatDate(dateFromIso(date)).replace(', ', ' ') + '</div><div style="margin-top:10px; height:10px; border-radius:999px; background:#edf3ee; overflow:hidden;"><span style="display:block; height:100%; width:' + percent + '%; background:linear-gradient(90deg,#8da895,#b63737); border-radius:999px;"></span></div><div style="margin-top:8px; font-size:10px; color:var(--muted);">' + label + '</div></button>';
+      return '<button type="button" data-date="' + date + '" class="month-day" title="' + label + '"><span class="month-day-label">' + formatDate(dateFromIso(date)).replace(', ', ' ') + '</span><span class="month-bar"><span class="month-bar-fill" style="width:' + percent + '%"></span></span><span class="month-day-meta">' + label + '</span></button>';
     }).join('');
-    return '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px;">' + cells + '</div>';
+    return '<div class="month-grid">' + cells + '</div>';
   }
 
   function renderCalendar() {
     const dates = getVisibleDates();
+    if (!state.initializedOpenDate && dates.length) {
+      state.openDates.add(dates[0]);
+      state.initializedOpenDate = true;
+    }
+    document.querySelectorAll('.view-button').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.view === state.viewMode));
+    });
     const isMonthView = state.viewMode === 'month';
     const cards = isMonthView ? renderMonthOverview() : dates.map((date) => {
       const blockedSet = new Set(state.blockedSlots[date] || []);
@@ -307,10 +342,20 @@ const adminPage = `<!doctype html>
         return '<button class="slot ' + slotClass + '" type="button" data-date="' + date + '" data-time="' + time + '" data-booked="' + booked + '" aria-disabled="' + booked + '" aria-label="' + date + ' ' + time + ', ' + label + '" title="' + label + '"><span>' + time + '</span><span class="slot-status">' + slotStatus + '</span></button>';
       }).join('');
 
-      return '<article class="date-card"><div class="date-head"><div><div class="date-name">' + formatDate(dateFromIso(date)) + '</div><div class="date-meta">' + date + '</div></div></div><div class="slot-grid">' + slotButtons + '</div><div class="date-actions"><button class="secondary" type="button" data-date="' + date + '" data-action="block-all">Block all</button><button class="ghost" type="button" data-date="' + date + '" data-action="clear-all">Clear</button></div></article>';
+      const blockedCountForDate = blockedSet.size;
+      const bookedCountForDate = bookedSet.size;
+      const availableCountForDate = Math.max(slots.length - new Set([...blockedSet, ...bookedSet]).size, 0);
+      const openAttribute = state.openDates.has(date) ? ' open' : '';
+      return '<details class="date-card day-card" data-date-card="' + date + '"' + openAttribute + '><summary class="day-summary"><span class="day-heading"><span class="date-name">' + formatDate(dateFromIso(date)) + '</span><span class="date-meta">' + date + '</span></span><span class="day-counts"><span class="count-open">' + availableCountForDate + ' open</span><span>' + blockedCountForDate + ' blocked</span><span class="count-booked">' + bookedCountForDate + ' booked</span></span><span class="day-chevron" aria-hidden="true"></span></summary><div class="day-content"><div class="day-rule"></div><div class="slot-grid">' + slotButtons + '</div><div class="date-actions"><button class="secondary" type="button" data-date="' + date + '" data-action="block-all">Block open slots</button><button class="ghost" type="button" data-date="' + date + '" data-action="clear-all">Clear manual blocks</button></div></div></details>';
     }).join('');
 
     calendarNode.innerHTML = cards;
+    calendarNode.querySelectorAll('details.day-card').forEach((details) => {
+      details.addEventListener('toggle', () => {
+        if (details.open) state.openDates.add(details.dataset.dateCard);
+        else state.openDates.delete(details.dataset.dateCard);
+      });
+    });
     if (isMonthView) {
       calendarNode.querySelectorAll('[data-date]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -432,9 +477,6 @@ const adminPage = `<!doctype html>
       state.history = Array.isArray(result.history) ? result.history : [];
       renderHistory();
       renderCalendar();
-      const totalBlocked = Object.values(state.blockedSlots).reduce((sum, times) => sum + times.length, 0);
-      const summaryText = 'Blocked slots: ' + totalBlocked + '\n\n' + (Object.entries(state.blockedSlots).map(([date, times]) => date + ': ' + times.join(', ')).join('\n') || 'No manual blocks yet.');
-      summaryNode.textContent = summaryText;
       setStatus('Calendar loaded.','ok');
     } catch (error) {
       setStatus(error.message, 'error');
@@ -451,9 +493,6 @@ const adminPage = `<!doctype html>
       state.history = Array.isArray(result.history) ? result.history : state.history;
       renderHistory();
       renderCalendar();
-      const totalBlocked = Object.values(state.blockedSlots).reduce((sum, times) => sum + times.length, 0);
-      const summaryText = 'Saved calendar blocks: ' + totalBlocked + '\n\n' + (Object.entries(state.blockedSlots).map(([date, times]) => date + ': ' + times.join(', ')).join('\n') || 'No manual blocks yet.');
-      summaryNode.textContent = summaryText;
       setStatus('Changes saved and live on the booking page.','ok');
     } catch (error) {
       setStatus(error.message, 'error');
