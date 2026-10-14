@@ -1,9 +1,9 @@
 export const SERVICE_AREA_CENTER = {
-    latitude: -33.95,
-    longitude: 18.44,
+    latitude: -33.978,
+    longitude: 18.444,
 };
 
-export const SERVICE_AREA_NAME = 'Milnerton, Cape Town';
+export const SERVICE_AREA_NAME = 'Newlands, Cape Town';
 
 export const BUSINESS_LOCATION = {
     latitude: -34.0700025,
