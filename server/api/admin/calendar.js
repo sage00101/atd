@@ -7,7 +7,6 @@ import {
   getBookedSlotsInRange,
     getBlockedSlotsInRange,
     getCalendarHistory,
-    seedDefaultCalendarBlocks,
     setCalendarBlockRange,
 } from '../_lib/store.js';
 
@@ -645,7 +644,6 @@ export default async function handler(req, res) {
         const end = req.query?.to || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
 
         if (req.method === 'GET') {
-            await seedDefaultCalendarBlocks();
           const [blockedSlots, bookedSlots, history] = await Promise.all([
                 getBlockedSlotsInRange(start, end),
             getBookedSlotsInRange(start, end),

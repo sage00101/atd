@@ -1,5 +1,5 @@
 import { applyCors } from '../_lib/cors.js';
-import { getBlockedSlotsInRange, getBookedSlotsInRange, seedDefaultCalendarBlocks } from '../_lib/store.js';
+import { getBlockedSlotsInRange, getBookedSlotsInRange } from '../_lib/store.js';
 
 // GET /api/bookings/availability?from=YYYY-MM-DD&to=YYYY-MM-DD
 // Returns the combined live set of booked + admin-blocked slots, so the
@@ -16,8 +16,6 @@ export default async function handler(req, res) {
         getBookedSlotsInRange(from, to),
         getBlockedSlotsInRange(from, to),
     ]);
-
-    await seedDefaultCalendarBlocks();
 
     const mergedSlots = { ...bookedSlots };
     for (const [date, times] of Object.entries(blockedSlots)) {

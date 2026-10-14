@@ -13,7 +13,6 @@ const REFERENCE_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year — matches confirme
 const CALENDAR_BLOCK_INDEX_TTL_SECONDS = 60 * 60 * 24 * 365 * 5; // 5 years — manual blocks persist until cleared
 
 export const BOOKING_SLOT_TIMES = ['08:00', '10:30', '13:00', '15:30', '18:00'];
-export const DEFAULT_CALENDAR_BLOCK_DATES = ['2026-10-14', '2026-10-15', '2026-10-16'];
 
 const referenceKey = (reference) => `booking-ref:${reference}`;
 const calendarDateIndexKey = (date) => `calendar-blocks:${date}`;
@@ -409,14 +408,6 @@ export async function appendCalendarHistory(entry) {
 export async function getCalendarHistory(limit = 20) {
     const items = await redis.lrange(calendarHistoryKey, 0, Math.max(0, limit - 1));
     return items;
-}
-
-export async function seedDefaultCalendarBlocks() {
-    for (const date of DEFAULT_CALENDAR_BLOCK_DATES) {
-        for (const time of BOOKING_SLOT_TIMES) {
-            await setCalendarBlock(date, time, 'default-block');
-        }
-    }
 }
 
 export async function clearCalendarBlocksForDate(date) {
