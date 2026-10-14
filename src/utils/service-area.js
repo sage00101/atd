@@ -1,9 +1,9 @@
 export const SERVICE_AREA_CENTER = {
-    latitude: -33.9847222,
-    longitude: 18.4625,
+    latitude: -33.95,
+    longitude: 18.44,
 };
 
-export const SERVICE_AREA_NAME = 'Claremont, Cape Town';
+export const SERVICE_AREA_NAME = 'Milnerton, Cape Town';
 
 export const BUSINESS_LOCATION = {
     latitude: -34.0700025,

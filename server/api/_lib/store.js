@@ -10,8 +10,14 @@ const WEBHOOK_DEDUPE_TTL_SECONDS = 60 * 60 * 24 * 3; // 3 days — longer than Y
 const PROMO_BATCH_KEY = 'promo:shared:active-batch';
 const PROMO_RESERVATION_TTL_SECONDS = 60 * 60;
 const REFERENCE_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year — matches confirmed-booking retention
+const CALENDAR_BLOCK_INDEX_TTL_SECONDS = 60 * 60 * 24 * 365 * 5; // 5 years — manual blocks persist until cleared
+
+export const BOOKING_SLOT_TIMES = ['08:00', '10:30', '13:00', '15:30', '18:00'];
+export const DEFAULT_CALENDAR_BLOCK_DATES = ['2026-10-14', '2026-10-15', '2026-10-16'];
 
 const referenceKey = (reference) => `booking-ref:${reference}`;
+const calendarDateIndexKey = (date) => `calendar-blocks:${date}`;
+const calendarSlotKey = (date, time) => `calendar-slot:${date}:${time}`;
 
 /** Generates a reference number and atomically claims it, retrying on the astronomically rare collision. */
 export async function claimUniqueReferenceNumber() {
@@ -333,6 +339,93 @@ export async function getBookedSlotsInRange(fromDate, toDate) {
     }));
 
     return bookedSlots;
+}
+
+/** Admin-managed day/time blocks for maintenance, holidays, and manual overrides. */
+export async function setCalendarBlock(date, time, reason = 'manual') {
+    if (!date || !time) return false;
+    await redis.sadd(calendarDateIndexKey(date), time);
+    await redis.set(calendarSlotKey(date, time), {
+        blocked: true,
+        reason,
+        blockedAt: new Date().toISOString(),
+    }, { ex: CALENDAR_BLOCK_INDEX_TTL_SECONDS });
+    return true;
+}
+
+export async function clearCalendarBlock(date, time) {
+    if (!date || !time) return false;
+    await redis.srem(calendarDateIndexKey(date), time);
+    await redis.del(calendarSlotKey(date, time));
+    return true;
+}
+
+export async function setCalendarBlockRange(date, times, reason = 'manual') {
+    if (!date || !Array.isArray(times)) return false;
+    for (const time of times) {
+        await setCalendarBlock(date, time, reason);
+    }
+    return true;
+}
+
+export async function getBlockedSlotsInRange(fromDate, toDate) {
+    const blockedSlots = {};
+    if (!fromDate || !toDate) return blockedSlots;
+
+    const dates = [];
+    const cursor = new Date(`${fromDate}T00:00:00`);
+    const end = new Date(`${toDate}T00:00:00`);
+    while (cursor <= end) {
+        const y = cursor.getFullYear();
+        const m = String(cursor.getMonth() + 1).padStart(2, '0');
+        const d = String(cursor.getDate()).padStart(2, '0');
+        dates.push(`${y}-${m}-${d}`);
+        cursor.setDate(cursor.getDate() + 1);
+    }
+
+    await Promise.all(dates.map(async (date) => {
+        const times = await redis.smembers(calendarDateIndexKey(date));
+        if (times.length) blockedSlots[date] = times;
+    }));
+
+    return blockedSlots;
+}
+
+const calendarHistoryKey = 'calendar:history';
+
+export async function appendCalendarHistory(entry) {
+    if (!entry || !entry.date || !entry.action) return null;
+    const record = {
+        ...entry,
+        timestamp: entry.timestamp || new Date().toISOString(),
+    };
+    const current = await redis.lrange(calendarHistoryKey, 0, 49);
+    const next = [record, ...current].slice(0, 50);
+    await redis.del(calendarHistoryKey);
+    if (next.length) await redis.rpush(calendarHistoryKey, ...next);
+    return record;
+}
+
+export async function getCalendarHistory(limit = 20) {
+    const items = await redis.lrange(calendarHistoryKey, 0, Math.max(0, limit - 1));
+    return items;
+}
+
+export async function seedDefaultCalendarBlocks() {
+    for (const date of DEFAULT_CALENDAR_BLOCK_DATES) {
+        for (const time of BOOKING_SLOT_TIMES) {
+            await setCalendarBlock(date, time, 'default-block');
+        }
+    }
+}
+
+export async function clearCalendarBlocksForDate(date) {
+    const times = await redis.smembers(calendarDateIndexKey(date));
+    if (!times.length) return false;
+    for (const time of times) {
+        await clearCalendarBlock(date, time);
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------------
