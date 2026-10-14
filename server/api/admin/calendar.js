@@ -122,9 +122,16 @@ const adminPage = `<!doctype html>
   .slot.booked .slot-status { color:#18566b; }
   .date-actions { display:flex; justify-content:flex-end; gap:7px; margin-top:11px; }
   .date-actions button { padding:7px 10px; font-size:11px; }
-  .status { min-height: 20px; margin: 12px 0 0; font-size: 12px; color: var(--sage-ink); }
-  .status.error { color: var(--danger); }
-  .status.ok { color: #166e3d; }
+  .status { display:flex; align-items:center; gap:9px; min-height:38px; margin:12px 0 0; padding:9px 11px; border:1px solid var(--line); border-radius:7px; background:#f8faf9; color:var(--muted); font-size:12px; }
+  .status:empty { display:none; }
+  .status::before { content:""; width:8px; height:8px; flex:0 0 8px; border-radius:50%; background:#8ba193; }
+  .status.loading { color:var(--sage-ink); background:#f1f6f2; }
+  .status.loading::before { border:2px solid #c8d6cd; border-top-color:var(--sage); background:transparent; animation:status-spin .7s linear infinite; }
+  .status.error { color:var(--danger); background:var(--danger-soft); border-color:#e9c5c2; }
+  .status.error::before { background:var(--danger); }
+  .status.ok { color:#1d6840; background:#edf6ef; border-color:#c9e1cf; }
+  .status.ok::before { background:#2e8a52; }
+  @keyframes status-spin { to { transform:rotate(360deg); } }
   .summary { margin: 9px 0 0; color:var(--muted); font-size:11px; line-height:1.5; white-space:pre-wrap; }
   .history { margin-top:20px; border-top:1px solid var(--line); padding:15px 2px 0; max-height:165px; overflow:auto; font-size:11px; color:var(--muted); }
   .month-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:8px; }
@@ -151,6 +158,7 @@ const adminPage = `<!doctype html>
       <button id="load" class="secondary" type="button">Load live calendar</button>
       <button id="save" class="primary" type="button">Save changes</button>
     </div>
+    <p id="status" class="status" role="status" aria-live="polite" aria-atomic="true"></p>
     <div class="button-row">
       <div class="view-controls" role="group" aria-label="Calendar view">
         <button id="viewWeek" class="view-button" data-view="week" aria-pressed="false" type="button">Week</button>
@@ -170,7 +178,6 @@ const adminPage = `<!doctype html>
     </div>
     <div id="calendar" class="grid"></div>
     <div id="history" class="history"></div>
-    <p id="status" class="status" role="status"></p>
     <pre id="summary" class="summary"></pre>
   </main>
 </div>
@@ -218,6 +225,11 @@ const adminPage = `<!doctype html>
     return new Date(year, month - 1, day);
   }
 
+  function isWeekday(value) {
+    const day = dateFromIso(value).getDay();
+    return day !== 0 && day !== 6;
+  }
+
   function buildDateRange(days = 30) {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
@@ -226,6 +238,10 @@ const adminPage = `<!doctype html>
       date.setDate(start.getDate() + index);
       return isoDate(date);
     });
+  }
+
+  function buildWeekdayRange(days = 30) {
+    return buildDateRange(days).filter(isWeekday);
   }
 
   function buildWeekRange() {
@@ -238,13 +254,12 @@ const adminPage = `<!doctype html>
       const date = new Date(start);
       date.setDate(start.getDate() + index);
       return isoDate(date);
-    });
+    }).filter(isWeekday);
   }
 
   function getVisibleDates() {
     if (state.viewMode === 'week') return buildWeekRange();
-    if (state.viewMode === 'month') return buildDateRange(30);
-    return buildDateRange(30);
+    return buildWeekdayRange(30);
   }
 
   function renderHistory() {
@@ -308,7 +323,7 @@ const adminPage = `<!doctype html>
   }
 
   function renderMonthOverview() {
-    const monthDates = buildDateRange(30);
+    const monthDates = buildWeekdayRange(30);
     const cells = monthDates.map((date) => {
       const blocked = new Set(state.blockedSlots[date] || []);
       const booked = new Set(state.bookedSlots[date] || []);
@@ -469,7 +484,11 @@ const adminPage = `<!doctype html>
   }
 
   async function loadCalendar() {
-    setStatus('Loading live calendar…');
+    const button = document.getElementById('load');
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.textContent = 'Loading…';
+    setStatus('Connecting to the live calendar…', 'loading');
     try {
       const result = await callApi('GET');
       state.blockedSlots = result.blockedSlots || {};
@@ -477,14 +496,24 @@ const adminPage = `<!doctype html>
       state.history = Array.isArray(result.history) ? result.history : [];
       renderHistory();
       renderCalendar();
-      setStatus('Calendar loaded.','ok');
+      const blockedCount = Object.values(state.blockedSlots).reduce((sum, times) => sum + times.length, 0);
+      const bookedCount = Object.values(state.bookedSlots).reduce((sum, times) => sum + times.length, 0);
+      setStatus('Calendar loaded: ' + blockedCount + ' manually blocked, ' + bookedCount + ' booked.', 'ok');
     } catch (error) {
       setStatus(error.message, 'error');
+    } finally {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.textContent = 'Load live calendar';
     }
   }
 
   async function saveCalendar() {
-    setStatus('Saving changes…');
+    const button = document.getElementById('save');
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.textContent = 'Saving…';
+    setStatus('Saving calendar changes…', 'loading');
     try {
       const payload = { blocks: state.blockedSlots, history: state.history.slice(0, 25) };
       const result = await callApi('PUT', payload);
@@ -493,9 +522,14 @@ const adminPage = `<!doctype html>
       state.history = Array.isArray(result.history) ? result.history : state.history;
       renderHistory();
       renderCalendar();
-      setStatus('Changes saved and live on the booking page.','ok');
+      const blockedCount = Object.values(state.blockedSlots).reduce((sum, times) => sum + times.length, 0);
+      setStatus('Saved successfully: ' + blockedCount + ' manual blocks. Booked slots remain protected.', 'ok');
     } catch (error) {
       setStatus(error.message, 'error');
+    } finally {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.textContent = 'Save changes';
     }
   }
 
