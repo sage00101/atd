@@ -4,6 +4,7 @@ import {
     BOOKING_SLOT_TIMES,
     appendCalendarHistory,
     clearCalendarBlock,
+  getBookedSlotsInRange,
     getBlockedSlotsInRange,
     getCalendarHistory,
     seedDefaultCalendarBlocks,
@@ -99,6 +100,9 @@ const adminPage = `<!doctype html>
   }
   .slot.blocked { background: var(--danger-soft); border-color: #e7b2b2; color: #7b2121; }
   .slot.blocked .state-flag { background: var(--danger); }
+  .slot.booked { background: #e4f1f5; border-color: #9bc7d6; color: #174e63; }
+  .slot.booked .slot-status { color: #174e63; }
+  .slot-status { font-size: 10px; color: var(--muted); }
   .state-flag { width: 8px; height: 8px; border-radius: 50%; background: #9cb4a4; }
   .date-actions { display:flex; gap:8px; margin-top:12px; }
   .date-actions button { flex:1; padding: 8px 10px; border-radius: 8px; font-size: 11px; }
@@ -134,6 +138,7 @@ const adminPage = `<!doctype html>
     <div class="legend">
       <span class="chip"><span class="dot" style="background:#9cb4a4"></span>Available</span>
       <span class="chip"><span class="dot" style="background:#b63737"></span>Blocked</span>
+      <span class="chip"><span class="dot" style="background:#287b99"></span>Booked</span>
     </div>
     <div id="calendar" class="grid"></div>
     <div id="history" style="margin-top:18px;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#f8faf8;max-height:180px;overflow:auto;font-size:12px;color:var(--muted)"></div>
@@ -163,7 +168,7 @@ const adminPage = `<!doctype html>
   const summaryNode = document.getElementById('summary');
   const historyNode = document.getElementById('history');
   const loginOverlay = document.getElementById('loginOverlay');
-  const state = { blockedSlots: {}, history: [], viewMode: '30', isDragging: false, dragCache: new Set() };
+  const state = { blockedSlots: {}, bookedSlots: {}, history: [], viewMode: '30', isDragging: false, dragCache: new Set() };
 
   function setStatus(message, tone = '') {
     statusNode.textContent = message;
@@ -249,6 +254,12 @@ const adminPage = `<!doctype html>
   }
 
   function toggleSlot(date, time, reason = 'toggle') {
+    if ((state.bookedSlots[date] || []).includes(time)) {
+      state.isDragging = false;
+      setStatus('A customer has booked or reserved ' + date + ' ' + time + '. This slot cannot be freed.', 'error');
+      return;
+    }
+
     const next = { ...state.blockedSlots };
     const set = new Set(next[date] || []);
     const isBlocked = set.has(time);
@@ -271,9 +282,11 @@ const adminPage = `<!doctype html>
   function renderMonthOverview() {
     const monthDates = buildDateRange(30);
     const cells = monthDates.map((date) => {
-      const count = (state.blockedSlots[date] || []).length;
-      const percent = Math.min((count / slots.length) * 100, 100);
-      const label = count + '/' + slots.length + ' blocked';
+      const blocked = new Set(state.blockedSlots[date] || []);
+      const booked = new Set(state.bookedSlots[date] || []);
+      const occupiedCount = new Set([...blocked, ...booked]).size;
+      const percent = Math.min((occupiedCount / slots.length) * 100, 100);
+      const label = blocked.size + ' blocked · ' + booked.size + ' booked';
       return '<button type="button" data-date="' + date + '" class="date-card" style="padding:10px 8px; border:1px solid var(--line); border-radius:10px; background:linear-gradient(180deg, rgba(39,74,52,.10), rgba(39,74,52,.02)); min-height:86px; text-align:left; cursor:pointer;" title="' + label + '"><div style="font-size:10px; font-weight:700; color:var(--muted);">' + formatDate(dateFromIso(date)).replace(', ', ' ') + '</div><div style="margin-top:10px; height:10px; border-radius:999px; background:#edf3ee; overflow:hidden;"><span style="display:block; height:100%; width:' + percent + '%; background:linear-gradient(90deg,#8da895,#b63737); border-radius:999px;"></span></div><div style="margin-top:8px; font-size:10px; color:var(--muted);">' + label + '</div></button>';
     }).join('');
     return '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px;">' + cells + '</div>';
@@ -284,9 +297,14 @@ const adminPage = `<!doctype html>
     const isMonthView = state.viewMode === 'month';
     const cards = isMonthView ? renderMonthOverview() : dates.map((date) => {
       const blockedSet = new Set(state.blockedSlots[date] || []);
+      const bookedSet = new Set(state.bookedSlots[date] || []);
       const slotButtons = slots.map((time) => {
         const blocked = blockedSet.has(time);
-        return '<button class="slot ' + (blocked ? 'blocked' : '') + '" type="button" data-date="' + date + '" data-time="' + time + '" aria-label="' + date + ' ' + time + '"><span>' + time + '</span><span class="state-flag" aria-hidden="true"></span></button>';
+        const booked = bookedSet.has(time);
+        const slotClass = booked ? 'booked' : blocked ? 'blocked' : '';
+        const slotStatus = booked ? 'Booked' : blocked ? 'Blocked' : 'Open';
+        const label = booked ? 'Booked by a customer; cannot be freed' : blocked ? 'Manually blocked' : 'Available';
+        return '<button class="slot ' + slotClass + '" type="button" data-date="' + date + '" data-time="' + time + '" data-booked="' + booked + '" aria-disabled="' + booked + '" aria-label="' + date + ' ' + time + ', ' + label + '" title="' + label + '"><span>' + time + '</span><span class="slot-status">' + slotStatus + '</span></button>';
       }).join('');
 
       return '<article class="date-card"><div class="date-head"><div><div class="date-name">' + formatDate(dateFromIso(date)) + '</div><div class="date-meta">' + date + '</div></div></div><div class="slot-grid">' + slotButtons + '</div><div class="date-actions"><button class="secondary" type="button" data-date="' + date + '" data-action="block-all">Block all</button><button class="ghost" type="button" data-date="' + date + '" data-action="clear-all">Clear</button></div></article>';
@@ -298,17 +316,22 @@ const adminPage = `<!doctype html>
         button.addEventListener('click', () => {
           const date = button.dataset.date;
           const set = new Set(state.blockedSlots[date] || []);
+          const booked = new Set(state.bookedSlots[date] || []);
+          const unbookedSlots = slots.filter((time) => !booked.has(time));
           const next = { ...state.blockedSlots };
-          if (set.size === slots.length) {
-            delete next[date];
+          const allUnbookedSlotsBlocked = unbookedSlots.every((time) => set.has(time));
+          if (allUnbookedSlotsBlocked) {
+            const retained = [...set].filter((time) => booked.has(time));
+            if (retained.length) next[date] = retained; else delete next[date];
           } else {
-            next[date] = [...slots];
+            next[date] = [...new Set([...set, ...unbookedSlots])].sort();
           }
           state.blockedSlots = next;
-          state.history.unshift({ action: set.size === slots.length ? 'cleared' : 'blocked', date, time: 'all slots', timestamp: new Date().toISOString() });
+          state.history.unshift({ action: allUnbookedSlotsBlocked ? 'cleared' : 'blocked', date, time: 'all slots', timestamp: new Date().toISOString() });
           state.history = state.history.slice(0, 20);
           renderHistory();
           renderCalendar();
+          if (booked.size) setStatus('Customer-booked slots remain protected and cannot be freed.', 'error');
         });
       });
       return;
@@ -317,6 +340,10 @@ const adminPage = `<!doctype html>
     calendarNode.querySelectorAll('.slot').forEach((button) => {
       button.addEventListener('pointerdown', (event) => {
         event.preventDefault();
+        if (button.dataset.booked === 'true') {
+          toggleSlot(button.dataset.date, button.dataset.time);
+          return;
+        }
         state.isDragging = true;
         state.dragCache.clear();
         const { date, time } = button.dataset;
@@ -327,6 +354,10 @@ const adminPage = `<!doctype html>
       button.addEventListener('pointerenter', () => {
         if (!state.isDragging) return;
         const { date, time } = button.dataset;
+        if (button.dataset.booked === 'true') {
+          toggleSlot(date, time);
+          return;
+        }
         const key = date + ':' + time;
         if (state.dragCache.has(key)) return;
         state.dragCache.add(key);
@@ -342,7 +373,10 @@ const adminPage = `<!doctype html>
     calendarNode.querySelectorAll('[data-action="block-all"]').forEach((button) => {
       button.addEventListener('click', () => {
         const { date } = button.dataset;
-        state.blockedSlots[date] = [...slots];
+        const booked = new Set(state.bookedSlots[date] || []);
+        const current = new Set(state.blockedSlots[date] || []);
+        slots.filter((time) => !booked.has(time)).forEach((time) => current.add(time));
+        state.blockedSlots[date] = [...current].sort();
         state.history.unshift({ action: 'blocked', date, time: 'all slots', timestamp: new Date().toISOString() });
         state.history = state.history.slice(0, 20);
         renderHistory();
@@ -353,20 +387,25 @@ const adminPage = `<!doctype html>
     calendarNode.querySelectorAll('[data-action="clear-all"]').forEach((button) => {
       button.addEventListener('click', () => {
         const { date } = button.dataset;
+        const booked = new Set(state.bookedSlots[date] || []);
+        const protectedBlocks = (state.blockedSlots[date] || []).filter((time) => booked.has(time));
         const next = { ...state.blockedSlots };
-        delete next[date];
+        if (protectedBlocks.length) next[date] = protectedBlocks; else delete next[date];
         state.blockedSlots = next;
         state.history.unshift({ action: 'cleared', date, time: 'all slots', timestamp: new Date().toISOString() });
         state.history = state.history.slice(0, 20);
         renderHistory();
         renderCalendar();
+        if (booked.size) setStatus('Customer-booked slots remain protected and cannot be freed.', 'error');
       });
     });
 
-    const blockedCount = Object.values(state.blockedSlots).reduce((sum, times) => sum + times.length, 0);
+    const blockedCount = dates.reduce((sum, date) => sum + (state.blockedSlots[date] || []).length, 0);
+    const bookedCount = dates.reduce((sum, date) => sum + (state.bookedSlots[date] || []).length, 0);
     const visibleCount = dates.length * slots.length;
-    const availableCount = Math.max(visibleCount - blockedCount, 0);
-    summaryNode.textContent = 'Visible schedule: ' + visibleCount + ' slots · ' + blockedCount + ' blocked · ' + availableCount + ' available';
+    const occupiedCount = dates.reduce((sum, date) => sum + new Set([...(state.blockedSlots[date] || []), ...(state.bookedSlots[date] || [])]).size, 0);
+    const availableCount = Math.max(visibleCount - occupiedCount, 0);
+    summaryNode.textContent = 'Visible schedule: ' + visibleCount + ' slots · ' + blockedCount + ' blocked · ' + bookedCount + ' booked · ' + availableCount + ' available';
   }
 
   async function callApi(method, body) {
@@ -389,6 +428,7 @@ const adminPage = `<!doctype html>
     try {
       const result = await callApi('GET');
       state.blockedSlots = result.blockedSlots || {};
+      state.bookedSlots = result.bookedSlots || {};
       state.history = Array.isArray(result.history) ? result.history : [];
       renderHistory();
       renderCalendar();
@@ -407,6 +447,7 @@ const adminPage = `<!doctype html>
       const payload = { blocks: state.blockedSlots, history: state.history.slice(0, 25) };
       const result = await callApi('PUT', payload);
       state.blockedSlots = result.blockedSlots || state.blockedSlots;
+      state.bookedSlots = result.bookedSlots || state.bookedSlots;
       state.history = Array.isArray(result.history) ? result.history : state.history;
       renderHistory();
       renderCalendar();
@@ -475,12 +516,19 @@ const adminPage = `<!doctype html>
 
   document.getElementById('clearNext30').addEventListener('click', () => {
     const next = { ...state.blockedSlots };
-    getVisibleDates().forEach((date) => delete next[date]);
+    let protectedCount = 0;
+    getVisibleDates().forEach((date) => {
+      const booked = new Set(state.bookedSlots[date] || []);
+      const protectedBlocks = (next[date] || []).filter((time) => booked.has(time));
+      protectedCount += protectedBlocks.length;
+      if (protectedBlocks.length) next[date] = protectedBlocks; else delete next[date];
+    });
     state.blockedSlots = next;
     state.history.unshift({ action: 'cleared', date: 'next 30 days', time: 'all slots', timestamp: new Date().toISOString() });
     state.history = state.history.slice(0, 20);
     renderHistory();
     renderCalendar();
+    if (protectedCount) setStatus('Some slots were kept blocked because customers have booked them.', 'error');
   });
 
   const savedKey = sessionStorage.getItem('a10tion-calendar-key');
@@ -525,12 +573,14 @@ export default async function handler(req, res) {
 
         if (req.method === 'GET') {
             await seedDefaultCalendarBlocks();
-            const [blockedSlots, history] = await Promise.all([
+          const [blockedSlots, bookedSlots, history] = await Promise.all([
                 getBlockedSlotsInRange(start, end),
+            getBookedSlotsInRange(start, end),
                 getCalendarHistory(20),
             ]);
             res.status(200).json({
                 blockedSlots,
+            bookedSlots,
                 history,
                 totalBlocked: Object.values(blockedSlots).reduce((sum, times) => sum + (Array.isArray(times) ? times.length : 0), 0),
             });
@@ -540,9 +590,25 @@ export default async function handler(req, res) {
         const { blocks, history = [] } = req.body || {};
         if (blocks && typeof blocks === 'object') {
             const dateKeys = new Set([...Object.keys(blocks), ...Object.keys(await getBlockedSlotsInRange(start, end))]);
+          const changes = [];
             for (const date of dateKeys) {
                 const desired = new Set(Array.isArray(blocks[date]) ? blocks[date] : []);
-                const current = new Set((await getBlockedSlotsInRange(date, date))[date] || []);
+            const [currentSlots, bookedForDate] = await Promise.all([
+              getBlockedSlotsInRange(date, date),
+              getBookedSlotsInRange(date, date),
+            ]);
+            const current = new Set(currentSlots[date] || []);
+            const booked = new Set(bookedForDate[date] || []);
+            const attemptedToFree = [...current].find((time) => !desired.has(time) && booked.has(time));
+            if (attemptedToFree) {
+              const conflict = new Error('A customer has booked or reserved ' + date + ' ' + attemptedToFree + '. This slot cannot be freed. Refresh the calendar and try again.');
+              conflict.statusCode = 409;
+              throw conflict;
+            }
+            changes.push({ date, current, desired });
+          }
+
+          for (const { date, current, desired } of changes) {
                 for (const time of [...current]) {
                     if (!desired.has(time)) await clearCalendarBlock(date, time);
                 }
@@ -555,12 +621,14 @@ export default async function handler(req, res) {
                 await appendCalendarHistory(entry);
             }
 
-            const [blockedSlots, nextHistory] = await Promise.all([
+            const [blockedSlots, bookedSlots, nextHistory] = await Promise.all([
                 getBlockedSlotsInRange(start, end),
+              getBookedSlotsInRange(start, end),
                 getCalendarHistory(20),
             ]);
             res.status(200).json({
                 blockedSlots,
+              bookedSlots,
                 history: nextHistory,
                 totalBlocked: Object.values(blockedSlots).reduce((sum, times) => sum + times.length, 0),
             });
@@ -569,6 +637,7 @@ export default async function handler(req, res) {
 
         res.status(400).json({ message: 'Expected a blocks object with date => [times].' });
     } catch (error) {
-        res.status(400).json({ message: error instanceof Error ? error.message : 'Could not update the calendar.' });
+      const status = Number.isInteger(error?.statusCode) ? error.statusCode : 400;
+      res.status(status).json({ message: error instanceof Error ? error.message : 'Could not update the calendar.' });
     }
 }
