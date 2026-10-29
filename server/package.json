@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@upstash/redis": "^1.39.0",
+    "dotenv": "^16.4.5",
     "formidable": "^3.5.1",
     "yarn": "^1.22.22"
   },

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import { IncomingForm } from 'formidable';
+import '../../_lib/load-env.js';
 import { applyCors } from '../../_lib/cors.js';
 import { getServiceAreaError } from '../../_lib/service-area.js';
 import {
@@ -141,7 +142,8 @@ export default async function handler(req, res) {
             await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
             reservedSlotDate = null;
             reservedSlotTime = null;
-            res.status(500).json({ message: 'Payment gateway not configured.' });
+            console.error('[Yoco checkout] Missing YOCO_SECRET_KEY. Add it to the runtime environment or root .env file and restart the API.');
+            res.status(500).json({ message: 'Payment gateway is not configured. Please contact the site administrator.' });
             return;
         }
 

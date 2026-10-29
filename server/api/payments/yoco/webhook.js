@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import '../../_lib/load-env.js';
 import { applyCors } from '../../_lib/cors.js';
 import { sendReceiptEmail } from '../../_lib/email.js';
 import {

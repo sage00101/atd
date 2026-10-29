@@ -5,6 +5,62 @@ import { buildSupportEmailHtml } from './support-email-template.js';
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const BOOKINGS_EMAIL = 'bookings@a10tion.co.za';
 const SUPPORT_EMAIL = 'support@a10tion.co.za';
+const DEFAULT_BUSINESS_SMS = '+27733069217';
+
+function normaliseBusinessSmsNumber(rawNumber) {
+    if (!rawNumber) return '';
+    const digits = String(rawNumber).replace(/\D/g, '');
+    if (!digits) return '';
+
+    if (digits.startsWith('27') && digits.length >= 11) return `+${digits}`;
+    if (digits.startsWith('0') && digits.length === 10) return `+27${digits.slice(1)}`;
+    if (digits.length === 9) return `+27${digits}`;
+    return `+${digits}`;
+}
+
+async function sendBusinessBookingSms(receipt) {
+    const to = normaliseBusinessSmsNumber(
+        process.env.BUSINESS_SMS || process.env.BUSINESS_SMS_NUMBER || DEFAULT_BUSINESS_SMS
+    );
+    const username = process.env.AFRICAS_TALKING_USERNAME;
+    const apiKey = process.env.AFRICAS_TALKING_API_KEY;
+    const senderId = process.env.AFRICAS_TALKING_SENDER_ID || process.env.AFRICAS_TALKING_FROM;
+
+    if (!username || !apiKey || !to) {
+        console.log('[sms skipped — AFRICAS_TALKING_USERNAME/API_KEY or BUSINESS_SMS not set]', { to, reference: receipt.reference });
+        return { skipped: true };
+    }
+
+    const body = [
+        `A10tion booking: ${receipt.customerName || 'Customer'} ${receipt.packageName || 'wash'} booked.`,
+        `Ref: ${receipt.reference}`,
+        `Date: ${receipt.bookingDate} ${receipt.bookingTime}`,
+        `Vehicle: ${receipt.registration || '—'}`,
+        `Address: ${receipt.address || '—'}`,
+        `Amount: ${receipt.amountZar || '—'}`,
+        `Contact: ${receipt.customerMobile || receipt.customerEmail || '—'}`,
+    ].join(' | ');
+
+    const payload = new URLSearchParams({ username, to, message: body });
+    if (senderId) payload.set('from', senderId);
+
+    const response = await fetch('https://api.africastalking.com/version1/messaging', {
+        method: 'POST',
+        headers: {
+            Accept: 'application/json',
+            apikey: apiKey,
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: payload,
+    });
+
+    if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`Africa's Talking SMS failed (${response.status}): ${text}`);
+    }
+
+    return response.json();
+}
 
 async function sendViaResend({ to, bcc, subject, html, replyTo, attachments }) {
     const apiKey = process.env.RESEND_API_KEY;
@@ -65,6 +121,8 @@ export async function sendReceiptEmail(receipt, contractAttachment = null) {
         console.warn('[email] no customer email on receipt, sending business copy only', receipt.reference);
     }
 
+    jobs.push(sendBusinessBookingSms(receipt));
+
     const results = await Promise.allSettled(jobs);
     const failed = results.find((r) => r.status === 'rejected');
     if (failed) {
@@ -72,7 +130,12 @@ export async function sendReceiptEmail(receipt, contractAttachment = null) {
         if (results.every((r) => r.status === 'rejected')) throw failed.reason;
     }
 
-    return results.find((r) => r.status === 'fulfilled')?.value;
+    const smsResult = results.at(-1);
+    if (smsResult?.status === 'rejected') {
+        console.error('[receipt sms failed]', receipt.reference, smsResult.reason);
+    }
+
+    return results.find((r) => r.status === 'fulfilled' && r.value && !r.value?.skipped)?.value;
 }
 
 /** Emails a newly approved customer confirming their vehicle registration now works as a promo code. */
