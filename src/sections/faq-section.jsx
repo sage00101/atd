@@ -69,7 +69,7 @@ const faqGroups = [
             {
                 question: 'What are your 2026 rates?',
                 answer:
-                    'Pay As You Go: Sedan/Hatch R650 | SUV/Bakkie R850 | Minibus/Van R1,100 Standard (2x per month): Sedan R1,150 | SUV R1,550 | Minibus R2,050 - Save R150 Premium (4x per month): Sedan R2,300 | SUV R3,100 | Minibus R4,100 - Save R300 3 Month Prepay: Sedan Std R3,300 Prem R7,200 | SUV Std R4,500 Prem R9,600 | Minibus Std R6,000 Prem R12,600',
+                    'Pay As You Go: Sedan/Hatch R325 | SUV/Bakkie R425 | Minibus/Van R550 Standard (2x per month): Sedan R1,150 | SUV R1,550 | Minibus R2,050 - Save R150 Premium (4x per month): Sedan R2,300 | SUV R3,100 | Minibus R4,100 - Save R300 3 Month Prepay: Sedan Std R3,300 Prem R7,200 | SUV Std R4,500 Prem R9,600 | Minibus Std R6,000 Prem R12,600',
             },
             {
                 question: 'Do you offer monthly accounts for businesses?',

@@ -99,9 +99,9 @@ function looksLikeVehicleRegistration(value) {
 
 /** Client-side reference prices in cents (server recalculates securely). */
 const SINGLE_WASH_BASE_PRICES = {
-    'Sedan / Hatchback': 65000,
-    'SUV / Bakkie': 85000,
-    'Minibus / Van': 110000,
+    'Sedan / Hatchback': 32500,
+    'SUV / Bakkie': 42500,
+    'Minibus / Van': 55000,
 };
 
 function formatZarFromCents(cents) {
@@ -188,10 +188,12 @@ export default function BookingSection() {
     const ref = useReveal();
     const checkoutDialogRef = useRef(null);
     const checkoutScrollRef = useRef(null);
+    const lastAvailabilityRefreshRef = useRef(0);
     const [now, setNow] = useState(() => new Date());
     const [paymentStatus, setPaymentStatus] = useState(null);
     const [paymentReference, setPaymentReference] = useState(null);
     const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
+    const [calendarInView, setCalendarInView] = useState(false);
     const [bookedSlots, setBookedSlots] = useState({});
     const [selectedDate, setSelectedDate] = useState(null);
     const [selectedTime, setSelectedTime] = useState(null);
@@ -282,6 +284,17 @@ export default function BookingSection() {
     }, [calendarMonthKey, todayKey]);
 
     useEffect(() => {
+        const node = ref.current;
+        if (!node) return;
+
+        const observer = new IntersectionObserver(([entry]) => {
+            setCalendarInView(entry.isIntersecting);
+        });
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [ref]);
+
+    useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const status = params.get('payment');
         if (status && PAYMENT_STATUS_MESSAGES[status]) {
@@ -312,12 +325,27 @@ export default function BookingSection() {
     }, [todayKey]);
 
     useEffect(() => {
+        if (!calendarInView) return;
+
         let active = true;
         let controller;
+        let cooldownTimer;
 
         const refresh = async () => {
             if (document.visibilityState !== 'visible') return;
 
+            const elapsed = Date.now() - lastAvailabilityRefreshRef.current;
+            if (elapsed < AVAILABILITY_REFRESH_MS) {
+                if (cooldownTimer === undefined) {
+                    cooldownTimer = window.setTimeout(() => {
+                        cooldownTimer = undefined;
+                        refresh();
+                    }, AVAILABILITY_REFRESH_MS - elapsed);
+                }
+                return;
+            }
+
+            lastAvailabilityRefreshRef.current = Date.now();
             controller?.abort();
             controller = new AbortController();
             const from = isSameMonth(calendarMonth, today) ? today : startOfMonth(calendarMonth);
@@ -337,16 +365,29 @@ export default function BookingSection() {
             }
         };
 
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                refresh();
+            } else {
+                window.clearTimeout(cooldownTimer);
+                cooldownTimer = undefined;
+                controller?.abort();
+            }
+        };
+
         refresh();
         const timer = window.setInterval(refresh, AVAILABILITY_REFRESH_MS);
         window.addEventListener('focus', refresh);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => {
             active = false;
             controller?.abort();
+            window.clearTimeout(cooldownTimer);
             window.clearInterval(timer);
             window.removeEventListener('focus', refresh);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [calendarMonthKey, todayKey]);
+    }, [calendarInView, calendarMonthKey, todayKey]);
 
     useEffect(() => {
         const syncSelection = () => {

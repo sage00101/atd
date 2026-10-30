@@ -35,9 +35,9 @@ const promoCodes = new Map();
 const pendingBookings = new Map(); // keyed by yoco checkout id
 
 const SINGLE_WASH_CENTS = {
-  'Sedan / Hatchback': 65000,
-  'SUV / Bakkie': 85000,
-  'Minibus / Van': 110000,
+  'Sedan / Hatchback': 32500,
+  'SUV / Bakkie': 42500,
+  'Minibus / Van': 55000,
 };
 
 const PROMO_DISCOUNT_RATE = 0.5; // 50%
