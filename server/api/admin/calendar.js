@@ -624,6 +624,11 @@ const adminPage = `<!doctype html>
 
 export default async function handler(req, res) {
     if (req.method === 'GET' && String(req.headers.accept || '').includes('text/html')) {
+        if (req.query?.embedded !== '1') {
+            res.setHeader('Cache-Control', 'no-store');
+            res.status(302).setHeader('Location', '/api/admin/promo-codes?tab=calendar').end();
+            return;
+        }
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');
         res.status(200).send(adminPage);

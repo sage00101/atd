@@ -139,6 +139,9 @@ if(savedKey){
   connectManagers();
   loadBatch();
 }
+if(new URLSearchParams(location.search).get('tab')==='calendar'){
+  activateTab('calendar');
+}
 </script>
 </body>
 </html>`;
