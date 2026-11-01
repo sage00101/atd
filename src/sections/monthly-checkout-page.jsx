@@ -3,7 +3,6 @@ import {
     ArrowLeft,
     ArrowRight,
     CalendarDays,
-    CheckCircle2,
     ChevronLeft,
     ChevronRight,
     Clock3,
@@ -13,6 +12,8 @@ import {
     ShieldCheck,
 } from 'lucide-react';
 import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
+import useBookingRequest from '../hooks/use-booking-request';
+import BookingRequestModal from '../components/booking-request-modal';
 
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -92,6 +93,7 @@ function makeCalendarDays(month) {
 }
 
 export default function MonthlyCheckoutPage() {
+    const bookingRequest = useBookingRequest();
     const [selection] = useState(readSelection);
     const [now, setNow] = useState(() => new Date());
     const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -114,7 +116,6 @@ export default function MonthlyCheckoutPage() {
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
-    const [confirmation, setConfirmation] = useState(null);
     const [serviceAreaStatus, setServiceAreaStatus] = useState(null);
 
     const allowance = selection?.packageTier === 'premium' ? 4 : 2;
@@ -195,7 +196,7 @@ export default function MonthlyCheckoutPage() {
 
     const submitBooking = async (event) => {
         event.preventDefault();
-        if (isSubmitting || !selection) return;
+        if (isSubmitting || !selection || bookingRequest.request) return;
         setError('');
         if (!selectedDate || !selectedTime) {
             setError('Choose an available booking date and time.');
@@ -262,7 +263,13 @@ export default function MonthlyCheckoutPage() {
             if (!response.ok || !result.reference || !result.continuationUrl) {
                 throw new Error(result.message || 'The monthly booking request could not be submitted.');
             }
-            setConfirmation({ reference: result.reference, continuationUrl: result.continuationUrl, notificationSent: result.notificationSent });
+            bookingRequest.saveRequest(result, {
+                bookingDate: booking.bookingDate,
+                bookingTime: booking.bookingTime,
+                bookingType: 'monthly',
+                customerType: customerTypeLabel,
+                packageTier: packageLabel,
+            });
         } catch (submitError) {
             setError(submitError.message || 'The monthly booking could not be confirmed.');
         } finally {
@@ -279,32 +286,6 @@ export default function MonthlyCheckoutPage() {
                     <p className='mt-2 text-sm leading-6 text-[#5b6560]'>Start from the booking page to select your customer type and monthly allowance.</p>
                     <button type='button' onClick={() => clearMonthlyRoute(true)} className='mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1e3128] px-5 text-sm font-semibold text-white'>
                         <ArrowLeft className='size-4' /> Back to booking
-                    </button>
-                </section>
-            </main>
-        );
-    }
-
-    if (confirmation) {
-        return (
-            <main className='min-h-screen bg-[#f5f7f3] px-4 py-10 sm:px-6'>
-                <section className='mx-auto max-w-2xl rounded-3xl border border-[#dce6de] bg-white p-6 shadow-xl sm:p-10'>
-                    <div className='grid size-14 place-items-center rounded-2xl bg-amber-50 text-amber-700'><Clock3 className='size-8' /></div>
-                    <p className='mt-6 text-xs font-bold uppercase tracking-[.16em] text-[#31553c]'>Awaiting business approval</p>
-                    <h1 className='mt-2 font-display text-3xl font-semibold tracking-tight text-[#1e3128]'>Your request is received</h1>
-                    <p className='mt-3 text-sm leading-6 text-[#5b6560]'>Your monthly wash will be covered at R0.00 once approved. It is not confirmed until you receive approval and complete the secure continuation step.</p>
-                    <div className='mt-6 grid gap-3 rounded-2xl bg-[#f3f7f3] p-4 text-sm sm:grid-cols-2'>
-                        <p><span className='text-[#68776e]'>Reference</span><br /><strong>{confirmation.reference}</strong></p>
-                        <p><span className='text-[#68776e]'>Package</span><br /><strong>{customerTypeLabel} · {packageLabel}</strong></p>
-                        <p><span className='text-[#68776e]'>Booking</span><br /><strong>{selectedDateKey} at {selectedTime}</strong></p>
-                        <p><span className='text-[#68776e]'>Amount due after approval</span><br /><strong>R0.00</strong></p>
-                    </div>
-                    <p className='mt-4 text-xs leading-5 text-[#68776e]'>{confirmation.notificationSent ? 'We emailed you a secure link to check approval and continue. The monthly wash is temporarily reserved while your request is reviewed.' : 'Your request is recorded, but the email could not be sent. Use the secure status link below and contact the business if needed.'}</p>
-                    <a href={confirmation.continuationUrl} className='mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#cbd9cf] px-5 text-sm font-semibold text-[#1e4931]'>
-                        View request status <ArrowRight className='size-4' />
-                    </a>
-                    <button type='button' onClick={() => clearMonthlyRoute()} className='mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1e3128] px-5 text-sm font-semibold text-white'>
-                        Return to website
                     </button>
                 </section>
             </main>
@@ -419,7 +400,7 @@ export default function MonthlyCheckoutPage() {
                             <span>I confirm my booking details and service location are accurate, and agree to the booking terms.</span>
                         </label>
                         {error && <p className='rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800' role='alert'>{error}</p>}
-                        <button type='submit' disabled={isSubmitting} className='flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1e3128] px-4 text-sm font-bold text-white transition hover:bg-[#294c37] disabled:cursor-wait disabled:opacity-60'>
+                        <button type='submit' disabled={isSubmitting || Boolean(bookingRequest.request)} className='flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1e3128] px-4 text-sm font-bold text-white transition hover:bg-[#294c37] disabled:cursor-wait disabled:opacity-60'>
                             {isSubmitting ? <><LoaderCircle className='size-4 animate-spin' /> Validating entitlement and confirming…</> : <>Confirm monthly booking · R0.00 <ArrowRight className='size-4' /></>}
                         </button>
                         <p className='flex items-center justify-center gap-1.5 text-[10px] text-[#68776e]'><ShieldCheck className='size-3.5' /> No Yoco payment required for a valid monthly wash.</p>
@@ -447,6 +428,7 @@ export default function MonthlyCheckoutPage() {
                     </aside>
                 </div>
             </div>
+            <BookingRequestModal controller={bookingRequest} />
         </main>
     );
 }

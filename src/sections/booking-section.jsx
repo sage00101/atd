@@ -23,6 +23,8 @@ import {
     Droplet,
 } from 'lucide-react';
 import useReveal from '../hooks/use-reveal';
+import useBookingRequest from '../hooks/use-booking-request';
+import BookingRequestModal from '../components/booking-request-modal';
 import VehiclePromoModal from '../components/vehicle-promo-modal';
 import { packageGroups } from '../data/pricing';
 import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
@@ -49,7 +51,6 @@ function isAllowedContractFile(file) {
 }
 
 const PAYMENT_STATUS_MESSAGES = {
-    pendingApproval: { tone: 'info', text: 'Your booking request has been submitted. It is not confirmed yet; we will email you after the business reviews it.' },
     success: { tone: 'success', text: 'Payment received - thank you! Your booking is confirmed and a receipt is on its way.' },
     covered: { tone: 'success', text: 'Booking confirmed! This wash is covered by your monthly package; no payment is due.' },
     onsite: { tone: 'info', text: 'Booking confirmed! Please have your card or phone ready to pay our technician on arrival. A receipt has been emailed to you.' },
@@ -188,13 +189,13 @@ function readStoredSelection() {
 
 export default function BookingSection() {
     const ref = useReveal();
+    const bookingRequest = useBookingRequest();
     const checkoutDialogRef = useRef(null);
     const checkoutScrollRef = useRef(null);
     const lastAvailabilityRefreshRef = useRef(0);
     const [now, setNow] = useState(() => new Date());
     const [paymentStatus, setPaymentStatus] = useState(null);
     const [paymentReference, setPaymentReference] = useState(null);
-    const [paymentContinuationUrl, setPaymentContinuationUrl] = useState(null);
     const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
     const [calendarInView, setCalendarInView] = useState(false);
     const [bookedSlots, setBookedSlots] = useState({});
@@ -543,7 +544,7 @@ export default function BookingSection() {
 
     const beginSecurePayment = async (event) => {
         event.preventDefault();
-        if (missingSelection || isSubmitting) return;
+        if (missingSelection || isSubmitting || bookingRequest.request) return;
 
         if (!serviceLocationAllowed) {
             setPaymentError(serviceLocation
@@ -617,9 +618,14 @@ export default function BookingSection() {
                 throw new Error(result.message || 'Booking request could not be submitted.');
             }
             setCheckoutOpen(false);
-            setPaymentStatus('pendingApproval');
-            setPaymentReference(result.reference);
-            setPaymentContinuationUrl(result.continuationUrl);
+            bookingRequest.saveRequest(result, {
+                bookingDate: bookingPayload.bookingDate,
+                bookingTime: bookingPayload.bookingTime,
+                bookingType: bookingPayload.bookingType || 'single',
+                customerType: bookingPayload.monthlyClientType || null,
+                packageTier: bookingPayload.monthlyPackageTier || null,
+            });
+            setIsSubmitting(false);
         } catch (error) {
             setPaymentError(error instanceof Error ? error.message : 'Secure payment could not be started. Please try again.');
             setIsSubmitting(false);
@@ -651,16 +657,11 @@ export default function BookingSection() {
                     >
                         <span className='flex-1'>
                             {PAYMENT_STATUS_MESSAGES[paymentStatus].text}
-                            {(paymentStatus === 'success' || paymentStatus === 'onsite' || paymentStatus === 'pendingApproval') && paymentReference && (
+                            {(paymentStatus === 'success' || paymentStatus === 'onsite') && paymentReference && (
                                 <span className='mt-1 block font-semibold'>Reference: {paymentReference}</span>
                             )}
-                            {paymentStatus === 'pendingApproval' && paymentContinuationUrl && (
-                                <a href={paymentContinuationUrl} className='mt-2 inline-flex font-semibold underline underline-offset-2'>
-                                    View your request status
-                                </a>
-                            )}
                         </span>
-                        <button type='button' onClick={() => { setPaymentStatus(null); setPaymentContinuationUrl(null); }} className='shrink-0 text-current/70 hover:text-current' aria-label='Dismiss'>
+                        <button type='button' onClick={() => setPaymentStatus(null)} className='shrink-0 text-current/70 hover:text-current' aria-label='Dismiss'>
                             <X className='size-3.5' />
                         </button>
                     </div>
@@ -783,7 +784,7 @@ export default function BookingSection() {
 
                         <button
                             type='button'
-                            disabled={Boolean(missingSelection) && missingSelection !== 'Select your package to purchase'}
+                            disabled={Boolean(bookingRequest.request) || (Boolean(missingSelection) && missingSelection !== 'Select your package to purchase')}
                             onClick={() => {
                                 if (missingSelection === 'Select your package to purchase') {
                                     document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -799,6 +800,7 @@ export default function BookingSection() {
                         </button>
                         <button
                             type='button'
+                            disabled={Boolean(bookingRequest.request)}
                             onClick={() => {
                                 setMonthlySelectionStep(1);
                                 setMonthlyClientType('');
@@ -806,7 +808,7 @@ export default function BookingSection() {
                                 setMonthlySelectionError('');
                                 setMonthlySelectionOpen(true);
                             }}
-                            className='group mt-2 flex min-h-[38px] w-full items-center justify-center gap-2 rounded-[11px] border border-[#31553c]/35 bg-[#edf4ee] px-4 text-[10px] font-semibold text-[#1e4931] transition hover:-translate-y-px hover:border-[#31553c] hover:bg-[#e2eee4] sm:min-h-[44px] sm:text-[11px]'
+                            className='group mt-2 flex min-h-[38px] w-full items-center justify-center gap-2 rounded-[11px] border border-[#31553c]/35 bg-[#edf4ee] px-4 text-[10px] font-semibold text-[#1e4931] transition hover:-translate-y-px hover:border-[#31553c] hover:bg-[#e2eee4] disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[44px] sm:text-[11px]'
                         >
                             <Package className='size-3.5' />
                             Monthly Clients
@@ -1271,6 +1273,7 @@ export default function BookingSection() {
                 onClose={() => setPromoRegistrationOpen(false)}
                 defaults={{ ...customer }}
             />
+            <BookingRequestModal controller={bookingRequest} />
 
         </section>
     );

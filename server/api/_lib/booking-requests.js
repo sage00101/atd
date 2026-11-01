@@ -25,6 +25,7 @@ const REQUEST_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 const REQUEST_INDEX_KEY = 'booking:approval:index';
 const requestKey = (reference) => `booking:approval:${reference}`;
 const tokenDigest = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
+const customerRequestLockKey = (email) => `booking:approval:customer:${crypto.createHash('sha256').update(normaliseEmail(email)).digest('hex')}`;
 function encryptContinuationToken(token) {
     const secret = process.env.BOOKING_TOKEN_ENCRYPTION_KEY
         || process.env.ADMIN_API_KEY
@@ -55,8 +56,11 @@ function decryptContinuationToken(value) {
 }
 const REQUEST_CREATE_SCRIPT = `
 if redis.call('EXISTS', KEYS[1]) == 1 then return 'EXISTS' end
+local activeReference = redis.call('GET', KEYS[3])
+if activeReference then return {'ACTIVE_REQUEST', activeReference} end
 redis.call('SET', KEYS[1], ARGV[1])
 redis.call('LPUSH', KEYS[2], ARGV[2])
+redis.call('SET', KEYS[3], ARGV[2], 'EX', ARGV[3])
 return 'OK'
 `;
 const REQUEST_TRANSITION_SCRIPT = `
@@ -74,6 +78,7 @@ if tonumber(request.expiresAt) <= tonumber(ARGV[3]) then
     request.booking.contractFileName = nil
     request.booking.promoCode = nil
   end
+  if KEYS[2] and redis.call('GET', KEYS[2]) == ARGV[7] then redis.call('DEL', KEYS[2]) end
   request.events = request.events or {}
   table.insert(request.events, 1, {status = 'expired', at = ARGV[4]})
   redis.call('SET', KEYS[1], cjson.encode(request))
@@ -84,6 +89,7 @@ request.updatedAt = ARGV[4]
 request.events = request.events or {}
 table.insert(request.events, 1, {status = ARGV[2], at = ARGV[4], reason = ARGV[5]})
 if ARGV[2] == 'declined' then
+  request.tokenHash = nil
   request.tokenCiphertext = nil
   if request.booking then
     request.booking.contractFileBase64 = nil
@@ -91,9 +97,41 @@ if ARGV[2] == 'declined' then
     request.booking.promoCode = nil
   end
 end
+if ARGV[2] == 'cancelled' then
+  request.tokenHash = nil
+  request.tokenCiphertext = nil
+  if request.booking then
+    request.booking.contractFileBase64 = nil
+    request.booking.contractFileName = nil
+    request.booking.promoCode = nil
+  end
+end
+if (ARGV[2] == 'declined' or ARGV[2] == 'cancelled') and KEYS[2]
+  and redis.call('GET', KEYS[2]) == ARGV[7] then
+  redis.call('DEL', KEYS[2])
+end
 if ARGV[6] ~= '' then request.checkoutUrl = ARGV[6] end
 redis.call('SET', KEYS[1], cjson.encode(request))
 return {'OK', cjson.encode(request)}
+`;
+const REQUEST_CONFIRM_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return nil end
+local request = cjson.decode(raw)
+if request.status == 'confirmed' then return raw end
+if request.status == 'declined' or request.status == 'cancelled' or request.status == 'expired' then return raw end
+request.status = 'confirmed'
+request.tokenHash = nil
+request.tokenCiphertext = nil
+request.booking.contractFileBase64 = nil
+request.booking.contractFileName = nil
+request.booking.promoCode = nil
+request.updatedAt = ARGV[1]
+request.events = request.events or {}
+table.insert(request.events, 1, {status = 'confirmed', at = ARGV[1]})
+if redis.call('GET', KEYS[2]) == ARGV[2] then redis.call('DEL', KEYS[2]) end
+redis.call('SET', KEYS[1], cjson.encode(request))
+return cjson.encode(request)
 `;
 const REQUEST_CHECKOUT_SAVE_SCRIPT = `
 local raw = redis.call('GET', KEYS[1])
@@ -161,7 +199,17 @@ async function saveRequest(request) {
     const result = await redis.eval(REQUEST_CREATE_SCRIPT, [
         requestKey(request.reference),
         REQUEST_INDEX_KEY,
-    ], [JSON.stringify(request), request.reference]);
+        customerRequestLockKey(request.booking.customer.email),
+    ], [
+        JSON.stringify(request),
+        request.reference,
+        String(Math.max(1, Math.ceil((request.expiresAt - Date.now()) / 1000))),
+    ]);
+    if (result?.[0] === 'ACTIVE_REQUEST') {
+        const error = new Error('You already have a booking request awaiting a decision. Cancel it or wait for the business to respond before requesting another wash.');
+        error.statusCode = 409;
+        throw error;
+    }
     if (result !== 'OK') throw new Error('Could not save the booking request.');
 }
 
@@ -175,15 +223,17 @@ async function releaseRequestReservations(request) {
 async function expireRequestIfNeeded(request) {
     if (['pending', 'approved', 'checkout_starting', 'payment_pending'].includes(request.status)
         && Number(request.expiresAt) <= Date.now()) {
-        const result = await redis.eval(REQUEST_TRANSITION_SCRIPT, [requestKey(request.reference)], [
+        const result = await redis.eval(REQUEST_TRANSITION_SCRIPT, [
+            requestKey(request.reference),
+            customerRequestLockKey(request.booking.customer.email),
+        ], [
             request.status,
             'expired',
             String(Date.now()),
             new Date().toISOString(),
             '',
             '',
-            '',
-            '',
+            request.reference,
         ]);
         if (result?.[0] === 'OK' || result?.[0] === 'EXPIRED') {
             await releaseRequestReservations(request);
@@ -364,6 +414,10 @@ export async function getBookingRequestStatus(reference, token) {
         customerName: `${request.booking.customer.firstName} ${request.booking.customer.surname}`.trim(),
         bookingDate: request.booking.bookingDate,
         bookingTime: request.booking.bookingTime,
+        customerType: request.booking.monthlyClientType === 'business' ? 'Business / Fleet / Family'
+            : request.booking.monthlyClientType === 'private' ? 'Private Client' : null,
+        packageTier: request.booking.monthlyPackageTier || null,
+        monthlyAllowance: request.booking.monthlyAllowance || null,
         checkoutUrl: request.status === 'payment_pending' ? request.checkoutUrl : null,
         message: request.status === 'pending' ? 'Your request is waiting for business approval.'
             : request.status === 'approved' ? 'Your request is approved. Continue to complete the booking.'
@@ -371,7 +425,8 @@ export async function getBookingRequestStatus(reference, token) {
                 : request.status === 'payment_pending' ? 'Your approved booking is waiting for payment.'
                     : request.status === 'confirmed' ? 'Your booking is confirmed.'
                         : request.status === 'declined' ? 'This booking request was declined.'
-                            : 'This booking request has expired.',
+                            : request.status === 'cancelled' ? 'This booking request was cancelled.'
+                                : 'This booking request has expired.',
     };
 }
 
@@ -385,14 +440,17 @@ export async function authorizeBookingContinuation(reference, token) {
 export async function startBookingRequestCheckout(reference, token) {
     const authorization = await authorizeBookingContinuation(reference, token);
     if (authorization.error) throw new Error(authorization.error);
-    const transition = await redis.eval(REQUEST_TRANSITION_SCRIPT, [requestKey(reference)], [
+    const transition = await redis.eval(REQUEST_TRANSITION_SCRIPT, [
+        requestKey(reference),
+        customerRequestLockKey(authorization.request.booking.customer.email),
+    ], [
         'approved',
         'checkout_starting',
         String(Date.now()),
         new Date().toISOString(),
         '',
         '',
-        '',
+        reference,
     ]);
     if (transition?.[0] === 'OK') return JSON.parse(transition[1]);
     throw new Error('This approved booking is already being processed. Refresh this page in a moment.');
@@ -408,36 +466,31 @@ export async function saveBookingRequestCheckout(reference, checkoutUrl, checkou
 }
 
 export async function resetBookingRequestCheckout(reference) {
-    const result = await redis.eval(REQUEST_TRANSITION_SCRIPT, [requestKey(reference)], [
+    const request = await redis.get(requestKey(reference));
+    if (!request) return false;
+    const result = await redis.eval(REQUEST_TRANSITION_SCRIPT, [
+        requestKey(reference),
+        customerRequestLockKey(request.booking.customer.email),
+    ], [
         'checkout_starting',
         'approved',
         String(Date.now()),
         new Date().toISOString(),
         '',
         '',
-        '',
+        reference,
     ]);
     return result?.[0] === 'OK';
 }
 
 export async function markBookingRequestConfirmed(reference) {
     const request = await redis.get(requestKey(reference));
-    if (!request || ['confirmed', 'declined', 'expired'].includes(request.status)) return request;
-    const updated = {
-        ...request,
-        status: 'confirmed',
-        tokenCiphertext: null,
-        booking: {
-            ...request.booking,
-            contractFileBase64: null,
-            contractFileName: null,
-            promoCode: null,
-        },
-        updatedAt: new Date().toISOString(),
-        events: [{ status: 'confirmed', at: new Date().toISOString() }, ...(request.events || [])],
-    };
-    await redis.set(requestKey(reference), updated);
-    return updated;
+    if (!request) return null;
+    const updated = await redis.eval(REQUEST_CONFIRM_SCRIPT, [
+        requestKey(reference),
+        customerRequestLockKey(request.booking.customer.email),
+    ], [new Date().toISOString(), reference]);
+    return typeof updated === 'string' ? JSON.parse(updated) : updated;
 }
 
 export async function markBookingRequestPaymentFailed(reference) {
@@ -470,13 +523,17 @@ export async function transitionBookingRequest(reference, action, reason = '') {
     if (!request) throw new Error('Booking request not found.');
     const now = new Date();
     const nextStatus = action === 'approve' ? 'approved' : 'declined';
-    const transition = await redis.eval(REQUEST_TRANSITION_SCRIPT, [requestKey(reference)], [
+    const transition = await redis.eval(REQUEST_TRANSITION_SCRIPT, [
+        requestKey(reference),
+        customerRequestLockKey(request.booking.customer.email),
+    ], [
         'pending',
         nextStatus,
         String(now.getTime()),
         now.toISOString(),
         String(reason || '').trim().slice(0, 500),
         '',
+        reference,
     ]);
     if (transition?.[0] === 'EXPIRED') {
         await releaseRequestReservations(request);
@@ -500,6 +557,40 @@ export async function transitionBookingRequest(reference, action, reason = '') {
         await redis.set(requestKey(reference), updated);
     }
     return safeRequestForAdmin(updated);
+}
+
+export async function cancelBookingApprovalRequest(reference, token) {
+    const request = await getValidRequest(reference, token);
+    if (!request) return { status: 'not_found' };
+    if (request.status !== 'pending') {
+        return { status: 'not_cancellable', currentStatus: request.status };
+    }
+
+    const transition = await redis.eval(REQUEST_TRANSITION_SCRIPT, [
+        requestKey(reference),
+        customerRequestLockKey(request.booking.customer.email),
+    ], [
+        'pending',
+        'cancelled',
+        String(Date.now()),
+        new Date().toISOString(),
+        '',
+        '',
+        reference,
+    ]);
+    if (transition?.[0] === 'EXPIRED') {
+        await releaseRequestReservations(request);
+        return { status: 'expired' };
+    }
+    if (transition?.[0] !== 'OK') {
+        return {
+            status: 'not_cancellable',
+            currentStatus: transition?.[1] || request.status,
+        };
+    }
+
+    await releaseRequestReservations(request);
+    return { status: 'cancelled' };
 }
 
 export async function getStoredBookingRequest(reference) {

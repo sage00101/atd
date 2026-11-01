@@ -10,21 +10,33 @@ const tabs = [
     { id: 'prepay', label: '3-month prepay', shortLabel: 'Prepay', icon: Clock3 },
 ];
 
+const QUOTE_EMAIL = 'mailto:info@a10tion.co.za?subject=Monthly%20wash%20package%20quote';
+
+function QuoteLink({ children = 'Email info@a10tion for a quote', className = '' }) {
+    return (
+        <a href={QUOTE_EMAIL} className={`font-semibold text-[#24543a] underline decoration-[#9db9a3] underline-offset-2 transition hover:text-[#142b1e] ${className}`}>
+            {children}
+        </a>
+    );
+}
+
 function MonthlyPackageCard({ groupLabel, pkg }) {
     const savingsBadges = [
         pkg.sixMonthNote ? { label: '6 month', value: pkg.sixMonthNote } : null,
         pkg.twelveMonthNote ? { label: '12 month', value: pkg.twelveMonthNote } : null,
     ].filter(Boolean);
+    const hasMissingContractRates = pkg.monthlyPrices.some((_, index) =>
+        !pkg.sixMonthPrices?.[index] || !pkg.twelveMonthPrices?.[index]);
 
     return (
-        <article className='overflow-hidden rounded-[16px] border border-[#dfe9e1] bg-white shadow-[0_20px_60px_-35px_rgba(15,28,20,0.75)]'>
-            <div className='border-b border-[#e7ede8] bg-gradient-to-br from-[#f9fbf9] to-[#f2f8f3] px-3.5 py-3 sm:px-4'>
+        <article className='overflow-hidden rounded-[18px] border border-[#dce7de] bg-white shadow-[0_22px_55px_-38px_rgba(15,28,20,0.7)] transition-shadow hover:shadow-[0_24px_60px_-36px_rgba(15,28,20,0.75)]'>
+            <div className='border-b border-[#e4ece5] bg-gradient-to-br from-white to-[#f0f6f1] px-4 py-4 sm:px-5'>
                 <div className='flex items-start justify-between gap-3'>
                     <div className='min-w-0'>
-                        <p className='text-[8px] font-semibold uppercase tracking-[0.12em] text-[#6a806f] sm:text-[9px]'>{groupLabel} · {pkg.washes}</p>
-                        <h4 className='mt-1 font-display text-[17px] font-semibold text-[#18231c] sm:text-[20px]'>{pkg.title}</h4>
+                        <p className='text-[9px] font-semibold uppercase tracking-[0.13em] text-[#617668] sm:text-[10px]'>{groupLabel} · {pkg.washes}</p>
+                        <h4 className='mt-1.5 font-display text-[19px] font-semibold text-[#18231c] sm:text-[22px]'>{pkg.title}</h4>
                     </div>
-                    <span className='rounded-full bg-[#eaf2eb] px-2.5 py-1 text-[8px] font-bold text-[#31553c] shadow-[inset_0_0_0_1px_rgba(49,85,60,0.08)] sm:text-[9px]'>{pkg.monthlyNote}</span>
+                    <span className='max-w-[48%] rounded-full border border-[#d8e6da] bg-[#edf5ee] px-2.5 py-1.5 text-[8px] font-semibold leading-snug text-[#31553c] sm:text-[9px]'>{pkg.monthlyNote}</span>
                 </div>
 
                 {savingsBadges.length > 0 && (
@@ -39,44 +51,49 @@ function MonthlyPackageCard({ groupLabel, pkg }) {
             </div>
 
             <div className='hidden sm:block'>
-                <div className='grid grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(100px,0.8fr))] gap-3 border-b border-[#e7ede8] bg-[#f5f8f5] px-4 py-2.5 text-[8px] font-semibold uppercase tracking-[0.08em] text-[#64756a]'>
+                <div className='grid grid-cols-[minmax(0,1.25fr)_repeat(3,minmax(0,0.85fr))] gap-2 border-b border-[#e7ede8] bg-[#f5f8f5] px-4 py-3 text-[8px] font-semibold uppercase tracking-[0.08em] text-[#64756a] sm:px-5'>
                     <span>Vehicle</span>
                     <span className='text-center'>Per month</span>
                     <span className='text-center'>6-month</span>
                     <span className='text-center'>12-month</span>
                 </div>
                 {pkg.monthlyPrices.map(([vehicle, monthlyPrice], index) => (
-                    <div key={vehicle} className='grid grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(100px,0.8fr))] gap-3 border-b border-[#edf1ed] px-4 py-3 text-[12px] last:border-0'>
+                    <div key={vehicle} className='grid grid-cols-[minmax(0,1.25fr)_repeat(3,minmax(0,0.85fr))] items-center gap-2 border-b border-[#edf1ed] px-4 py-3.5 text-[11px] last:border-0 even:bg-[#fcfdfc] sm:px-5 sm:text-[12px]'>
                         <span className='text-[#59655d]'>{vehicle}</span>
                         <span className='text-center font-semibold tabular-nums text-[#18231c]'>{monthlyPrice}</span>
-                        <span className='text-center font-semibold tabular-nums text-[#18231c]'>{pkg.sixMonthPrices?.[index] ?? '—'}</span>
-                        <span className='text-center font-semibold tabular-nums text-[#18231c]'>{pkg.twelveMonthPrices?.[index] ?? '—'}</span>
+                        <span className='text-center font-semibold tabular-nums text-[#18231c]'>{pkg.sixMonthPrices?.[index] || <QuoteLink className='text-[9px]'>Request quote</QuoteLink>}</span>
+                        <span className='text-center font-semibold tabular-nums text-[#18231c]'>{pkg.twelveMonthPrices?.[index] || <QuoteLink className='text-[9px]'>Request quote</QuoteLink>}</span>
                     </div>
                 ))}
             </div>
 
             <div className='sm:hidden'>
                 {pkg.monthlyPrices.map(([vehicle, monthlyPrice], index) => (
-                    <div key={vehicle} className='border-b border-[#edf1ed] px-3.5 py-3 last:border-0'>
+                    <div key={vehicle} className='border-b border-[#edf1ed] px-4 py-3.5 last:border-0'>
                         <div className='flex items-center justify-between gap-3'>
                             <h5 className='text-[12px] font-semibold text-[#18231c]'>{vehicle}</h5>
-                            <span className='rounded-full bg-[#eef4ef] px-2 py-0.5 text-[8px] font-semibold text-[#31553c]'>{monthlyPrice}</span>
+                            <span className='rounded-full bg-[#eef4ef] px-2.5 py-1 text-[9px] font-semibold text-[#31553c]'>{monthlyPrice}</span>
                         </div>
-                        <div className='mt-2 grid grid-cols-3 gap-1.5'>
+                        <div className='mt-2.5 grid grid-cols-3 gap-2'>
                             {[
                                 ['Per month', monthlyPrice],
-                                ['6 mth', pkg.sixMonthPrices?.[index] ?? '—'],
-                                ['12 mth', pkg.twelveMonthPrices?.[index] ?? '—'],
+                                ['6 month', pkg.sixMonthPrices?.[index] || null],
+                                ['12 month', pkg.twelveMonthPrices?.[index] || null],
                             ].map(([label, price]) => (
-                                <div key={label} className='rounded-[8px] bg-[#f4f7f4] px-2 py-1.5'>
-                                    <p className='text-[7px] font-medium uppercase tracking-[0.08em] text-[#718076]'>{label}</p>
-                                    <p className='mt-1 break-words text-[9px] font-semibold tabular-nums leading-tight text-[#18231c]'>{price}</p>
+                                <div key={label} className='min-w-0 rounded-[9px] border border-[#e7eee8] bg-[#f7faf7] px-2 py-2'>
+                                    <p className='text-[7px] font-semibold uppercase tracking-[0.08em] text-[#718076]'>{label}</p>
+                                    <p className='mt-1 break-words text-[9px] font-semibold tabular-nums leading-tight text-[#18231c]'>{price || <QuoteLink className='text-[8px]'>Request quote</QuoteLink>}</p>
                                 </div>
                             ))}
                         </div>
                     </div>
                 ))}
             </div>
+            {hasMissingContractRates && (
+                <div className='border-t border-[#e6eee7] bg-[#f6faf6] px-4 py-3 text-center text-[10px] leading-relaxed text-[#59655d] sm:px-5'>
+                    <QuoteLink />
+                </div>
+            )}
         </article>
     );
 }
@@ -114,13 +131,13 @@ export default function PriceListModal({ open, onClose }) {
     return createPortal(
         <div className='fixed inset-0 z-[140] h-[100dvh] w-screen overflow-hidden bg-[#f6f8f5]' role='presentation'>
             <section className='flex h-full w-full flex-col overflow-hidden bg-[#f6f8f5]' role='dialog' aria-modal='true' aria-labelledby='price-list-title'>
-                <header className='relative shrink-0 bg-gradient-to-br from-[#132219] via-[#20382a] to-[#355941] px-4 py-3.5 text-white sm:px-7 sm:py-6'>
+                <header className='relative shrink-0 bg-gradient-to-br from-[#132219] via-[#20382a] to-[#355941] px-4 py-4 text-white shadow-[0_10px_30px_-20px_rgba(10,25,15,.8)] sm:px-8 sm:py-6'>
                     <button ref={closeButtonRef} type='button' onClick={onClose} className='absolute right-3 top-3 grid size-8 place-items-center rounded-[6px] border-0 bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:right-5 sm:top-5 sm:size-9' aria-label='Close price list'>
                         <X className='size-4' />
                     </button>
-                    <p className='text-[9px] font-semibold uppercase tracking-[0.14em] text-[#c4d8c9] sm:text-[10px] sm:tracking-[0.16em]'>A10tion To Detail</p>
-                    <h2 id='price-list-title' className='mt-0.5 max-w-[calc(100%-42px)] font-display text-[21px] font-semibold leading-tight sm:mt-1 sm:text-[34px]'>Wash price list</h2>
-                    <p className='mt-1 max-w-2xl text-[11px] leading-[1.4] text-white/70 sm:mt-1.5 sm:text-[13px] sm:leading-[1.5]'>Compare once-off and monthly options by vehicle size.</p>
+                    <p className='text-[9px] font-semibold uppercase tracking-[0.16em] text-[#c4d8c9] sm:text-[10px] sm:tracking-[0.18em]'>A10tion To Detail</p>
+                    <h2 id='price-list-title' className='mt-1 max-w-[calc(100%-42px)] font-display text-[23px] font-semibold leading-tight sm:mt-1.5 sm:text-[36px]'>Wash price list</h2>
+                    <p className='mt-1.5 max-w-2xl text-[11px] leading-[1.5] text-white/75 sm:text-[13px]'>Find the right wash plan for your vehicle, household, or fleet.</p>
                 </header>
 
                 <nav className='shrink-0 border-b border-[#dfe7e0] bg-white/90 p-2 backdrop-blur-sm sm:px-5 sm:py-2.5' aria-label='Price list categories'>
@@ -163,17 +180,18 @@ export default function PriceListModal({ open, onClose }) {
 
                     {(activeTab === 'private' || activeTab === 'business') && (
                         <div>
-                            <div className='mb-4 flex flex-wrap items-end justify-between gap-2'>
+                            <div className='mx-auto mb-5 flex max-w-6xl flex-wrap items-center justify-between gap-3 rounded-[16px] border border-[#dfe9e1] bg-white/80 px-4 py-4 shadow-[0_14px_38px_-32px_rgba(15,28,20,.75)] sm:px-5'>
                                 <div>
-                                    <h3 className='font-display text-[20px] font-semibold text-[#18231c] sm:text-[24px]'>{activeGroup.label}</h3>
-                                    <p className='mt-1 text-[12px] text-[#59655d]'>Monthly rates and 6- or 12-month contract totals by vehicle.</p>
+                                    <p className='text-[8px] font-bold uppercase tracking-[0.15em] text-[#6a806f] sm:text-[9px]'>Monthly wash plans</p>
+                                    <h3 className='mt-1 font-display text-[20px] font-semibold text-[#18231c] sm:text-[25px]'>{activeGroup.label}</h3>
+                                    <p className='mt-1 text-[11px] leading-relaxed text-[#59655d] sm:text-[12px]'>Monthly rates and contract totals, organised by vehicle size.</p>
                                 </div>
-                                {activeTab === 'business' && <span className='rounded-full bg-[#eaf2eb] px-3 py-1.5 text-[10px] font-semibold text-[#31553c]'>Minimum 3 vehicles · same premises</span>}
+                                {activeTab === 'business' && <span className='rounded-full border border-[#d6e5d9] bg-[#edf5ee] px-3 py-2 text-[9px] font-semibold text-[#31553c] sm:text-[10px]'>Minimum 3 vehicles · same premises</span>}
                             </div>
-                            <div className='mx-auto grid max-w-5xl items-start gap-3 sm:gap-4 xl:grid-cols-2'>
+                            <div className='mx-auto grid max-w-6xl items-start gap-4 sm:gap-5 xl:grid-cols-2'>
                                 {activeGroup.packages.map((pkg) => <MonthlyPackageCard key={pkg.id} groupLabel={activeGroup.label} pkg={pkg} />)}
                             </div>
-                            <p className='mt-4 text-center text-[11px] leading-[1.5] text-[#69766e] sm:text-left'>Monthly package pricing is shown per month. Confirm the vehicle mix and service address before booking.</p>
+                            <p className='mx-auto mt-4 max-w-6xl rounded-xl bg-[#edf3ee] px-4 py-3 text-[10px] leading-[1.6] text-[#526158] sm:text-[11px]'>Monthly package pricing is shown per month. Confirm the vehicle mix and service address before booking.</p>
                         </div>
                     )}
 
@@ -210,7 +228,7 @@ export default function PriceListModal({ open, onClose }) {
                                     </div>
                                 ))}
                             </div>
-                            <p className='mt-3 rounded-[10px] bg-[#edf3ee] px-3.5 py-3 text-[11px] leading-[1.5] text-[#526158]'>Business / fleet prepay rates are confirmed based on the number of vehicles and service requirements.</p>
+                            <p className='mt-3 rounded-[10px] bg-[#edf3ee] px-3.5 py-3 text-[11px] leading-[1.5] text-[#526158]'>Business / fleet prepay rates depend on the number of vehicles and service requirements. <QuoteLink /></p>
                         </div>
                     )}
                 </div>

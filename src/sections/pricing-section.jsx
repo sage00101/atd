@@ -233,7 +233,11 @@ function PackageDetailsModal({ pkg, open, onClose }) {
                                             ))}
                                         </div>
                                     ) : (
-                                        <p className='mt-2 text-[8px] leading-[1.45] text-body'>To be confirmed.</p>
+                                        <p className='mt-2 text-[8px] leading-[1.45] text-body'>
+                                            <a href='mailto:info@a10tion.co.za?subject=Monthly%20wash%20package%20quote' className='font-semibold text-[#24543a] underline decoration-[#9db9a3] underline-offset-2 hover:text-[#142b1e]'>
+                                                Email info@a10tion for a quote
+                                            </a>
+                                        </p>
                                     )}
                                 </div>
                             ))}
