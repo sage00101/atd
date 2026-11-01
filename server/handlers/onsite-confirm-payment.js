@@ -1,11 +1,11 @@
 import crypto from 'node:crypto';
-import { applyCors } from '../../_lib/cors.js';
-import { sendReceiptEmail } from '../../_lib/email.js';
+import { applyCors } from '../api/_lib/cors.js';
+import { sendReceiptEmail } from '../api/_lib/email.js';
 import {
     getBooking,
     markOnsiteBookingPaid,
     markSharedPromoCodeUsed,
-} from '../../_lib/store.js';
+} from '../api/_lib/store.js';
 
 function safeEqual(left, right) {
     const leftDigest = crypto.createHash('sha256').update(String(left)).digest();

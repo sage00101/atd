@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ArrowRight,
+    Building2,
     CalendarClock,
     CarFront,
     CheckCircle2,
@@ -29,8 +30,7 @@ import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/servic
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-const PAYMENT_API_ENDPOINT = `${API_BASE_URL}/api/payments/yoco/checkout`;
-const ONSITE_API_ENDPOINT = `${API_BASE_URL}/api/bookings/onsite`;
+const BOOKING_REQUEST_ENDPOINT = `${API_BASE_URL}/api/bookings/requests`;
 const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
 const BOOKING_CLOCK_REFRESH_MS = 10_000;
@@ -49,7 +49,9 @@ function isAllowedContractFile(file) {
 }
 
 const PAYMENT_STATUS_MESSAGES = {
+    pendingApproval: { tone: 'info', text: 'Your booking request has been submitted. It is not confirmed yet; we will email you after the business reviews it.' },
     success: { tone: 'success', text: 'Payment received - thank you! Your booking is confirmed and a receipt is on its way.' },
+    covered: { tone: 'success', text: 'Booking confirmed! This wash is covered by your monthly package; no payment is due.' },
     onsite: { tone: 'info', text: 'Booking confirmed! Please have your card or phone ready to pay our technician on arrival. A receipt has been emailed to you.' },
     onsiteEmailIssue: { tone: 'error', text: 'Booking confirmed, but the receipt email could not be sent. Please contact us with your booking reference.' },
     cancelled: { tone: 'info', text: 'Checkout was cancelled. No payment was taken - you can restart whenever you\u2019re ready.' },
@@ -192,6 +194,7 @@ export default function BookingSection() {
     const [now, setNow] = useState(() => new Date());
     const [paymentStatus, setPaymentStatus] = useState(null);
     const [paymentReference, setPaymentReference] = useState(null);
+    const [paymentContinuationUrl, setPaymentContinuationUrl] = useState(null);
     const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
     const [calendarInView, setCalendarInView] = useState(false);
     const [bookedSlots, setBookedSlots] = useState({});
@@ -204,6 +207,11 @@ export default function BookingSection() {
     const [selectedVehicleType, setSelectedVehicleType] = useState(readSingleWashVehicle);
     const [requirementsOpen, setRequirementsOpen] = useState(false);
     const [checkoutOpen, setCheckoutOpen] = useState(false);
+    const [monthlySelectionOpen, setMonthlySelectionOpen] = useState(false);
+    const [monthlySelectionStep, setMonthlySelectionStep] = useState(1);
+    const [monthlyClientType, setMonthlyClientType] = useState('');
+    const [monthlyPackageTier, setMonthlyPackageTier] = useState('');
+    const [monthlySelectionError, setMonthlySelectionError] = useState('');
     const [promoRegistrationOpen, setPromoRegistrationOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [paymentError, setPaymentError] = useState('');
@@ -424,6 +432,20 @@ export default function BookingSection() {
     }, [checkoutOpen, isSubmitting]);
 
     useEffect(() => {
+        if (!monthlySelectionOpen) return undefined;
+        const previous = document.body.style.overflow;
+        const escape = (event) => {
+            if (event.key === 'Escape') setMonthlySelectionOpen(false);
+        };
+        document.body.style.overflow = 'hidden';
+        document.addEventListener('keydown', escape);
+        return () => {
+            document.body.style.overflow = previous;
+            document.removeEventListener('keydown', escape);
+        };
+    }, [monthlySelectionOpen]);
+
+    useEffect(() => {
         if (!checkoutOpen) return undefined;
         const dialog = checkoutDialogRef.current;
         const scroller = checkoutScrollRef.current;
@@ -575,6 +597,7 @@ export default function BookingSection() {
                     serviceAreaAccepted,
                     termsAccepted,
                     contractAccepted: isMonthly ? contractAccepted : false,
+                    paymentMethod,
                     customer: {
                         ...customer,
                         registration: customer.registration.trim().toUpperCase(),
@@ -584,34 +607,19 @@ export default function BookingSection() {
             formData.append('booking', JSON.stringify(bookingPayload));
             if (isMonthly) contractFiles.forEach((file) => formData.append('contract_files', file, file.name));
 
-            if (paymentMethod === 'onsite') {
-                const response = await fetch(ONSITE_API_ENDPOINT, {
-                    method: 'POST',
-                    body: formData,
-                });
-
-                const result = await response.json().catch(() => ({}));
-                if (!response.ok || !result.success) {
-                    throw new Error(result.message || 'Booking could not be confirmed.');
-                }
-
-                setCheckoutOpen(false);
-                setPaymentStatus(result.receiptSent ? 'onsite' : 'onsiteEmailIssue');
-                setPaymentReference(result.reference);
-                setIsSubmitting(false);
-                return;
-            }
-
-            const response = await fetch(PAYMENT_API_ENDPOINT, {
+            const response = await fetch(BOOKING_REQUEST_ENDPOINT, {
                 method: 'POST',
                 body: formData,
             });
 
             const result = await response.json().catch(() => ({}));
-            if (!response.ok || typeof result.redirectUrl !== 'string') {
-                throw new Error(result.message || 'Secure payment could not be started.');
+            if (!response.ok || !result.reference || !result.continuationUrl) {
+                throw new Error(result.message || 'Booking request could not be submitted.');
             }
-            window.location.assign(result.redirectUrl);
+            setCheckoutOpen(false);
+            setPaymentStatus('pendingApproval');
+            setPaymentReference(result.reference);
+            setPaymentContinuationUrl(result.continuationUrl);
         } catch (error) {
             setPaymentError(error instanceof Error ? error.message : 'Secure payment could not be started. Please try again.');
             setIsSubmitting(false);
@@ -643,11 +651,16 @@ export default function BookingSection() {
                     >
                         <span className='flex-1'>
                             {PAYMENT_STATUS_MESSAGES[paymentStatus].text}
-                            {(paymentStatus === 'success' || paymentStatus === 'onsite') && paymentReference && (
+                            {(paymentStatus === 'success' || paymentStatus === 'onsite' || paymentStatus === 'pendingApproval') && paymentReference && (
                                 <span className='mt-1 block font-semibold'>Reference: {paymentReference}</span>
                             )}
+                            {paymentStatus === 'pendingApproval' && paymentContinuationUrl && (
+                                <a href={paymentContinuationUrl} className='mt-2 inline-flex font-semibold underline underline-offset-2'>
+                                    View your request status
+                                </a>
+                            )}
                         </span>
-                        <button type='button' onClick={() => setPaymentStatus(null)} className='shrink-0 text-current/70 hover:text-current' aria-label='Dismiss'>
+                        <button type='button' onClick={() => { setPaymentStatus(null); setPaymentContinuationUrl(null); }} className='shrink-0 text-current/70 hover:text-current' aria-label='Dismiss'>
                             <X className='size-3.5' />
                         </button>
                     </div>
@@ -784,9 +797,125 @@ export default function BookingSection() {
                             {missingSelection || 'Continue to payment details'}
                             <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' />
                         </button>
+                        <button
+                            type='button'
+                            onClick={() => {
+                                setMonthlySelectionStep(1);
+                                setMonthlyClientType('');
+                                setMonthlyPackageTier('');
+                                setMonthlySelectionError('');
+                                setMonthlySelectionOpen(true);
+                            }}
+                            className='group mt-2 flex min-h-[38px] w-full items-center justify-center gap-2 rounded-[11px] border border-[#31553c]/35 bg-[#edf4ee] px-4 text-[10px] font-semibold text-[#1e4931] transition hover:-translate-y-px hover:border-[#31553c] hover:bg-[#e2eee4] sm:min-h-[44px] sm:text-[11px]'
+                        >
+                            <Package className='size-3.5' />
+                            Monthly Clients
+                            <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' />
+                        </button>
                     </div>
                 </div>
             </div>
+
+            {monthlySelectionOpen && (
+                <div className='fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto bg-[#101b14]/65 p-3 backdrop-blur-sm sm:p-6' role='presentation'>
+                    <button type='button' className='absolute inset-0 cursor-default' onClick={() => setMonthlySelectionOpen(false)} aria-label='Close monthly package selection' />
+                    <section className='relative my-auto w-full max-w-xl overflow-hidden rounded-2xl border border-[#dce6de] bg-white shadow-2xl sm:rounded-3xl' role='dialog' aria-modal='true' aria-labelledby='monthly-selection-title'>
+                        <header className='bg-gradient-to-br from-[#14251c] to-[#294c37] px-5 py-5 text-white sm:px-7 sm:py-6'>
+                            <div className='flex items-start justify-between gap-4'>
+                                <div>
+                                    <p className='text-[9px] font-bold uppercase tracking-[.17em] text-[#c5d9c9]'>Monthly wash booking · Step {monthlySelectionStep} of 2</p>
+                                    <h2 id='monthly-selection-title' className='mt-2 font-display text-xl font-semibold sm:text-2xl'>
+                                        {monthlySelectionStep === 1 ? 'Who is the package for?' : 'Choose your monthly package'}
+                                    </h2>
+                                    <p className='mt-1.5 max-w-md text-xs leading-5 text-white/70'>
+                                        {monthlySelectionStep === 1
+                                            ? 'Select the customer type assigned to your monthly entitlement.'
+                                            : `Select the package assigned to your ${monthlyClientType === 'business' ? 'Business / Fleet / Family' : 'Private Client'} entitlement.`}
+                                    </p>
+                                </div>
+                                <button type='button' onClick={() => setMonthlySelectionOpen(false)} className='grid size-9 shrink-0 place-items-center rounded-full border border-white/20 text-white transition hover:bg-white/10' aria-label='Close'>
+                                    <X className='size-4' />
+                                </button>
+                            </div>
+                            <div className='mt-5 flex gap-2' aria-hidden='true'>
+                                {[1, 2].map((step) => <span key={step} className={`h-1 flex-1 rounded-full ${monthlySelectionStep >= step ? 'bg-[#d6ead9]' : 'bg-white/20'}`} />)}
+                            </div>
+                        </header>
+
+                        <div className='p-4 sm:p-7'>
+                            {monthlySelectionStep === 1 ? (
+                                <div className='grid gap-3 sm:grid-cols-2'>
+                                    {[
+                                        { id: 'private', title: 'Private Client', detail: 'For an individual private vehicle or household.', Icon: CarFront },
+                                        { id: 'business', title: 'Business / Fleet / Family', detail: 'For business, fleet or family monthly packages.', Icon: Building2 },
+                                    ].map(({ id, title, detail, Icon }) => (
+                                        <button key={id} type='button' aria-pressed={monthlyClientType === id} onClick={() => setMonthlyClientType(id)} className={`min-h-32 rounded-2xl border p-4 text-left transition ${monthlyClientType === id ? 'border-[#31553c] bg-[#edf4ee] ring-2 ring-[#31553c]/15' : 'border-[#dce6de] bg-white hover:border-[#9db6a2] hover:bg-[#f8faf8]'}`}>
+                                            <span className={`grid size-10 place-items-center rounded-xl ${monthlyClientType === id ? 'bg-[#dcebdd] text-[#31553c]' : 'bg-[#f0f3f0] text-[#52635a]'}`}><Icon className='size-5' /></span>
+                                            <span className='mt-3 block text-sm font-bold text-[#1e3128]'>{title}</span>
+                                            <span className='mt-1 block text-xs leading-5 text-[#68776e]'>{detail}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className='grid gap-3 sm:grid-cols-2'>
+                                    {[
+                                        { id: 'standard', title: 'Standard', washes: 2, note: '2 eligible washes each calendar month' },
+                                        { id: 'premium', title: 'Premium', washes: 4, note: '4 eligible washes each calendar month' },
+                                    ].map((item) => (
+                                        <button key={item.id} type='button' aria-pressed={monthlyPackageTier === item.id} onClick={() => setMonthlyPackageTier(item.id)} className={`min-h-36 rounded-2xl border p-4 text-left transition ${monthlyPackageTier === item.id ? 'border-[#31553c] bg-[#edf4ee] ring-2 ring-[#31553c]/15' : 'border-[#dce6de] bg-white hover:border-[#9db6a2] hover:bg-[#f8faf8]'}`}>
+                                            <span className={`grid size-10 place-items-center rounded-xl ${monthlyPackageTier === item.id ? 'bg-[#dcebdd] text-[#31553c]' : 'bg-[#f0f3f0] text-[#52635a]'}`}><Package className='size-5' /></span>
+                                            <span className='mt-3 flex items-center justify-between gap-2 text-sm font-bold text-[#1e3128]'>{item.title}<span className='text-xs font-semibold text-[#31553c]'>{item.washes} washes / month</span></span>
+                                            <span className='mt-1 block text-xs leading-5 text-[#68776e]'>{item.note}. Unused washes do not roll over.</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {monthlySelectionError && <p className='mt-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700' role='alert'>{monthlySelectionError}</p>}
+                            <div className='mt-6 flex flex-col-reverse gap-2 border-t border-[#edf1ed] pt-4 sm:flex-row sm:justify-between'>
+                                {monthlySelectionStep === 2 ? (
+                                    <button type='button' onClick={() => { setMonthlySelectionStep(1); setMonthlyPackageTier(''); }} className='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#dce6de] px-4 text-sm font-semibold text-[#35483b] transition hover:bg-[#f5f7f3]'>
+                                        <ChevronLeft className='size-4' /> Back
+                                    </button>
+                                ) : (
+                                    <button type='button' onClick={() => setMonthlySelectionOpen(false)} className='inline-flex min-h-11 items-center justify-center rounded-xl border border-[#dce6de] px-4 text-sm font-semibold text-[#35483b] transition hover:bg-[#f5f7f3]'>Close</button>
+                                )}
+                                {monthlySelectionStep === 1 ? (
+                                    <button type='button' disabled={!monthlyClientType} onClick={() => setMonthlySelectionStep(2)} className='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1e3128] px-5 text-sm font-bold text-white transition hover:bg-[#294c37] disabled:cursor-not-allowed disabled:opacity-40'>
+                                        Continue <ArrowRight className='size-4' />
+                                    </button>
+                                ) : (
+                                    <button
+                                        type='button'
+                                        disabled={!monthlyPackageTier}
+                                        onClick={() => {
+                                            const selected = {
+                                                customerType: monthlyClientType,
+                                                packageTier: monthlyPackageTier,
+                                            };
+                                            try {
+                                                sessionStorage.setItem('a10tion-monthly-checkout-selection', JSON.stringify(selected));
+                                            } catch {
+                                                setMonthlySelectionError('Your browser could not save this package selection. Please enable session storage and try again.');
+                                                return;
+                                            }
+                                            const url = new URL(window.location.href);
+                                            url.searchParams.set('monthly-checkout', '1');
+                                            url.searchParams.delete('payment');
+                                            url.searchParams.delete('ref');
+                                            url.hash = '';
+                                            window.location.assign(url.toString());
+                                        }}
+                                        className='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1e3128] px-5 text-sm font-bold text-white transition hover:bg-[#294c37] disabled:cursor-not-allowed disabled:opacity-40'
+                                    >
+                                        Continue to Monthly Checkout <ArrowRight className='size-4' />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            )}
 
             {checkoutOpen && (
                 <div
@@ -944,7 +1073,7 @@ export default function BookingSection() {
                                                 autoCapitalize='characters'
                                                 autoComplete='off'
                                             />
-                                            <span className='mt-1 block text-[8px] leading-[1.45] text-body/65 sm:text-[9px]'>An active code takes 50% off this single wash. Each code can be redeemed once.</span>
+                                            <span className='mt-1 block text-[8px] leading-[1.45] text-body/65 sm:text-[9px]'>Single-wash codes give 50% off once. Monthly Clients should use the dedicated monthly booking flow.</span>
                                         </label>
                                     )}
 

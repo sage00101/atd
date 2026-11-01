@@ -17,6 +17,25 @@ export const BOOKING_SLOT_TIMES = ['08:00', '10:30', '13:00', '15:30', '18:00'];
 const referenceKey = (reference) => `booking-ref:${reference}`;
 const calendarDateIndexKey = (date) => `calendar-blocks:${date}`;
 const calendarSlotKey = (date, time) => `calendar-slot:${date}:${time}`;
+const MARK_BOOKING_CONFIRMED_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return {'NOT_FOUND'} end
+local booking = cjson.decode(raw)
+if booking.status == 'paid' then return {'DUPLICATE'} end
+booking.status = 'paid'
+booking.confirmedAt = ARGV[1]
+redis.call('SET', KEYS[1], cjson.encode(booking), 'EX', ARGV[2])
+if ARGV[3] ~= '' and ARGV[4] ~= '' then
+  redis.call('EXPIRE', KEYS[2], ARGV[2])
+end
+return {'OK', cjson.encode(booking)}
+`;
+const RELEASE_BOOKING_SLOT_IF_OWNED_SCRIPT = `
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+redis.call('DEL', KEYS[1])
+redis.call('SREM', KEYS[2], ARGV[2])
+return 1
+`;
 
 /** Generates a reference number and atomically claims it, retrying on the astronomically rare collision. */
 export async function claimUniqueReferenceNumber() {
@@ -295,12 +314,16 @@ export async function markOnsiteBookingPaid(reference) {
 export async function markBookingConfirmed(checkoutId) {
     const booking = await redis.get(bookingKey(checkoutId));
     if (!booking) return null;
-    const confirmed = { ...booking, status: 'paid', confirmedAt: new Date().toISOString() };
-    await redis.set(bookingKey(checkoutId), confirmed, { ex: CONFIRMED_BOOKING_TTL_SECONDS });
-    if (booking.bookingDate && booking.bookingTime) {
-        await redis.expire(slotKey(booking.bookingDate, booking.bookingTime), CONFIRMED_BOOKING_TTL_SECONDS);
-    }
-    return confirmed;
+    const result = await redis.eval(MARK_BOOKING_CONFIRMED_SCRIPT, [
+        bookingKey(checkoutId),
+        slotKey(booking.bookingDate, booking.bookingTime),
+    ], [
+        new Date().toISOString(),
+        String(CONFIRMED_BOOKING_TTL_SECONDS),
+        booking.bookingDate || '',
+        booking.bookingTime || '',
+    ]);
+    return result?.[0] === 'OK' ? JSON.parse(result[1]) : null;
 }
 
 /** Frees a reserved slot after a failed/cancelled payment so it goes back up for booking immediately. */
@@ -308,6 +331,14 @@ export async function releaseBookingSlot(bookingDate, bookingTime) {
     if (!bookingDate || !bookingTime) return;
     await redis.del(slotKey(bookingDate, bookingTime));
     await redis.srem(dateIndexKey(bookingDate), bookingTime);
+}
+
+export async function releaseBookingSlotIfOwned(bookingDate, bookingTime, token) {
+    if (!bookingDate || !bookingTime || !token) return false;
+    return Boolean(await redis.eval(RELEASE_BOOKING_SLOT_IF_OWNED_SCRIPT, [
+        slotKey(bookingDate, bookingTime),
+        dateIndexKey(bookingDate),
+    ], [token, bookingTime]));
 }
 
 /** Returns { [date]: [time, ...] } for every slot still actively held (pending or paid) in the given date range. */

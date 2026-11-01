@@ -3,6 +3,10 @@ import '../../_lib/load-env.js';
 import { applyCors } from '../../_lib/cors.js';
 import { sendReceiptEmail } from '../../_lib/email.js';
 import {
+    markBookingRequestConfirmed,
+    markBookingRequestPaymentFailed,
+} from '../../_lib/booking-requests.js';
+import {
     getBooking,
     getVehiclePromo,
     hasProcessedWebhook,
@@ -96,7 +100,11 @@ export default async function handler(req, res) {
         if (meta.promoCodeType === 'shared-code' && promo && reservationId) {
             await releaseSharedPromoCode(promo, reservationId);
         }
-        await releaseBookingSlot(meta.bookingDate || pending?.bookingDate, meta.bookingTime || pending?.bookingTime);
+        if (pending?.approvalReference) {
+            await markBookingRequestPaymentFailed(pending.approvalReference);
+        } else {
+            await releaseBookingSlot(meta.bookingDate || pending?.bookingDate, meta.bookingTime || pending?.bookingTime);
+        }
         res.status(200).send('ignored');
         return;
     }
@@ -135,7 +143,14 @@ export default async function handler(req, res) {
         await markVehiclePromoUsed(promo);
     }
 
-    // TODO: persist the confirmed booking in a real database here.
+    const confirmedBooking = checkoutId ? await markBookingConfirmed(checkoutId) : null;
+    if (checkoutId && !confirmedBooking) {
+        res.status(200).send('already confirmed');
+        return;
+    }
+    if (pending?.approvalReference) {
+        await markBookingRequestConfirmed(pending.approvalReference);
+    }
 
     const amountCents = pending?.amountCents || event.payload?.amount || 0;
     const discountCents = Number(meta.discountCents || pending?.discountCents || 0);
@@ -171,6 +186,5 @@ export default async function handler(req, res) {
     }
 
     // Keep the slot durably blocked (booking stays, just flipped to "paid").
-    if (checkoutId) await markBookingConfirmed(checkoutId);
     res.status(200).send('ok');
 }

@@ -23,26 +23,48 @@ function row(label, value) {
         </tr>`;
 }
 
+function formatPackageTier(value) {
+    if (!value) return '';
+    return `${String(value).charAt(0).toUpperCase()}${String(value).slice(1)}`;
+}
+
 /** Branded booking-confirmation / receipt email shared by customer + business copies. */
 export function buildReceiptEmailHtml(receipt) {
     const isOnsiteUnpaid = receipt.paymentMethod === 'onsite' && receipt.paymentStatus !== 'paid';
     const isOnsitePaid = receipt.paymentMethod === 'onsite' && receipt.paymentStatus === 'paid';
+    const isMonthlyCovered = receipt.paymentMethod === 'monthly-entitlement';
 
     const rows = [
         row('Reference', receipt.reference),
+        row('Customer type', isMonthlyCovered ? receipt.customerType : ''),
+        row('Monthly package', isMonthlyCovered ? formatPackageTier(receipt.monthlyPackageTier) : ''),
+        row('Monthly allowance', isMonthlyCovered && receipt.monthlyAllowance
+            ? `${receipt.monthlyAllowance} washes per month` : ''),
+        row('Wash booked', isMonthlyCovered ? receipt.vehicleType : ''),
         row('Package', receipt.vehicleType ? `${receipt.packageName} · ${receipt.vehicleType}` : receipt.packageName),
         row('Date & time', `${receipt.bookingDate} at ${receipt.bookingTime}`),
         row('Vehicle registration', receipt.registration),
         row('Customer', receipt.customerName),
         row('Contact', [receipt.customerEmail, receipt.customerMobile].filter(Boolean).join(' · ')),
         row('Service address', receipt.address),
-        row('Promo code used', receipt.promoApplied ? `Yes — ${receipt.promoCode} (50% off)` : 'No'),
+        row(isMonthlyCovered ? 'Monthly entitlement reference' : 'Promo code used', isMonthlyCovered
+            ? receipt.promoCodeReference || 'Assigned monthly package'
+            : receipt.promoApplied ? `Yes — ${receipt.promoCode} (${receipt.promoDiscountPercent || 50}% off)` : 'No'),
+        row('Payment method', isMonthlyCovered ? 'Monthly Package Promo Code' : ''),
         row('Subtotal', receipt.discountZar ? receipt.originalAmountZar : ''),
         row('Discount', receipt.discountZar ? `-${receipt.discountZar}` : ''),
-        row(isOnsiteUnpaid ? 'Amount due on-site' : 'Amount paid', receipt.amountZar),
+        row(isOnsiteUnpaid ? 'Amount due on-site' : isMonthlyCovered ? 'Amount due' : 'Amount paid', receipt.amountZar),
     ].join('');
 
-    const paymentNotice = isOnsiteUnpaid
+    const paymentNotice = isMonthlyCovered
+        ? `
+                            <div style="margin:0 0 20px;padding:14px 16px;background:#EAF0E9;border:1px solid #D4E3D7;border-radius:10px;">
+                                <p style="margin:0;color:#1E3128;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;">Monthly wash entitlement applied</p>
+                                <p style="margin:6px 0 0;color:#405B48;font-size:12.5px;line-height:1.55;">
+                                    This wash is covered by your monthly package. No payment is due for this booking.
+                                </p>
+                            </div>`
+        : isOnsiteUnpaid
         ? `
                             <div style="margin:0 0 20px;padding:14px 16px;background:#FBF3DC;border:1px solid #F0DFA5;border-radius:10px;">
                                 <p style="margin:0;color:#7A5B00;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;">Payment due on-site</p>
@@ -64,13 +86,13 @@ export function buildReceiptEmailHtml(receipt) {
                     <tr>
                         <td style="background:${BRAND.sagedeep};padding:28px 32px;">
                             <p style="margin:0;color:#c4d8c9;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;">A10tion To Detail</p>
-                            <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:600;">${isOnsiteUnpaid ? 'Booking confirmed — pay on arrival' : 'Booking confirmed — thank you!'}</h1>
+                            <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:600;">${isOnsiteUnpaid ? 'Booking confirmed — pay on arrival' : isMonthlyCovered ? 'Monthly booking confirmed — thank you!' : 'Booking confirmed — thank you!'}</h1>
                         </td>
                     </tr>
                     <tr>
                         <td style="padding:28px 32px;">
                             <p style="margin:0 0 16px;color:${BRAND.body};font-size:14px;line-height:1.6;">
-                                Hi ${escapeHtml(receipt.customerName || 'there')}, ${isOnsiteUnpaid ? "your wash is booked in — you'll pay our technician when we arrive." : "we've received your payment and your wash is booked in."}
+                                Hi ${escapeHtml(receipt.customerName || 'there')}, ${isOnsiteUnpaid ? "your wash is booked in — you'll pay our technician when we arrive." : isMonthlyCovered ? 'your wash is booked in under your monthly package. Your entitlement covers this booking in full, so no payment is due.' : "we've received your payment and your wash is booked in."}
                                 Keep your reference number handy in case you need to contact us about this booking.
                             </p>
                             <div style="margin:0 0 20px;padding:14px 16px;background:${BRAND.sagelight};border-radius:10px;text-align:center;">

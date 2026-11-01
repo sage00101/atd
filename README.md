@@ -10,6 +10,44 @@ npm install
 npm run dev
 ```
 
+## Monthly client management email
+
+The Business Manager's **Monthly Clients** tab stores a customer's contact
+details and package with their monthly entitlement. Individual and bulk access
+code emails use the existing Resend integration (`RESEND_API_KEY` and
+`RESEND_FROM_EMAIL`). Set `SITE_URL` to the public booking-page URL so the email
+button opens checkout with the customer's package preselected.
+
+Bulk sends require an on-screen recipient preview and confirmation. Each send
+is recorded in Redis; provider acceptance is distinct from delivery. To record
+delivery, configure a Resend webhook for `email.delivered`, `email.bounced`,
+`email.failed`, and `email.complained` at `/api/webhooks/resend`, and set the
+webhook signing secret as `RESEND_WEBHOOK_SECRET` in the deployment environment.
+
+## Booking approval workflow
+
+Website bookings are saved as Redis-backed requests before payment or final
+confirmation. Review them in the Business Manager's **Booking requests** tab:
+approving sends the customer a secure continuation link, and declining releases
+the temporary appointment slot and any monthly wash reservation. Single-wash
+codes are reserved only when an approved customer starts checkout and are
+redeemed after Yoco confirms payment. Monthly entitlement washes are reserved
+while approval is pending and counted only when the booking is confirmed.
+
+The request API is `/api/bookings/requests`; approval actions are protected by
+the existing `ADMIN_API_KEY` or `CALENDAR_API_KEY` at
+`/api/admin/booking-requests`. Requests and their event history are retained in
+Upstash Redis; temporary requests/reservations expire after three days. Keep
+`BOOKING_TOKEN_ENCRYPTION_KEY` stable across deployments while requests are
+active (if absent, the backend falls back to `ADMIN_API_KEY`). Continue using
+the configured `SITE_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`,
+`YOCO_SECRET_KEY`, `YOCO_WEBHOOK_SECRET`, and Upstash Redis credentials.
+
+The booking availability, request, on-site, on-site payment confirmation, and
+Yoco checkout endpoints are routed through one Vercel function to stay within
+the Hobby plan's 12-function deployment limit. Keep the Vercel project root
+directory set to `server` so `server/vercel.json` rewrites are applied.
+
 ## Vacancy applications with Formspree
 
 The vacancies form submits through Formspree. To connect applications to the
@@ -48,7 +86,9 @@ src/
     about-section.jsx
     services-section.jsx
     gallery-section.jsx
-    booking-section.jsx        static mockup — see integration notes below
+    booking-section.jsx        date/time booking request and customer checkout
+    monthly-checkout-page.jsx  monthly entitlement booking flow
+    booking-request-page.jsx   secure request status and continuation page
     reviews-section.jsx        static mockup — see integration notes below
     service-area-section.jsx
     contact-section.jsx
@@ -73,11 +113,8 @@ src/
 
 ## Integration points (currently design-only, per brief)
 
-- **Booking (`booking-section.jsx`)** — the calendar/time-slot grid is static markup.
-  Swap it for a real scheduling integration that enforces: 1.5-hour appointment
-  blocks, no double-bookings, confirmation emails/SMS, self-service cancellation and
-  rescheduling. The surrounding layout and copy are written to make that swap
-  drop-in — the widget card is a single self-contained block.
+- **Booking** — appointment slots and approval are enforced by the Redis-backed
+  booking APIs. Cancellation and rescheduling workflows are not currently provided.
 - **Reviews (`reviews-section.jsx`)** — `reviews` is a static array today. Replace
   with a live Google Places/Reviews API response (or a small serverless proxy) once
   the business has a Google Business Profile connected. Keep the same shape

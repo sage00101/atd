@@ -1,5 +1,5 @@
-import { applyCors } from '../_lib/cors.js';
-import { getBlockedSlotsInRange, getBookedSlotsInRange } from '../_lib/store.js';
+import { applyCors } from '../api/_lib/cors.js';
+import { getBlockedSlotsInRange, getBookedSlotsInRange } from '../api/_lib/store.js';
 
 // GET /api/bookings/availability?from=YYYY-MM-DD&to=YYYY-MM-DD
 // Returns the combined live set of booked + admin-blocked slots, so the

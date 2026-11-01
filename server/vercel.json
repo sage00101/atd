@@ -1,0 +1,24 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/bookings/availability",
+      "destination": "/api/booking-router?__route=availability"
+    },
+    {
+      "source": "/api/bookings/onsite",
+      "destination": "/api/booking-router?__route=onsite"
+    },
+    {
+      "source": "/api/bookings/requests",
+      "destination": "/api/booking-router?__route=requests"
+    },
+    {
+      "source": "/api/bookings/onsite/confirm-payment",
+      "destination": "/api/booking-router?__route=confirm-onsite-payment"
+    },
+    {
+      "source": "/api/payments/yoco/checkout",
+      "destination": "/api/booking-router?__route=yoco-checkout"
+    }
+  ]
+}
