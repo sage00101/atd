@@ -99,9 +99,9 @@ function looksLikeVehicleRegistration(value) {
 
 /** Client-side reference prices in cents (server recalculates securely). */
 const SINGLE_WASH_BASE_PRICES = {
-    'Sedan / Hatchback': 32500,
-    'SUV / Bakkie': 42500,
-    'Minibus / Van': 55000,
+    'Sedan / Hatchback': 65000,
+    'SUV / Bakkie': 85000,
+    'Minibus / Van': 110000,
 };
 
 function formatZarFromCents(cents) {

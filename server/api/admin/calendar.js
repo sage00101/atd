@@ -20,8 +20,8 @@ function getSuppliedKey(req) {
     return req.headers['x-calendar-key'] || req.headers['x-admin-key'];
 }
 
-function getExpectedKey() {
-    return process.env.CALENDAR_API_KEY || process.env.ADMIN_API_KEY;
+function getExpectedKeys() {
+    return [process.env.CALENDAR_API_KEY, process.env.ADMIN_API_KEY].filter(Boolean);
 }
 
 const adminPage = `<!doctype html>
@@ -203,6 +203,10 @@ const adminPage = `<!doctype html>
   const historyNode = document.getElementById('history');
   const loginOverlay = document.getElementById('loginOverlay');
   const state = { blockedSlots: {}, bookedSlots: {}, history: [], viewMode: '30', isDragging: false, dragCache: new Set(), openDates: new Set(), initializedOpenDate: false };
+  if (new URLSearchParams(location.search).get('embedded') === '1') {
+    keyInput.hidden = true;
+    document.getElementById('loginBtn').hidden = true;
+  }
 
   function setStatus(message, tone = '') {
     statusNode.textContent = message;
@@ -632,9 +636,9 @@ export default async function handler(req, res) {
         return;
     }
 
-    const expectedKey = getExpectedKey();
     const suppliedKey = getSuppliedKey(req);
-    if (!expectedKey || !suppliedKey || !safeEqual(suppliedKey, expectedKey)) {
+    const expectedKeys = getExpectedKeys();
+    if (!suppliedKey || !expectedKeys.some((expectedKey) => safeEqual(suppliedKey, expectedKey))) {
         res.status(401).json({ message: 'Calendar key is missing or invalid.' });
         return;
     }

@@ -156,6 +156,7 @@ export default function PriceListModal({ open, onClose }) {
                             <div className='mt-3 rounded-[10px] border border-[#dce6de] bg-white p-3 sm:mt-4 sm:rounded-[12px] sm:p-4'>
                                 <p className='text-[11px] font-semibold text-[#1e3128] sm:text-[12px]'>Every wash includes</p>
                                 <p className='mt-1 text-[11px] leading-[1.45] text-[#59655d] sm:text-[12px] sm:leading-[1.55]'>Full exterior hand wash, interior clean, wheel and tyre care, glass cleaning, vacuum, and the standard vehicle checks.</p>
+                                <p className='mt-2 text-[11px] leading-[1.45] text-[#31553c] sm:text-[12px] sm:leading-[1.55]'>Enjoy a promo code on your first wash! Simply follow us on Instagram to receive yours.</p>
                             </div>
                         </div>
                     )}
