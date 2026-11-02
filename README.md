@@ -36,12 +36,14 @@ while approval is pending and counted only when the booking is confirmed.
 Customers choose Yoco or on-site card-machine payment after approval. Requests
 are not confirmed and no payment is taken while they await review. Decline
 reasons are included in outcome emails and the secure status page.
-Customers can cancel only while a request is still pending; approval or decline
-closes that option. Cancellation releases the held appointment slot and monthly
-wash reservation, returning that wash to the entitlement's available allowance.
-It does not revoke the customer's monthly entitlement code. A single-wash promo
-code is reserved at checkout and redeemed only after successful payment, so
-cancelling a pending request does not consume that code.
+Customers can cancel while a request is pending, or after a checkout-start
+attempt has timed out without producing a payment link. This lets them release
+a stuck request without risking cancellation of an active payment session.
+Cancellation releases the held appointment slot and monthly wash reservation,
+returning that wash to the entitlement's available allowance. It does not revoke
+the customer's monthly entitlement code. A single-wash promo code is reserved at
+checkout and redeemed only after successful payment, so cancelling a request
+does not consume that code.
 If an outcome email cannot be sent, the manager can retry it from the request
 card. A checkout interrupted during startup can be retried from the customer's
 secure status page after the in-progress attempt becomes stale. Active requests

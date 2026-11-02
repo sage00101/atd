@@ -43,6 +43,7 @@ export default function BookingRequestModal({ controller }) {
     if (!request) return null;
     const content = STATUS_CONTENT[request.status] || STATUS_CONTENT.pending;
     const isPending = request.status === 'pending';
+    const canCancel = request.canCancel ?? isPending;
 
     return (
         <>
@@ -119,7 +120,7 @@ export default function BookingRequestModal({ controller }) {
                         </div>
                     ) : (
                         <div className='mt-5 flex flex-col gap-2 sm:flex-row'>
-                            {isPending ? (
+                            {canCancel ? (
                                 <button type='button' onClick={() => setConfirmCancel(true)} className='inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#cbd9cf] bg-white px-4 text-sm font-bold text-[#36513f] transition hover:bg-[#f5f8f4]'>
                                     Cancel booking request
                                 </button>

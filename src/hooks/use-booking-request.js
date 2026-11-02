@@ -47,6 +47,7 @@ export default function useBookingRequest() {
             token: link.searchParams.get('token') || '',
             continuationUrl: link.toString(),
             status: 'pending',
+            canCancel: true,
             notificationSent: result.notificationSent !== false,
             ...details,
         };
@@ -110,7 +111,8 @@ export default function useBookingRequest() {
     }, [request?.reference, request?.token, refreshStatus]);
 
     const cancelRequest = useCallback(async () => {
-        if (!request || request.status !== 'pending' || isCancelling) return;
+        const canCancel = request && (request.canCancel ?? request.status === 'pending');
+        if (!request || !canCancel || isCancelling) return;
         setIsCancelling(true);
         setStatusError('');
         try {

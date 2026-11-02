@@ -442,6 +442,7 @@ export async function getBookingRequestStatus(reference, token) {
         monthlyAllowance: request.booking.monthlyAllowance || null,
         checkoutUrl: request.status === 'payment_pending' ? request.checkoutUrl : null,
         canContinue: request.status === 'approved' || canRetryCheckoutStart(request),
+        canCancel: request.status === 'pending' || canRetryCheckoutStart(request),
         declineReason,
         message: request.status === 'pending' ? 'Your request is waiting for business approval.'
             : request.status === 'approved' ? 'Your request is approved. Continue to complete the booking.'
@@ -624,21 +625,23 @@ export async function resendBookingRequestDecisionEmail(reference) {
 export async function cancelBookingApprovalRequest(reference, token) {
     const request = await getValidRequest(reference, token);
     if (!request) return { status: 'not_found' };
-    if (request.status !== 'pending') {
+    if (request.status !== 'pending' && !canRetryCheckoutStart(request)) {
         return { status: 'not_cancellable', currentStatus: request.status };
     }
 
+    const now = new Date();
     const transition = await redis.eval(REQUEST_TRANSITION_SCRIPT, [
         requestKey(reference),
         customerRequestLockKey(request.booking.customer.email),
     ], [
-        'pending',
+        request.status,
         'cancelled',
-        String(Date.now()),
-        new Date().toISOString(),
+        String(now.getTime()),
+        now.toISOString(),
         '',
         '',
         reference,
+        request.status === 'checkout_starting' ? request.updatedAt : '',
     ]);
     if (transition?.[0] === 'EXPIRED') {
         await releaseRequestReservations(request);

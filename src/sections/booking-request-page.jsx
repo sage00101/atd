@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, CheckCircle2, Clock3, CreditCard, LoaderCircle, RefreshCw, ShieldCheck, Smartphone, XCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock3, CreditCard, LoaderCircle, RefreshCw, ShieldCheck, Smartphone, X, XCircle } from 'lucide-react';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const REQUEST_ENDPOINT = `${API_BASE_URL}/api/bookings/requests`;
@@ -103,7 +103,7 @@ export default function BookingRequestPage() {
     };
 
     const cancelBooking = async () => {
-        if (request?.status !== 'pending' || cancelling) return;
+        if (!request?.canCancel || cancelling) return;
         setCancelling(true);
         setError('');
         try {
@@ -134,6 +134,7 @@ export default function BookingRequestPage() {
                 ...current,
                 status: 'cancelled',
                 canContinue: false,
+                canCancel: false,
                 checkoutUrl: null,
                 message: 'Your request was cancelled. Any reserved monthly wash has been returned to your allowance.',
             } : current);
@@ -176,9 +177,10 @@ export default function BookingRequestPage() {
                     <p className='text-[10px] font-bold uppercase tracking-[.14em] text-[#31553c]'>Booking status</p>
                     <a
                         href={`${import.meta.env.BASE_URL}#booking`}
+                        aria-label='Close booking status and return to the website'
                         className='inline-flex min-h-10 shrink-0 items-center justify-center rounded-full border border-[#d2ddd4] px-4 text-xs font-semibold text-[#31553c] transition hover:bg-[#f3f7f3]'
                     >
-                        Close · Return to website
+                        <X className='mr-1.5 size-3.5' /> Close · Return to website
                     </a>
                 </div>
                 <div className={`grid size-14 place-items-center rounded-2xl ${isConfirmed ? 'bg-emerald-50 text-emerald-700' : isDeclined || isExpired || isCancelled ? 'bg-red-50 text-red-700' : 'bg-[#eaf0e9] text-[#31553c]'}`}>
@@ -223,13 +225,14 @@ export default function BookingRequestPage() {
                         Continue secure payment <ArrowRight className='size-4' />
                     </a>
                 )}
-                {request?.status === 'pending' && (
+                {request?.canCancel && (
                     <div className='mt-5'>
                         {confirmCancel ? (
                             <div className='rounded-2xl border border-amber-200 bg-amber-50 p-4'>
                                 <p className='text-sm font-bold text-amber-950'>Cancel this booking request?</p>
                                 <p className='mt-1 text-xs leading-5 text-amber-900'>
-                                    Your held time slot and monthly wash reservation, if applicable, will be released. The monthly wash returns to your available allowance. A single-wash promo code is only redeemed after payment, so cancelling this pending request will not use it.
+                                    Your held time slot and monthly wash reservation, if applicable, will be released. The monthly wash returns to your available allowance.
+                                    A single-wash promo code is only redeemed after payment, so cancelling this request will not use it.
                                 </p>
                                 <div className='mt-4 flex flex-col-reverse gap-2 sm:flex-row'>
                                     <button type='button' disabled={cancelling} onClick={() => setConfirmCancel(false)} className='min-h-11 rounded-xl border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-950 disabled:opacity-60'>
