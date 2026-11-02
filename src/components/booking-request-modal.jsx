@@ -109,7 +109,7 @@ export default function BookingRequestModal({ controller }) {
                     {confirmCancel ? (
                         <div className='mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4'>
                             <p className='text-sm font-bold text-amber-950'>Cancel this booking request?</p>
-                            <p className='mt-1 text-xs leading-5 text-amber-900'>Your reserved time slot and monthly wash, if applicable, will be released. You may then submit a new request.</p>
+                            <p className='mt-1 text-xs leading-5 text-amber-900'>Your held time slot and monthly wash reservation, if applicable, will be released back to availability. A single-wash promo code is only redeemed after payment, so cancelling this pending request will not use it. You may then submit a new request.</p>
                             <div className='mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end'>
                                 <button type='button' onClick={() => setConfirmCancel(false)} className='min-h-11 rounded-xl border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-950'>Keep request</button>
                                 <button type='button' disabled={isCancelling} onClick={cancelRequest} className='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#9f3427] px-4 text-sm font-bold text-white disabled:opacity-60'>

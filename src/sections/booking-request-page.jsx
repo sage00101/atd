@@ -23,6 +23,8 @@ export default function BookingRequestPage() {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
+    const [confirmCancel, setConfirmCancel] = useState(false);
 
     const loadStatus = useCallback(async () => {
         if (!reference || !token) {
@@ -99,18 +101,65 @@ export default function BookingRequestPage() {
         }
     };
 
+    const cancelBooking = async () => {
+        if (request?.status !== 'pending' || cancelling) return;
+        setCancelling(true);
+        setError('');
+        try {
+            const response = await fetch(REQUEST_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'cancel', reference, token }),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                if (response.status === 409) {
+                    const latest = await loadStatus();
+                    if (!latest && ['approved', 'declined', 'confirmed', 'checkout_starting', 'payment_pending'].includes(result.status)) {
+                        setRequest((current) => current && current.status === 'pending' ? {
+                            ...current,
+                            status: result.status,
+                            canContinue: result.status === 'approved',
+                            message: result.message || 'The business has already responded to this request.',
+                        } : current);
+                    }
+                }
+                throw new Error(result.message || 'Your booking request could not be cancelled.');
+            }
+            if (result.status !== 'cancelled') {
+                throw new Error('The booking request was not cancelled. Please refresh its status and try again.');
+            }
+            setRequest((current) => current ? {
+                ...current,
+                status: 'cancelled',
+                canContinue: false,
+                checkoutUrl: null,
+                message: 'Your request was cancelled. Any reserved monthly wash has been returned to your allowance.',
+            } : current);
+            setConfirmCancel(false);
+        } catch (cancelError) {
+            setError(cancelError instanceof TypeError
+                ? 'We could not reach the booking service. Your request is unchanged; please try cancelling again shortly.'
+                : cancelError.message || 'Your booking request could not be cancelled.');
+        } finally {
+            setCancelling(false);
+        }
+    };
+
     const isConfirmed = request?.status === 'confirmed';
     const isDeclined = request?.status === 'declined';
     const isExpired = request?.status === 'expired';
+    const isCancelled = request?.status === 'cancelled';
     const isCheckoutStarting = request?.status === 'checkout_starting';
     const icon = loading
         ? <LoaderCircle className='size-8 animate-spin' />
         : isCheckoutStarting ? <LoaderCircle className='size-8 animate-spin' />
         : isConfirmed ? <CheckCircle2 className='size-8' />
-            : isDeclined || isExpired ? <XCircle className='size-8' />
+            : isDeclined || isExpired || isCancelled ? <XCircle className='size-8' />
                 : <Clock3 className='size-8' />;
     const title = isConfirmed ? 'Your booking is confirmed'
         : isDeclined ? 'Request not approved'
+            : isCancelled ? 'Your request was cancelled'
             : isExpired ? 'Request link expired'
                 : request?.status === 'approved' ? 'Your request is approved'
                     : isCheckoutStarting ? 'Checkout is being prepared'
@@ -129,7 +178,7 @@ export default function BookingRequestPage() {
                         Close · Return to website
                     </a>
                 </div>
-                <div className={`grid size-14 place-items-center rounded-2xl ${isConfirmed ? 'bg-emerald-50 text-emerald-700' : isDeclined || isExpired ? 'bg-red-50 text-red-700' : 'bg-[#eaf0e9] text-[#31553c]'}`}>
+                <div className={`grid size-14 place-items-center rounded-2xl ${isConfirmed ? 'bg-emerald-50 text-emerald-700' : isDeclined || isExpired || isCancelled ? 'bg-red-50 text-red-700' : 'bg-[#eaf0e9] text-[#31553c]'}`}>
                     {icon}
                 </div>
                 <p className='mt-6 text-xs font-bold uppercase tracking-[.16em] text-[#31553c]'>A10tion To Detail · Booking approval</p>
@@ -157,6 +206,31 @@ export default function BookingRequestPage() {
                     <a href={request.checkoutUrl} className='mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1e4931] px-5 text-sm font-semibold text-white'>
                         Continue secure payment <ArrowRight className='size-4' />
                     </a>
+                )}
+                {request?.status === 'pending' && (
+                    <div className='mt-5'>
+                        {confirmCancel ? (
+                            <div className='rounded-2xl border border-amber-200 bg-amber-50 p-4'>
+                                <p className='text-sm font-bold text-amber-950'>Cancel this booking request?</p>
+                                <p className='mt-1 text-xs leading-5 text-amber-900'>
+                                    Your held time slot and monthly wash reservation, if applicable, will be released. The monthly wash returns to your available allowance. A single-wash promo code is only redeemed after payment, so cancelling this pending request will not use it.
+                                </p>
+                                <div className='mt-4 flex flex-col-reverse gap-2 sm:flex-row'>
+                                    <button type='button' disabled={cancelling} onClick={() => setConfirmCancel(false)} className='min-h-11 rounded-xl border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-950 disabled:opacity-60'>
+                                        Keep request
+                                    </button>
+                                    <button type='button' disabled={cancelling} onClick={cancelBooking} className='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#9f3427] px-4 text-sm font-bold text-white disabled:opacity-60'>
+                                        {cancelling ? <LoaderCircle className='size-4 animate-spin' /> : null}
+                                        {cancelling ? 'Cancelling…' : 'Yes, cancel booking'}
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <button type='button' onClick={() => setConfirmCancel(true)} className='inline-flex min-h-11 items-center justify-center rounded-xl border border-[#d6b7b2] px-4 text-sm font-semibold text-[#9f3427] transition hover:bg-red-50'>
+                                Cancel booking
+                            </button>
+                        )}
+                    </div>
                 )}
                 {error && <button type='button' onClick={loadStatus} className='mt-4 text-sm font-semibold text-[#31553c] underline'>Try again</button>}
                 <button type='button' disabled={refreshing || loading} onClick={refreshStatus} className='mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#dce6de] px-4 text-xs font-semibold text-[#31553c] disabled:cursor-wait disabled:opacity-60'>

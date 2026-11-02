@@ -33,6 +33,12 @@ the temporary appointment slot and any monthly wash reservation. Single-wash
 codes are reserved only when an approved customer starts checkout and are
 redeemed after Yoco confirms payment. Monthly entitlement washes are reserved
 while approval is pending and counted only when the booking is confirmed.
+Customers can cancel only while a request is still pending; approval or decline
+closes that option. Cancellation releases the held appointment slot and monthly
+wash reservation, returning that wash to the entitlement's available allowance.
+It does not revoke the customer's monthly entitlement code. A single-wash promo
+code is reserved at checkout and redeemed only after successful payment, so
+cancelling a pending request does not consume that code.
 If an outcome email cannot be sent, the manager can retry it from the request
 card. A checkout interrupted during startup can be retried from the customer's
 secure status page after the in-progress attempt becomes stale. Active requests
