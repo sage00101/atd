@@ -39,8 +39,10 @@ export default function BookingRequestPage() {
             if (!response.ok) throw new Error(result.message || 'Booking status could not be loaded.');
             setRequest(result);
             setError('');
+            return result;
         } catch (loadError) {
             setError(loadError.message || 'Booking status could not be loaded.');
+            return null;
         } finally {
             setLoading(false);
         }
@@ -48,6 +50,9 @@ export default function BookingRequestPage() {
 
     useEffect(() => {
         loadStatus();
+    }, [loadStatus]);
+
+    useEffect(() => {
         const timer = window.setInterval(() => {
             if (request?.status === 'pending' || request?.status === 'checkout_starting' || request?.status === 'payment_pending') loadStatus();
         }, request?.status === 'checkout_starting' ? 5_000 : 15_000);
@@ -81,9 +86,14 @@ export default function BookingRequestPage() {
                 window.location.assign(result.redirectUrl);
                 return;
             }
-            await loadStatus();
+            const updatedRequest = await loadStatus();
+            if (updatedRequest?.status === 'checkout_starting') {
+                setError('Checkout is still starting. Refresh the status in a few seconds or retry when the option becomes available.');
+            }
         } catch (submitError) {
-            setError(submitError.message || 'The booking could not be continued.');
+            const message = submitError.message || 'The booking could not be continued.';
+            await loadStatus();
+            setError(message);
         } finally {
             setSubmitting(false);
         }
@@ -108,8 +118,17 @@ export default function BookingRequestPage() {
                         : 'Booking request status';
 
     return (
-        <main className='grid min-h-screen place-items-center bg-[#f5f7f3] px-4 py-8 text-[#17241c]'>
-            <section className='w-full max-w-xl rounded-3xl border border-[#dce6de] bg-white p-6 shadow-xl sm:p-10'>
+        <main className='min-h-screen bg-[#f5f7f3] px-4 py-6 text-[#17241c] sm:grid sm:place-items-center sm:py-8'>
+            <section className='mx-auto w-full max-w-xl rounded-3xl border border-[#dce6de] bg-white p-5 shadow-xl sm:p-10'>
+                <div className='mb-5 flex items-center justify-between gap-3'>
+                    <p className='text-[10px] font-bold uppercase tracking-[.14em] text-[#31553c]'>Booking status</p>
+                    <a
+                        href={`${import.meta.env.BASE_URL}#booking`}
+                        className='inline-flex min-h-10 shrink-0 items-center justify-center rounded-full border border-[#d2ddd4] px-4 text-xs font-semibold text-[#31553c] transition hover:bg-[#f3f7f3]'
+                    >
+                        Close · Return to website
+                    </a>
+                </div>
                 <div className={`grid size-14 place-items-center rounded-2xl ${isConfirmed ? 'bg-emerald-50 text-emerald-700' : isDeclined || isExpired ? 'bg-red-50 text-red-700' : 'bg-[#eaf0e9] text-[#31553c]'}`}>
                     {icon}
                 </div>
@@ -143,9 +162,7 @@ export default function BookingRequestPage() {
                 <button type='button' disabled={refreshing || loading} onClick={refreshStatus} className='mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#dce6de] px-4 text-xs font-semibold text-[#31553c] disabled:cursor-wait disabled:opacity-60'>
                     <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing status…' : 'Refresh status'}
                 </button>
-                <a href={import.meta.env.BASE_URL} className='mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#52635a]'>
-                    Return to website
-                </a>
+                <p className='mt-5 text-xs leading-5 text-[#718078]'>You can close this status page and return to the website at any time. Your request remains saved securely.</p>
             </section>
         </main>
     );
