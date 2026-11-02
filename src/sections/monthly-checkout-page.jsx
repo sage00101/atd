@@ -281,7 +281,7 @@ export default function MonthlyCheckoutPage({ bookingRequest }) {
                 <section className='mx-auto max-w-xl rounded-3xl border border-[#dce6de] bg-white p-6 text-center shadow-xl sm:p-10'>
                     <PackageCheck className='mx-auto size-10 text-[#31553c]' />
                     <h1 className='mt-4 font-display text-2xl font-semibold text-[#1e3128]'>Choose your monthly package</h1>
-                    <p className='mt-2 text-sm leading-6 text-[#5b6560]'>Start from the booking page to select your customer type and monthly allowance.</p>
+                    <p className='mt-2 text-sm leading-6 text-[#5b6560]'>Start from the booking page to select your customer type and monthly package.</p>
                     <button type='button' onClick={() => clearMonthlyRoute(true)} className='mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1e3128] px-5 text-sm font-semibold text-white'>
                         <ArrowLeft className='size-4' /> Back to booking
                     </button>
@@ -313,10 +313,10 @@ export default function MonthlyCheckoutPage({ bookingRequest }) {
                                 <span className='grid size-10 shrink-0 place-items-center rounded-xl bg-[#e1eee3] text-[#31553c]'><PackageCheck className='size-5' /></span>
                                 <div className='min-w-0'>
                                     <h2 className='text-sm font-bold text-[#1e3128]'>Your monthly package</h2>
-                                    <p className='mt-1 text-xs leading-5 text-[#52635a]'>The promo code validates your assigned entitlement and covers one eligible wash at 100%, subject to your monthly remaining allowance.</p>
+                                    <p className='mt-1 text-xs leading-5 text-[#52635a]'>The promo code validates your assigned entitlement and covers one eligible wash at 100%, subject to your available prepaid credits and the booking cap for this billing period.</p>
                                     <div className='mt-3 flex flex-wrap gap-2'>
                                         <span className='rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-[#31553c]'>{customerTypeLabel}</span>
-                                        <span className='rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-[#31553c]'>{packageLabel} · {allowance} washes/month</span>
+                                        <span className='rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-[#31553c]'>{packageLabel} · {allowance} bookings per billing period</span>
                                     </div>
                                 </div>
                             </div>
@@ -408,7 +408,7 @@ export default function MonthlyCheckoutPage({ bookingRequest }) {
                         <section className='rounded-2xl border border-[#dce6de] bg-white p-5 shadow-sm'>
                             <p className='text-[10px] font-bold uppercase tracking-[.14em] text-[#31553c]'>Booking summary</p>
                             <h2 className='mt-2 text-lg font-bold text-[#1e3128]'>{customerTypeLabel}</h2>
-                            <p className='text-sm text-[#52635a]'>{packageLabel} · {allowance} washes/month</p>
+                            <p className='text-sm text-[#52635a]'>{packageLabel} · up to {allowance} bookings per billing period; unused prepaid washes roll over.</p>
                             <div className='my-4 h-px bg-[#e6e9e3]' />
                             <div className='flex justify-between gap-3 text-xs'><span className='text-[#68776e]'>Wash</span><strong className='text-right'>{selectedWash}</strong></div>
                             <div className='mt-2 flex justify-between gap-3 text-xs'><span className='text-[#68776e]'>Standard wash price</span><strong>{formatZar(washPrice)}</strong></div>
@@ -419,7 +419,7 @@ export default function MonthlyCheckoutPage({ bookingRequest }) {
                             <div className='flex items-center gap-2 text-sm font-bold text-[#1e3128]'><Clock3 className='size-4' /> How monthly booking works</div>
                             <ol className='mt-3 space-y-2 text-xs leading-5 text-[#52635a]'>
                                 <li>1. Enter the email linked to your entitlement and its assigned code.</li>
-                                <li>2. We check the selected package and remaining monthly allowance.</li>
+                                <li>2. We check your available wash credits and the booking cap for this billing period.</li>
                                 <li>3. Once confirmed, one wash is recorded and your total due is R0.00.</li>
                             </ol>
                         </section>

@@ -7,6 +7,8 @@ import {
     createMonthlyDistributionPreview,
     getMonthlyEntitlementsForAdmin,
     getMonthlyDistributionRuns,
+    getPendingMonthlyPurchasesForAdmin,
+    recordMonthlyEntitlementPayment,
     sendMonthlyCodesForRun,
     updateMonthlyEntitlement,
 } from '../_lib/monthly-promos.js';
@@ -36,11 +38,22 @@ export default async function handler(req, res) {
 
     try {
         if (req.method === 'GET') {
-            const [entitlements, distributionRuns] = await Promise.all([
+            const [entitlements, distributionRuns, pendingPurchases] = await Promise.all([
                 getMonthlyEntitlementsForAdmin(),
                 getMonthlyDistributionRuns(),
+                getPendingMonthlyPurchasesForAdmin(),
             ]);
-            res.status(200).json({ entitlements, distributionRuns });
+            res.status(200).json({ entitlements, distributionRuns, pendingPurchases });
+            return;
+        }
+
+        if (req.method === 'POST' && req.body?.action === 'record-payment') {
+            const entitlement = await recordMonthlyEntitlementPayment({
+                entitlementId: String(req.body?.id || '').trim(),
+                paymentReference: String(req.body?.paymentReference || '').trim(),
+                amountCents: req.body?.amountCents,
+            });
+            res.status(200).json({ entitlement });
             return;
         }
 

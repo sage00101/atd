@@ -33,6 +33,9 @@ the temporary appointment slot and any monthly wash reservation. Single-wash
 codes are reserved only when an approved customer starts checkout and are
 redeemed after Yoco confirms payment. Monthly entitlement washes are reserved
 while approval is pending and counted only when the booking is confirmed.
+Customers choose Yoco or on-site card-machine payment after approval. Requests
+are not confirmed and no payment is taken while they await review. Decline
+reasons are included in outcome emails and the secure status page.
 Customers can cancel only while a request is still pending; approval or decline
 closes that option. Cancellation releases the held appointment slot and monthly
 wash reservation, returning that wash to the entitlement's available allowance.
@@ -44,6 +47,27 @@ card. A checkout interrupted during startup can be retried from the customer's
 secure status page after the in-progress attempt becomes stale. Active requests
 remain available in a dismissible status drawer and a navbar shortcut appears
 once the request is approved or checkout has started.
+
+The **Monthly Clients** manager tracks a customer's package, random access code,
+payment history, prepaid wash-credit balance, reservations, and confirmed
+bookings. A confirmed first monthly-package payment automatically creates the
+entitlement, grants its 2 (Standard) or 4 (Premium) wash credits, and emails the
+code. Each booking reserves one credit, confirmation consumes it, and
+cancellation or an expired request restores it. Unused credits roll over while
+the entitlement remains active and paid through. The booking cap is still 2 or
+4 confirmed/reserved appointments in each billing period, anchored to the
+customer's payment date; rollover credits do not increase that per-period cap.
+
+Later monthly payments are recorded manually in the Monthly Clients manager.
+Recording a renewal extends the paid-through date, adds that package's washes
+without clearing rollover credits, records the payment reference, and emails
+the existing code. A payment for a customer who already has an entitlement is
+queued for manager review instead of creating a duplicate code; apply it to the
+matching customer record in the manager. Email delivery requires the configured
+Resend integration. Existing entitlements are migrated with the remaining
+allowance in their current billing period as the initial credit balance; their
+older historical monthly periods are not retroactively converted into rollover
+credits.
 
 The request API is `/api/bookings/requests`; approval actions are protected by
 the existing `ADMIN_API_KEY` or `CALENDAR_API_KEY` at
@@ -125,7 +149,8 @@ src/
 ## Integration points (currently design-only, per brief)
 
 - **Booking** — appointment slots and approval are enforced by the Redis-backed
-  booking APIs. Cancellation and rescheduling workflows are not currently provided.
+  booking APIs. Customers can cancel pending requests; rescheduling is not currently
+  provided.
 - **Reviews (`reviews-section.jsx`)** — `reviews` is a static array today. Replace
   with a live Google Places/Reviews API response (or a small serverless proxy) once
   the business has a Google Business Profile connected. Keep the same shape

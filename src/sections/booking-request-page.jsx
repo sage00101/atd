@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, CheckCircle2, Clock3, LoaderCircle, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock3, CreditCard, LoaderCircle, RefreshCw, ShieldCheck, Smartphone, XCircle } from 'lucide-react';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const REQUEST_ENDPOINT = `${API_BASE_URL}/api/bookings/requests`;
@@ -71,7 +71,7 @@ export default function BookingRequestPage() {
         }
     };
 
-    const continueBooking = async () => {
+    const continueBooking = async (paymentMethod) => {
         setSubmitting(true);
         setError('');
         try {
@@ -79,8 +79,9 @@ export default function BookingRequestPage() {
             body.append('booking', JSON.stringify({
                 approvalReference: reference,
                 continuationToken: token,
+                paymentMethod,
             }));
-            const endpoint = request.paymentMethod === 'onsite' ? ONSITE_ENDPOINT : CHECKOUT_ENDPOINT;
+            const endpoint = paymentMethod === 'onsite' ? ONSITE_ENDPOINT : CHECKOUT_ENDPOINT;
             const response = await fetch(endpoint, { method: 'POST', body });
             const result = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(result.message || 'The booking could not be continued.');
@@ -151,6 +152,8 @@ export default function BookingRequestPage() {
     const isExpired = request?.status === 'expired';
     const isCancelled = request?.status === 'cancelled';
     const isCheckoutStarting = request?.status === 'checkout_starting';
+    const isMonthlyCoveredWash = request?.bookingType === 'monthly-entitlement';
+    const canChoosePayment = request?.status === 'approved';
     const icon = loading
         ? <LoaderCircle className='size-8 animate-spin' />
         : isCheckoutStarting ? <LoaderCircle className='size-8 animate-spin' />
@@ -190,18 +193,31 @@ export default function BookingRequestPage() {
                         <p><span className='text-[#68776e]'>Customer</span><br /><strong>{request.customerName}</strong></p>
                         <p><span className='text-[#68776e]'>Appointment</span><br /><strong>{request.bookingDate} at {request.bookingTime}</strong></p>
                         <p><span className='text-[#68776e]'>Status</span><br /><strong className='capitalize'>{request.status.replaceAll('_', ' ')}</strong></p>
+                        {request.declineReason && <p className='sm:col-span-2'><span className='text-[#68776e]'>Reason</span><br /><strong>{request.declineReason}</strong></p>}
                     </div>
                 )}
                 {request?.expiresAt && !isConfirmed && (
                     <p className='mt-4 text-xs text-[#68776e]'>Secure link expires {formatExpiry(request.expiresAt)}.</p>
                 )}
-                {request?.canContinue && (
-                    <button type='button' disabled={submitting} onClick={continueBooking} className='mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1e4931] px-5 text-sm font-semibold text-white disabled:opacity-60'>
+                {request?.canContinue && (canChoosePayment && !isMonthlyCoveredWash ? (
+                    <div className='mt-6 grid gap-3 sm:grid-cols-2'>
+                        <button type='button' disabled={submitting} onClick={() => continueBooking('online')} className='inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-[#1e4931] px-4 text-sm font-semibold text-white disabled:opacity-60'>
+                            {submitting ? <LoaderCircle className='size-4 animate-spin' /> : <CreditCard className='size-4' />}
+                            {submitting ? 'Preparing…' : 'Pay securely with Yoco'}
+                            {!submitting && <ArrowRight className='size-4' />}
+                        </button>
+                        <button type='button' disabled={submitting} onClick={() => continueBooking('onsite')} className='inline-flex min-h-14 items-center justify-center gap-2 rounded-xl border border-[#cbd9cf] bg-white px-4 text-sm font-semibold text-[#31553c] disabled:opacity-60'>
+                            {submitting ? <LoaderCircle className='size-4 animate-spin' /> : <Smartphone className='size-4' />}
+                            {submitting ? 'Preparing…' : 'Pay by card machine on-site'}
+                        </button>
+                    </div>
+                ) : (
+                    <button type='button' disabled={submitting} onClick={() => continueBooking(request.paymentMethod || 'online')} className='mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1e4931] px-5 text-sm font-semibold text-white disabled:opacity-60'>
                         {submitting ? <LoaderCircle className='size-4 animate-spin' /> : <ShieldCheck className='size-4' />}
-                        {submitting ? 'Preparing your booking…' : request.status === 'checkout_starting' ? 'Retry secure checkout' : request.paymentMethod === 'onsite' ? 'Confirm booking · pay on arrival' : 'Continue to secure checkout'}
+                        {submitting ? 'Preparing your booking…' : isMonthlyCoveredWash ? 'Confirm your covered monthly wash' : 'Retry secure checkout'}
                         {!submitting && <ArrowRight className='size-4' />}
                     </button>
-                )}
+                ))}
                 {request?.status === 'payment_pending' && request.checkoutUrl && (
                     <a href={request.checkoutUrl} className='mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1e4931] px-5 text-sm font-semibold text-white'>
                         Continue secure payment <ArrowRight className='size-4' />

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { applyCors } from '../api/_lib/cors.js';
 import { sendReceiptEmail } from '../api/_lib/email.js';
+import { provisionMonthlyEntitlementFromPaidPurchase } from '../api/_lib/monthly-promos.js';
 import {
     getBooking,
     markOnsiteBookingPaid,
@@ -40,7 +41,14 @@ export default async function handler(req, res) {
             return;
         }
         if (booking.status === 'paid') {
-            res.status(200).json({ paid: true, alreadyConfirmed: true, receiptSent: false });
+            let monthlyProvisioning = null;
+            if (booking.purchaseType === 'monthly') {
+                monthlyProvisioning = await provisionMonthlyEntitlementFromPaidPurchase(booking);
+                if (monthlyProvisioning.status === 'needs_manager') {
+                    console.error('[monthly purchase requires manager action]', reference, monthlyProvisioning.existingEntitlementId || '');
+                }
+            }
+            res.status(200).json({ paid: true, alreadyConfirmed: true, receiptSent: false, monthlyProvisioned: monthlyProvisioning?.status === 'created' || monthlyProvisioning?.status === 'already_provisioned' });
             return;
         }
 
@@ -56,6 +64,13 @@ export default async function handler(req, res) {
         if (!paidBooking) {
             res.status(409).json({ message: 'Could not mark the onsite booking as paid.' });
             return;
+        }
+        let monthlyProvisioning = null;
+        if (booking.purchaseType === 'monthly') {
+            monthlyProvisioning = await provisionMonthlyEntitlementFromPaidPurchase(paidBooking);
+            if (monthlyProvisioning.status === 'needs_manager') {
+                console.error('[monthly purchase requires manager action]', reference, monthlyProvisioning.existingEntitlementId || '');
+            }
         }
 
         const customer = booking.customer || {};
@@ -91,7 +106,12 @@ export default async function handler(req, res) {
             console.error('[onsite paid receipt email failed]', reference, error);
         }
 
-        res.status(200).json({ paid: true, reference, receiptSent });
+        res.status(200).json({
+            paid: true,
+            reference,
+            receiptSent,
+            monthlyProvisioned: monthlyProvisioning?.status === 'created' || monthlyProvisioning?.status === 'already_provisioned',
+        });
     } catch (error) {
         console.error('[onsite payment confirmation failed]', reference, error);
         res.status(500).json({ message: 'Could not confirm the onsite payment.' });

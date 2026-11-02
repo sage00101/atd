@@ -38,8 +38,8 @@ export function buildReceiptEmailHtml(receipt) {
         row('Reference', receipt.reference),
         row('Customer type', isMonthlyCovered ? receipt.customerType : ''),
         row('Monthly package', isMonthlyCovered ? formatPackageTier(receipt.monthlyPackageTier) : ''),
-        row('Monthly allowance', isMonthlyCovered && receipt.monthlyAllowance
-            ? `${receipt.monthlyAllowance} washes per month` : ''),
+        row('Monthly booking cap', isMonthlyCovered && receipt.monthlyAllowance
+            ? `${receipt.monthlyAllowance} bookings per billing period` : ''),
         row('Wash booked', isMonthlyCovered ? receipt.vehicleType : ''),
         row('Package', receipt.vehicleType ? `${receipt.packageName} · ${receipt.vehicleType}` : receipt.packageName),
         row('Date & time', `${receipt.bookingDate} at ${receipt.bookingTime}`),

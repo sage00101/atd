@@ -17,6 +17,7 @@ import {
     releaseBookingSlot,
     releaseSharedPromoCode,
 } from '../../_lib/store.js';
+import { provisionMonthlyEntitlementFromPaidPurchase } from '../../_lib/monthly-promos.js';
 
 // Do not pre-parse the body — signature verification requires the
 // exact raw bytes that Yoco signed.
@@ -80,18 +81,18 @@ export default async function handler(req, res) {
         res.status(200).send('already processed');
         return;
     }
-    await markWebhookProcessed(webhookId);
 
     let event;
     try {
         event = JSON.parse(rawBody.toString('utf8'));
     } catch {
+        await markWebhookProcessed(webhookId);
         res.status(400).send('bad payload');
         return;
     }
 
     const checkoutId = event.payload?.metadata?.checkoutId;
-    const pending = checkoutId ? await getBooking(checkoutId) : null;
+    let pending = checkoutId ? await getBooking(checkoutId) : null;
     const meta = event.payload?.metadata || pending || {};
 
     if (event.type === 'payment.failed') {
@@ -105,10 +106,12 @@ export default async function handler(req, res) {
         } else {
             await releaseBookingSlot(meta.bookingDate || pending?.bookingDate, meta.bookingTime || pending?.bookingTime);
         }
+        await markWebhookProcessed(webhookId);
         res.status(200).send('ignored');
         return;
     }
     if (event.type !== 'payment.succeeded') {
+        await markWebhookProcessed(webhookId);
         res.status(200).send('ignored');
         return;
     }
@@ -129,6 +132,7 @@ export default async function handler(req, res) {
             currency: payment?.currency,
             amount: payment?.amount,
         });
+        await markWebhookProcessed(webhookId);
         res.status(200).send('ignored');
         return;
     }
@@ -144,12 +148,21 @@ export default async function handler(req, res) {
     }
 
     const confirmedBooking = checkoutId ? await markBookingConfirmed(checkoutId) : null;
-    if (checkoutId && !confirmedBooking) {
+    if (checkoutId && !confirmedBooking) pending = await getBooking(checkoutId);
+    if (checkoutId && !confirmedBooking && pending?.status !== 'paid') {
+        await markWebhookProcessed(webhookId);
         res.status(200).send('already confirmed');
         return;
     }
+    const paidBooking = confirmedBooking || pending;
     if (pending?.approvalReference) {
         await markBookingRequestConfirmed(pending.approvalReference);
+    }
+    if (pending?.purchaseType === 'monthly') {
+        const provisioning = await provisionMonthlyEntitlementFromPaidPurchase(paidBooking);
+        if (provisioning.status === 'needs_manager') {
+            console.error('[monthly purchase requires manager action]', pending.reference, provisioning.existingEntitlementId || '');
+        }
     }
 
     const amountCents = pending?.amountCents || event.payload?.amount || 0;
@@ -186,5 +199,6 @@ export default async function handler(req, res) {
     }
 
     // Keep the slot durably blocked (booking stays, just flipped to "paid").
+    await markWebhookProcessed(webhookId);
     res.status(200).send('ok');
 }

@@ -127,6 +127,7 @@ if (ARGV[2] == 'declined' or ARGV[2] == 'cancelled') and KEYS[2]
   redis.call('DEL', KEYS[2])
 end
 if ARGV[6] ~= '' then request.checkoutUrl = ARGV[6] end
+if ARGV[9] == 'online' or ARGV[9] == 'onsite' then request.paymentMethod = ARGV[9] end
 redis.call('SET', KEYS[1], cjson.encode(request))
 return {'OK', cjson.encode(request)}
 `;
@@ -421,12 +422,17 @@ export async function createBookingApprovalRequest(bookingInput, contractFile = 
 export async function getBookingRequestStatus(reference, token) {
     const request = await getValidRequest(reference, token);
     if (!request) return null;
+    const declineReason = request.status === 'declined'
+        ? request.events?.find((event) => event.status === 'declined')?.reason || ''
+        : '';
     return {
         reference: request.reference,
         status: request.status,
         expiresAt: request.expiresAt,
         paymentMethod: request.paymentMethod,
         bookingType: request.booking.bookingType || 'single',
+        purchaseType: request.booking.purchaseType,
+        packageName: request.booking.packageName || '',
         customerName: `${request.booking.customer.firstName} ${request.booking.customer.surname}`.trim(),
         bookingDate: request.booking.bookingDate,
         bookingTime: request.booking.bookingTime,
@@ -436,12 +442,13 @@ export async function getBookingRequestStatus(reference, token) {
         monthlyAllowance: request.booking.monthlyAllowance || null,
         checkoutUrl: request.status === 'payment_pending' ? request.checkoutUrl : null,
         canContinue: request.status === 'approved' || canRetryCheckoutStart(request),
+        declineReason,
         message: request.status === 'pending' ? 'Your request is waiting for business approval.'
             : request.status === 'approved' ? 'Your request is approved. Continue to complete the booking.'
                 : request.status === 'checkout_starting' ? 'Your secure checkout is being prepared.'
                 : request.status === 'payment_pending' ? 'Your approved booking is waiting for payment.'
                     : request.status === 'confirmed' ? 'Your booking is confirmed.'
-                        : request.status === 'declined' ? 'This booking request was declined.'
+                        : request.status === 'declined' ? declineReason || 'This booking request was declined.'
                             : request.status === 'cancelled' ? 'This booking request was cancelled.'
                                 : 'This booking request has expired.',
     };
@@ -458,7 +465,10 @@ export async function authorizeBookingContinuation(reference, token) {
     return { request };
 }
 
-export async function startBookingRequestCheckout(reference, token) {
+export async function startBookingRequestCheckout(reference, token, paymentMethod) {
+    if (!['online', 'onsite'].includes(paymentMethod)) {
+        throw new Error('Choose online or on-site payment to continue.');
+    }
     const authorization = await authorizeBookingContinuation(reference, token);
     if (authorization.error) throw new Error(authorization.error);
     const request = authorization.request;
@@ -474,6 +484,7 @@ export async function startBookingRequestCheckout(reference, token) {
         '',
         reference,
         request.status === 'checkout_starting' ? request.updatedAt : '',
+        paymentMethod,
     ]);
     if (transition?.[0] === 'OK') return decodeRedisRequest(transition[1]);
     throw new Error('This approved booking is already being processed. Refresh this page in a moment.');

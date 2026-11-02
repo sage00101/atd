@@ -19,6 +19,7 @@ export function buildMonthlyCodeEmailHtml({
     clientType,
     packageTier,
     monthlyAllowance,
+    creditsAvailable,
     validUntil,
     code,
     checkoutUrl,
@@ -39,14 +40,15 @@ export function buildMonthlyCodeEmailHtml({
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:18px">
           <tr><td style="padding:8px 0;border-bottom:1px solid ${BRAND.line};color:${BRAND.body};font-size:13px">Customer type</td><td align="right" style="padding:8px 0;border-bottom:1px solid ${BRAND.line};font-size:13px;font-weight:600">${typeLabel}</td></tr>
           <tr><td style="padding:8px 0;border-bottom:1px solid ${BRAND.line};color:${BRAND.body};font-size:13px">Package</td><td align="right" style="padding:8px 0;border-bottom:1px solid ${BRAND.line};font-size:13px;font-weight:600">${packageLabel}</td></tr>
-          <tr><td style="padding:8px 0;border-bottom:1px solid ${BRAND.line};color:${BRAND.body};font-size:13px">Monthly allowance</td><td align="right" style="padding:8px 0;border-bottom:1px solid ${BRAND.line};font-size:13px;font-weight:600">${Number(monthlyAllowance)} washes per month</td></tr>
+          <tr><td style="padding:8px 0;border-bottom:1px solid ${BRAND.line};color:${BRAND.body};font-size:13px">Booking cap</td><td align="right" style="padding:8px 0;border-bottom:1px solid ${BRAND.line};font-size:13px;font-weight:600">${Number(monthlyAllowance)} bookings per billing period</td></tr>
+          <tr><td style="padding:8px 0;border-bottom:1px solid ${BRAND.line};color:${BRAND.body};font-size:13px">Wash credits available</td><td align="right" style="padding:8px 0;border-bottom:1px solid ${BRAND.line};font-size:13px;font-weight:600">${Number(creditsAvailable ?? monthlyAllowance)}</td></tr>
           ${validUntil ? `<tr><td style="padding:8px 0;color:${BRAND.body};font-size:13px">Valid until</td><td align="right" style="padding:8px 0;font-size:13px;font-weight:600">${escapeHtml(validUntil)}</td></tr>` : ''}
         </table>
         <div style="padding:16px;border:1px dashed #cbd9cf;border-radius:10px;background:${BRAND.light};text-align:center">
           <p style="margin:0;color:${BRAND.sage};font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase">Your monthly access code</p>
           <p style="margin:7px 0 0;color:${BRAND.ink};font-size:22px;font-weight:800;letter-spacing:.06em">${escapeHtml(code)}</p>
         </div>
-        <p style="margin:16px 0;color:${BRAND.body};font-size:12.5px;line-height:1.6">The code provides a 100% discount for eligible washes, subject to your remaining monthly allowance. Unused washes do not roll over. Please keep this code private.</p>
+        <p style="margin:16px 0;color:${BRAND.body};font-size:12.5px;line-height:1.6">The code provides a 100% discount for eligible washes. Unused prepaid washes roll over while your subscription is active and payments are current. You may book up to ${Number(monthlyAllowance)} washes in each billing period, subject to your available wash credits. Please keep this code private.</p>
         <p style="margin:22px 0;text-align:center"><a href="${escapeHtml(checkoutUrl)}" style="display:inline-block;padding:12px 20px;border-radius:8px;background:${BRAND.deep};color:#fff;font-size:13px;font-weight:700;text-decoration:none">Book a monthly wash</a></p>
       </td></tr>
       <tr><td style="padding:18px 32px;border-top:1px solid ${BRAND.line};background:${BRAND.canvas};color:${BRAND.body};font-size:11px">A10tion To Detail · Thank you for choosing us.</td></tr>

@@ -18,9 +18,13 @@ const customerKey = (email) => `promo:monthly:customer:${digest(normaliseEmail(e
 const codeKey = (code) => `promo:monthly:code:${digest(String(code).trim().toUpperCase())}`;
 const periodUsageKey = (id, period) => `promo:monthly:used:${id}:${period}`;
 const periodReservationsKey = (id, period) => `promo:monthly:reservations:${id}:${period}`;
+const allReservationsKey = (id) => `promo:monthly:reservations:${id}`;
 const reservationKey = (id) => `promo:monthly:reservation:${id}`;
 const historyKey = (id) => `promo:monthly:history:${id}`;
 const confirmedBookingKey = (reference) => `promo:monthly:confirmed:${reference}`;
+const purchaseKey = (reference) => `promo:monthly:purchase:${reference}`;
+const pendingPurchaseKey = (reference) => `promo:monthly:purchase:pending:${reference}`;
+const pendingPurchaseIndexKey = 'promo:monthly:purchase:pending';
 const bookingKey = (reference) => `booking:${reference}`;
 const bookingSlotKey = (date, time) => `booking-slot:${date}:${time}`;
 const emailDispatchKey = (id) => `promo:monthly:email:dispatch:${id}`;
@@ -41,6 +45,27 @@ redis.call('SADD', KEYS[2], ARGV[2])
 redis.call('SET', KEYS[3], ARGV[2])
 redis.call('SET', KEYS[4], ARGV[2])
 return 'OK'
+`;
+
+const CREATE_PAID_ENTITLEMENT_SCRIPT = `
+local existingPurchase = redis.call('GET', KEYS[5])
+if existingPurchase then return {'PURCHASE_EXISTS', existingPurchase} end
+local existingCustomer = redis.call('GET', KEYS[3])
+if existingCustomer then
+  local pending = cjson.decode(ARGV[3])
+  pending.status = 'needs_manager'
+  redis.call('SET', KEYS[5], 'pending:' .. pending.reference)
+  redis.call('SET', KEYS[6], cjson.encode(pending))
+  redis.call('LPUSH', KEYS[7], pending.reference)
+  return {'EMAIL_EXISTS', existingCustomer}
+end
+if redis.call('EXISTS', KEYS[4]) == 1 then return {'CODE_EXISTS'} end
+redis.call('SET', KEYS[1], ARGV[1])
+redis.call('SADD', KEYS[2], ARGV[2])
+redis.call('SET', KEYS[3], ARGV[2])
+redis.call('SET', KEYS[4], ARGV[2])
+redis.call('SET', KEYS[5], ARGV[2])
+return {'OK'}
 `;
 
 const UPDATE_ENTITLEMENT_SCRIPT = `
@@ -69,6 +94,97 @@ if ARGV[3] == '1' then
 end
 redis.call('SET', KEYS[1], cjson.encode(nextRecord))
 return 'OK'
+`;
+
+const RECORD_MONTHLY_PAYMENT_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return {'NOT_FOUND'} end
+local entitlement = cjson.decode(raw)
+if entitlement.updatedAt ~= ARGV[1] then return {'STALE'} end
+if entitlement.archived then return {'ARCHIVED'} end
+if not entitlement.active then return {'INACTIVE'} end
+local existingPurchase = redis.call('GET', KEYS[2])
+if existingPurchase == entitlement.id then return {'DUPLICATE'} end
+if existingPurchase and existingPurchase ~= 'pending:' .. ARGV[7] then return {'PURCHASE_EXISTS'} end
+local pendingRaw = redis.call('GET', KEYS[3])
+if existingPurchase and not pendingRaw then return {'PURCHASE_NOT_FOUND'} end
+if pendingRaw then
+  local pending = cjson.decode(pendingRaw)
+  if pending.reference ~= ARGV[7] or pending.email ~= entitlement.email then return {'PURCHASE_MISMATCH'} end
+  if pending.clientType ~= entitlement.clientType or pending.packageTier ~= entitlement.packageTier then return {'PACKAGE_MISMATCH'} end
+end
+local allowance = tonumber(entitlement.monthlyAllowance)
+if not allowance or allowance < 1 then return {'INVALID_ALLOWANCE'} end
+entitlement.creditsAvailable = tonumber(entitlement.creditsAvailable or 0) + allowance
+entitlement.creditsGrantedTotal = tonumber(entitlement.creditsGrantedTotal or allowance) + allowance
+entitlement.creditsUsedTotal = tonumber(entitlement.creditsUsedTotal or 0)
+entitlement.creditsReserved = tonumber(entitlement.creditsReserved or 0)
+entitlement.billingAnchor = ARGV[8]
+entitlement.billingCyclesPaid = tonumber(ARGV[9])
+entitlement.validUntil = ARGV[10]
+entitlement.lastPaidAt = ARGV[4]
+entitlement.updatedAt = ARGV[4]
+entitlement.paymentHistory = entitlement.paymentHistory or {}
+table.insert(entitlement.paymentHistory, 1, cjson.decode(ARGV[5]))
+entitlement.auditHistory = entitlement.auditHistory or {}
+table.insert(entitlement.auditHistory, 1, cjson.decode(ARGV[6]))
+while #entitlement.auditHistory > 50 do table.remove(entitlement.auditHistory) end
+redis.call('SET', KEYS[1], cjson.encode(entitlement))
+redis.call('SET', KEYS[2], entitlement.id)
+if pendingRaw then
+  redis.call('DEL', KEYS[3])
+  redis.call('LREM', KEYS[4], 0, ARGV[7])
+end
+return {'OK', cjson.encode(entitlement)}
+`;
+
+const ENSURE_CREDIT_LEDGER_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return {'NOT_FOUND'} end
+local entitlement = cjson.decode(raw)
+if entitlement.creditsAvailable ~= nil and entitlement.creditsReserved ~= nil then return {'OK', raw} end
+local allowance = tonumber(entitlement.monthlyAllowance)
+if not allowance or allowance < 1 then return {'INVALID_ALLOWANCE'} end
+local used = redis.call('SCARD', KEYS[2])
+local reserved = redis.call('ZCARD', KEYS[3])
+entitlement.creditsAvailable = tonumber(entitlement.creditsAvailable or math.max(allowance - used - reserved, 0))
+entitlement.creditsReserved = tonumber(entitlement.creditsReserved or reserved)
+entitlement.creditsUsedTotal = tonumber(entitlement.creditsUsedTotal or used)
+entitlement.creditsGrantedTotal = tonumber(entitlement.creditsGrantedTotal or math.max(allowance, used + reserved))
+entitlement.billingAnchor = entitlement.billingAnchor or entitlement.validFrom or ARGV[1]
+entitlement.billingCyclesPaid = tonumber(entitlement.billingCyclesPaid or 1)
+entitlement.updatedAt = ARGV[2]
+local encoded = cjson.encode(entitlement)
+redis.call('SET', KEYS[1], encoded)
+return {'OK', encoded}
+`;
+
+const CLEAN_EXPIRED_RESERVATIONS_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return 0 end
+local entitlement = cjson.decode(raw)
+local expiredIds = redis.call('ZRANGEBYSCORE', KEYS[2], '-inf', ARGV[1])
+local changed = false
+for _, reservationId in ipairs(expiredIds) do
+  local reservationKey = 'promo:monthly:reservation:' .. reservationId
+  local reservationRaw = redis.call('GET', reservationKey)
+  if reservationRaw then
+    local reservation = cjson.decode(reservationRaw)
+    if reservation.entitlementId == entitlement.id then
+      redis.call('ZREM', 'promo:monthly:reservations:' .. entitlement.id .. ':' .. reservation.period, reservationId)
+      redis.call('DEL', reservationKey)
+    end
+  end
+  entitlement.creditsAvailable = tonumber(entitlement.creditsAvailable or 0) + 1
+  entitlement.creditsReserved = math.max(tonumber(entitlement.creditsReserved or 0) - 1, 0)
+  changed = true
+  redis.call('ZREM', KEYS[2], reservationId)
+end
+if changed then
+  entitlement.updatedAt = ARGV[2]
+  redis.call('SET', KEYS[1], cjson.encode(entitlement))
+end
+return #expiredIds
 `;
 
 const CREATE_EMAIL_DISPATCH_SCRIPT = `
@@ -140,14 +256,45 @@ local allowance = tonumber(entitlement.monthlyAllowance)
 if not allowance or allowance < 1 then return {'INVALID_ALLOWANCE'} end
 if redis.call('SISMEMBER', KEYS[2], ARGV[4]) == 1 then return {'ALREADY_USED'} end
 if redis.call('EXISTS', KEYS[4]) == 1 then return {'ALREADY_RESERVED'} end
-redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', ARGV[5])
+local expiredReservations = redis.call('ZRANGEBYSCORE', KEYS[5], '-inf', ARGV[5])
+for _, expiredId in ipairs(expiredReservations) do
+  local expiredRaw = redis.call('GET', 'promo:monthly:reservation:' .. expiredId)
+  if expiredRaw then
+    local expired = cjson.decode(expiredRaw)
+    if expired.entitlementId == entitlement.id then
+      local oldPeriodKey = 'promo:monthly:reservations:' .. entitlement.id .. ':' .. expired.period
+      redis.call('ZREM', oldPeriodKey, expiredId)
+      redis.call('DEL', 'promo:monthly:reservation:' .. expiredId)
+    end
+  end
+  entitlement.creditsAvailable = tonumber(entitlement.creditsAvailable or 0) + 1
+  entitlement.creditsReserved = math.max(tonumber(entitlement.creditsReserved or 0) - 1, 0)
+  redis.call('ZREM', KEYS[5], expiredId)
+end
+local existingReservations = redis.call('ZRANGE', KEYS[3], 0, -1, 'WITHSCORES')
+for index = 1, #existingReservations, 2 do
+  redis.call('ZADD', KEYS[5], existingReservations[index + 1], existingReservations[index])
+end
+entitlement.updatedAt = ARGV[12]
+redis.call('SET', KEYS[1], cjson.encode(entitlement))
 local used = redis.call('SCARD', KEYS[2])
 local reserved = redis.call('ZCARD', KEYS[3])
 if used + reserved >= allowance then return {'LIMIT_REACHED', tostring(allowance), tostring(used), tostring(reserved)} end
+local creditsAvailable = tonumber(entitlement.creditsAvailable)
+if not creditsAvailable then creditsAvailable = math.max(allowance - used - reserved, 0) end
+if creditsAvailable < 1 then return {'CREDITS_EXHAUSTED', tostring(allowance), tostring(used), tostring(reserved)} end
+entitlement.creditsAvailable = creditsAvailable - 1
+entitlement.creditsReserved = tonumber(entitlement.creditsReserved or reserved) + 1
+entitlement.creditsGrantedTotal = tonumber(entitlement.creditsGrantedTotal or allowance)
+entitlement.creditsUsedTotal = tonumber(entitlement.creditsUsedTotal or used)
+entitlement.billingAnchor = entitlement.billingAnchor or entitlement.validFrom or ARGV[3]
+entitlement.updatedAt = ARGV[12]
 redis.call('ZADD', KEYS[3], ARGV[6], ARGV[7])
+redis.call('ZADD', KEYS[5], ARGV[6], ARGV[7])
 redis.call('EXPIRE', KEYS[3], ARGV[9] + 86400)
 redis.call('SET', KEYS[4], ARGV[8], 'EX', ARGV[9], 'NX')
-return {'OK', tostring(allowance), tostring(used), tostring(reserved + 1)}
+redis.call('SET', KEYS[1], cjson.encode(entitlement))
+return {'OK', tostring(allowance), tostring(used), tostring(reserved + 1), tostring(entitlement.creditsAvailable)}
 `;
 
 const RELEASE_WASH_SCRIPT = `
@@ -156,6 +303,19 @@ if not raw then return 0 end
 local reservation = cjson.decode(raw)
 if reservation.reservationId ~= ARGV[1] then return 0 end
 redis.call('ZREM', KEYS[2], ARGV[1])
+redis.call('ZREM', KEYS[3], ARGV[1])
+redis.call('ZREM', KEYS[5], ARGV[1])
+local entitlementRaw = redis.call('GET', KEYS[4])
+if entitlementRaw then
+  local entitlement = cjson.decode(entitlementRaw)
+  local creditsReserved = tonumber(entitlement.creditsReserved)
+  if creditsReserved and creditsReserved > 0 then
+    entitlement.creditsReserved = creditsReserved - 1
+    entitlement.creditsAvailable = tonumber(entitlement.creditsAvailable or 0) + 1
+    entitlement.updatedAt = ARGV[2]
+    redis.call('SET', KEYS[4], cjson.encode(entitlement))
+  end
+end
 redis.call('DEL', KEYS[1])
 return 1
 `;
@@ -171,7 +331,6 @@ if not raw then return 'RESERVATION_LOST' end
 local reservation = cjson.decode(raw)
 if reservation.reservationId ~= ARGV[1] then return 'RESERVATION_LOST' end
 if entitlement.email ~= reservation.email then return 'EMAIL_MISMATCH' end
-if entitlement.currentCodeDigest ~= reservation.codeDigest then return 'REPLACED' end
 if entitlement.clientType ~= reservation.clientType then return 'CLIENT_TYPE_MISMATCH' end
 if entitlement.packageTier ~= reservation.packageTier then return 'PACKAGE_MISMATCH' end
 if entitlement.archived then return 'ARCHIVED' end
@@ -180,11 +339,22 @@ if entitlement.validFrom and entitlement.validFrom ~= cjson.null and reservation
 if entitlement.validUntil and entitlement.validUntil ~= cjson.null and reservation.bookingDate > entitlement.validUntil then return 'EXPIRED' end
 local allowance = tonumber(entitlement.monthlyAllowance)
 if not allowance or allowance < 1 then return 'INVALID_ALLOWANCE' end
-redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', ARGV[6])
-if redis.call('SCARD', KEYS[2]) >= allowance then return 'LIMIT_REACHED' end
+local usedBefore = redis.call('SCARD', KEYS[2])
+local reservedBefore = redis.call('ZCARD', KEYS[3])
+if usedBefore >= allowance then return 'LIMIT_REACHED' end
+local creditsAvailable = tonumber(entitlement.creditsAvailable)
+if not creditsAvailable then creditsAvailable = math.max(allowance - usedBefore - reservedBefore, 0) end
+local creditsReserved = tonumber(entitlement.creditsReserved)
+if not creditsReserved then creditsReserved = reservedBefore end
+if creditsReserved < 1 then return 'RESERVATION_LOST' end
 redis.call('SADD', KEYS[2], ARGV[2])
 local used = redis.call('SCARD', KEYS[2])
-local remaining = math.max(allowance - used, 0)
+entitlement.creditsAvailable = creditsAvailable
+entitlement.creditsReserved = creditsReserved - 1
+entitlement.creditsUsedTotal = tonumber(entitlement.creditsUsedTotal or usedBefore) + 1
+entitlement.creditsGrantedTotal = tonumber(entitlement.creditsGrantedTotal or allowance)
+entitlement.updatedAt = ARGV[7]
+local remaining = creditsAvailable
 local confirmedBooking = cjson.decode(ARGV[4])
 confirmedBooking.monthlyClientType = entitlement.clientType
 confirmedBooking.monthlyPackageTier = entitlement.packageTier
@@ -211,7 +381,10 @@ historyRecord.monthlyAllowance = allowance
 historyRecord.usedAfter = used
 historyRecord.remainingAfter = remaining
 historyRecord.promoCodeReference = confirmedBooking.promoCodeReference
+historyRecord.creditsUsedTotal = entitlement.creditsUsedTotal
+redis.call('SET', KEYS[1], cjson.encode(entitlement))
 redis.call('ZREM', KEYS[3], ARGV[1])
+redis.call('ZREM', KEYS[9], ARGV[1])
 redis.call('DEL', KEYS[4])
 redis.call('LPUSH', KEYS[5], cjson.encode(historyRecord))
 redis.call('SET', KEYS[6], cjson.encode(confirmedBooking), 'EX', ARGV[5])
@@ -229,6 +402,52 @@ function getSouthAfricanDate(date = new Date()) {
     }).formatToParts(date);
     const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
     return `${values.year}-${values.month}-${values.day}`;
+}
+
+function addDays(date, amount) {
+    const result = new Date(`${date}T00:00:00.000Z`);
+    result.setUTCDate(result.getUTCDate() + amount);
+    return result.toISOString().slice(0, 10);
+}
+
+function addMonthsClamped(date, amount) {
+    const [year, month, day] = date.split('-').map(Number);
+    const monthIndex = year * 12 + month - 1 + amount;
+    const targetYear = Math.floor(monthIndex / 12);
+    const targetMonth = monthIndex % 12;
+    const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+    const targetDay = Math.min(day, lastDay);
+    return `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
+}
+
+function getBillingPeriod(bookingDate, billingAnchor) {
+    if (!isValidDate(bookingDate)) throw new Error('Choose a valid booking date.');
+    const anchor = isValidDate(billingAnchor) ? billingAnchor : bookingDate;
+    if (bookingDate < anchor) {
+        return { start: anchor, end: addDays(addMonthsClamped(anchor, 1), -1) };
+    }
+    const [anchorYear, anchorMonth] = anchor.split('-').map(Number);
+    const [bookingYear, bookingMonth] = bookingDate.split('-').map(Number);
+    let monthOffset = (bookingYear - anchorYear) * 12 + bookingMonth - anchorMonth;
+    let start = addMonthsClamped(anchor, monthOffset);
+    if (start > bookingDate) {
+        monthOffset -= 1;
+        start = addMonthsClamped(anchor, monthOffset);
+    }
+    return {
+        start,
+        end: addDays(addMonthsClamped(anchor, monthOffset + 1), -1),
+    };
+}
+
+function getBillingCycleCount(billingAnchor, validUntil) {
+    if (!isValidDate(billingAnchor) || !isValidDate(validUntil)) return null;
+    for (let cycle = 1; cycle <= 1200; cycle += 1) {
+        const cycleEnd = addDays(addMonthsClamped(billingAnchor, cycle), -1);
+        if (cycleEnd === validUntil) return cycle;
+        if (cycleEnd > validUntil) return null;
+    }
+    return null;
 }
 
 function formatSouthAfricanDateTime(date = new Date()) {
@@ -306,9 +525,83 @@ function validateEntitlementInput(input) {
     };
 }
 
-function getPeriod(bookingDate) {
-    if (!isValidDate(bookingDate)) throw new Error('Choose a valid booking date.');
-    return bookingDate.slice(0, 7);
+function getCalendarMonthsBetween(start, end) {
+    const months = [];
+    const [startYear, startMonth] = start.split('-').map(Number);
+    const [endYear, endMonth] = end.split('-').map(Number);
+    let year = startYear;
+    let month = startMonth;
+    while (year < endYear || (year === endYear && month <= endMonth)) {
+        months.push(`${year}-${String(month).padStart(2, '0')}`);
+        month += 1;
+        if (month > 12) {
+            month = 1;
+            year += 1;
+        }
+    }
+    return months;
+}
+
+async function migrateLegacyReservations(id, billingAnchor) {
+    const markerKey = `promo:monthly:reservation-migration:${id}`;
+    if (await redis.exists(markerKey)) return;
+    const now = Date.now();
+    const today = getSouthAfricanDate();
+    const months = getCalendarMonthsBetween(today, addDays(today, 90));
+    const reservationIds = new Set();
+    for (const month of months) {
+        const oldIds = await redis.zrange(periodReservationsKey(id, month), 0, -1);
+        oldIds.forEach((reservationId) => reservationIds.add(String(reservationId)));
+    }
+    for (const reservationId of reservationIds) {
+        const reservation = await redis.get(reservationKey(reservationId));
+        if (!reservation || !isValidDate(reservation.bookingDate)) continue;
+        const createdAt = new Date(reservation.createdAt || 0).getTime();
+        const expiresAt = Number(reservation.expiresAt)
+            || (Number.isFinite(createdAt) ? createdAt + MONTHLY_RESERVATION_TTL_SECONDS * 1000 : now);
+        if (expiresAt <= now) continue;
+        const period = getBillingPeriod(reservation.bookingDate, billingAnchor).start;
+        if (reservation.period) await redis.zrem(periodReservationsKey(id, reservation.period), reservationId);
+        reservation.period = period;
+        reservation.expiresAt = expiresAt;
+        await redis.set(reservationKey(reservationId), reservation, {
+            ex: Math.max(1, Math.ceil((expiresAt - now) / 1000)),
+        });
+        await redis.zadd(periodReservationsKey(id, period), { score: expiresAt, member: reservationId });
+        await redis.zadd(allReservationsKey(id), { score: expiresAt, member: reservationId });
+    }
+    await redis.set(markerKey, '1', { nx: true, ex: 60 * 60 * 24 * 365 * 5 });
+}
+
+async function migratePeriodHistory(id, period, billingAnchor = period.start) {
+    await migrateLegacyReservations(id, billingAnchor);
+    const markerKey = `promo:monthly:migration:${id}:${period.start}`;
+    if (await redis.exists(markerKey)) return;
+
+    const usageKey = periodUsageKey(id, period.start);
+    const history = await redis.lrange(historyKey(id), 0, -1);
+    const usedReferences = [];
+    for (const entry of history) {
+        const record = typeof entry === 'string' ? JSON.parse(entry) : entry;
+        if (record?.reference && record.bookingDate >= period.start && record.bookingDate <= period.end) {
+            usedReferences.push(record.reference);
+        }
+    }
+    if (usedReferences.length) await redis.sadd(usageKey, ...usedReferences);
+
+    await redis.set(markerKey, '1', { nx: true, ex: 60 * 60 * 24 * 365 * 5 });
+}
+
+async function ensureCreditLedger(record, period) {
+    const result = await redis.eval(ENSURE_CREDIT_LEDGER_SCRIPT, [
+        entitlementKey(record.id),
+        periodUsageKey(record.id, period.start),
+        allReservationsKey(record.id),
+    ], [period.start, new Date().toISOString()]);
+    if (!Array.isArray(result) || result[0] !== 'OK') {
+        throw new Error('Could not initialize the monthly credit balance.');
+    }
+    return typeof result[1] === 'string' ? JSON.parse(result[1]) : result[1];
 }
 
 function getRedisStatus(result) {
@@ -339,6 +632,13 @@ export async function createMonthlyEntitlement(input) {
         ...details,
         code,
         currentCodeDigest: digest(code),
+        billingAnchor: details.validFrom,
+        billingCyclesPaid: getBillingCycleCount(details.validFrom, details.validUntil) || 1,
+        creditsAvailable: details.monthlyAllowance,
+        creditsReserved: 0,
+        creditsUsedTotal: 0,
+        creditsGrantedTotal: details.monthlyAllowance,
+        paymentHistory: [],
         active: true,
         archived: false,
         createdAt: now,
@@ -357,6 +657,266 @@ export async function createMonthlyEntitlement(input) {
     }
     if (result !== 'OK') throw new Error('Could not create the monthly entitlement.');
     return entitlement;
+}
+
+export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
+    if (booking?.purchaseType !== 'monthly') return { status: 'not_monthly' };
+    const reference = String(booking.reference || '').trim();
+    if (!/^[\w.:-]{3,120}$/.test(reference)) {
+        throw new Error('A valid paid monthly-purchase reference is required.');
+    }
+
+    const customer = booking.customer || {};
+    const packageId = String(booking.packageId || '');
+    const [, clientType, packageTier] = packageId.match(/^(private|business)-(standard|premium)$/) || [];
+    if (!clientType || !packageTier) throw new Error('The paid monthly package is not recognized.');
+    const amountCents = Number(booking.amountCents);
+    if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
+        throw new Error('The paid monthly package amount is invalid.');
+    }
+
+    const paidAt = String(booking.paidAt || new Date().toISOString());
+    const paidDate = getSouthAfricanDate(new Date(paidAt));
+    const monthlyAllowance = packageTier === 'premium' ? 4 : 2;
+    const customerName = `${customer.firstName || ''} ${customer.surname || ''}`.trim();
+    const details = validateEntitlementInput({
+        customerName,
+        email: customer.email,
+        customerPhone: customer.mobile,
+        businessName: customer.businessName || '',
+        clientType,
+        packageTier,
+        validFrom: paidDate,
+    });
+    const validUntil = addDays(addMonthsClamped(paidDate, 1), -1);
+    const now = new Date().toISOString();
+    const initialPayment = {
+        type: 'initial',
+        paidAt,
+        amountCents,
+        paymentMethod: booking.paymentMethod || 'online',
+        reference,
+        gatewayReference: booking.yocoCheckoutId || null,
+        packageId,
+        packageName: booking.packageName || '',
+        vehicleType: booking.vehicleType || '',
+        contractOption: booking.contractOption || null,
+        creditsAdded: monthlyAllowance,
+    };
+    const pendingPurchase = {
+        reference,
+        status: 'needs_manager',
+        paidAt,
+        amountCents,
+        paymentMethod: booking.paymentMethod || 'online',
+        customerName: details.customerName,
+        email: details.email,
+        customerPhone: details.customerPhone,
+        businessName: details.businessName,
+        clientType,
+        packageTier,
+        packageId,
+        packageName: booking.packageName || '',
+        vehicleType: booking.vehicleType || '',
+        contractOption: booking.contractOption || null,
+    };
+    const id = crypto.randomUUID();
+    let code;
+    let result;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        code = await createUniqueCode();
+        const entitlement = {
+            id,
+            ...details,
+            validUntil,
+            billingAnchor: paidDate,
+            billingCyclesPaid: 1,
+            creditsAvailable: monthlyAllowance,
+            creditsReserved: 0,
+            creditsUsedTotal: 0,
+            creditsGrantedTotal: monthlyAllowance,
+            code,
+            currentCodeDigest: digest(code),
+            active: true,
+            archived: false,
+            createdAt: now,
+            updatedAt: now,
+            lastPaidAt: paidAt,
+            packageId,
+            packageName: booking.packageName || '',
+            vehicleType: booking.vehicleType || '',
+            contractOption: booking.contractOption || null,
+            paymentHistory: [initialPayment],
+            codeHistory: [],
+            auditHistory: [{ action: 'paid_purchase_created', reference, createdAt: now }],
+        };
+        result = await redis.eval(CREATE_PAID_ENTITLEMENT_SCRIPT, [
+            entitlementKey(id),
+            ENTITLEMENT_INDEX_KEY,
+            customerKey(details.email),
+            codeKey(code),
+            purchaseKey(reference),
+            pendingPurchaseKey(reference),
+            pendingPurchaseIndexKey,
+        ], [JSON.stringify(entitlement), id, JSON.stringify(pendingPurchase)]);
+
+        if (Array.isArray(result) && result[0] === 'CODE_EXISTS') continue;
+        break;
+    }
+
+    if (!Array.isArray(result)) throw new Error('Could not provision the paid monthly entitlement.');
+    if (result[0] === 'EMAIL_EXISTS') {
+        return {
+            status: 'needs_manager',
+            reference,
+            existingEntitlementId: String(result[1] || ''),
+        };
+    }
+    if (result[0] === 'PURCHASE_EXISTS') {
+        const owner = String(result[1] || '');
+        if (owner.startsWith('pending:')) {
+            return { status: 'needs_manager', reference };
+        }
+        const existingEntitlement = await redis.get(entitlementKey(owner));
+        if (!existingEntitlement) throw new Error('The paid monthly purchase points to a missing entitlement.');
+        try {
+            const dispatch = await sendMonthlyCodeToClient({
+                entitlementId: owner,
+                idempotencyKey: `monthly-purchase-${digest(reference).slice(0, 24)}`,
+            });
+            return { status: 'already_provisioned', entitlement: existingEntitlement, emailStatus: dispatch.status };
+        } catch (error) {
+            console.error('[monthly purchase code email failed]', reference, error);
+            return { status: 'already_provisioned', entitlement: existingEntitlement, emailError: error.message };
+        }
+    }
+    if (result[0] !== 'OK') throw new Error('Could not provision the paid monthly entitlement.');
+
+    const entitlement = await redis.get(entitlementKey(id));
+    try {
+        const dispatch = await sendMonthlyCodeToClient({
+            entitlementId: id,
+            idempotencyKey: `monthly-purchase-${digest(reference).slice(0, 24)}`,
+        });
+        return { status: 'created', entitlement, emailStatus: dispatch.status };
+    } catch (error) {
+        console.error('[monthly purchase code email failed]', reference, error);
+        return { status: 'created', entitlement, emailError: error.message };
+    }
+}
+
+export async function recordMonthlyEntitlementPayment({ entitlementId, paymentReference, amountCents }) {
+    const id = String(entitlementId || '').trim();
+    const reference = String(paymentReference || '').trim();
+    const amount = Number(amountCents);
+    if (!id) throw new Error('Monthly entitlement id is required.');
+    if (!/^[\w.:-]{3,120}$/.test(reference)) throw new Error('Enter a valid unique payment reference.');
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('Enter the amount paid in cents.');
+
+    let entitlement = await redis.get(entitlementKey(id));
+    if (!entitlement) throw new Error('Monthly entitlement not found.');
+    const now = new Date().toISOString();
+    const today = getSouthAfricanDate();
+    const currentPeriod = getBillingPeriod(today, entitlement.billingAnchor || entitlement.validFrom);
+    await migratePeriodHistory(id, currentPeriod, entitlement.billingAnchor || entitlement.validFrom);
+    entitlement = await ensureCreditLedger(entitlement, currentPeriod);
+
+    const pending = await redis.get(pendingPurchaseKey(reference));
+    if (pending) {
+        if (normaliseEmail(pending.email) !== normaliseEmail(entitlement.email)) {
+            throw new Error('This paid purchase belongs to a different customer.');
+        }
+        if (Number(pending.amountCents) !== amount) {
+            throw new Error('The entered amount does not match the recorded paid purchase.');
+        }
+        if (pending.clientType !== entitlement.clientType || pending.packageTier !== entitlement.packageTier) {
+            throw new Error('Update the customer package to match this paid purchase before applying it.');
+        }
+    }
+
+    const paidAt = pending?.paidAt || now;
+    const paymentDate = getSouthAfricanDate(new Date(paidAt));
+    const stillCurrent = entitlement.validUntil && entitlement.validUntil >= paymentDate;
+    let billingAnchor = stillCurrent
+        ? (entitlement.billingAnchor || entitlement.validFrom)
+        : paymentDate;
+    let billingCyclesPaid = stillCurrent
+        ? getBillingCycleCount(billingAnchor, entitlement.validUntil)
+        : 0;
+    if (!billingCyclesPaid) {
+        billingAnchor = stillCurrent ? addDays(entitlement.validUntil, 1) : paymentDate;
+        billingCyclesPaid = 1;
+    } else {
+        billingCyclesPaid += 1;
+    }
+    const validUntil = addDays(addMonthsClamped(billingAnchor, billingCyclesPaid), -1);
+    const payment = {
+        type: pending ? 'renewal_purchase' : 'manual_renewal',
+        paidAt,
+        amountCents: amount,
+        paymentMethod: pending?.paymentMethod || 'manual',
+        reference,
+        packageId: pending?.packageId || entitlement.packageId || '',
+        packageName: pending?.packageName || entitlement.packageName || '',
+        vehicleType: pending?.vehicleType || entitlement.vehicleType || '',
+        contractOption: pending?.contractOption || entitlement.contractOption || null,
+        creditsAdded: entitlement.monthlyAllowance,
+    };
+    const auditEntry = {
+        action: 'monthly_payment_recorded',
+        reference,
+        creditsAdded: entitlement.monthlyAllowance,
+        previousValidUntil: entitlement.validUntil || null,
+        validUntil,
+        performedBy: 'admin',
+        createdAt: paidAt,
+    };
+    const result = await redis.eval(RECORD_MONTHLY_PAYMENT_SCRIPT, [
+        entitlementKey(id),
+        purchaseKey(reference),
+        pendingPurchaseKey(reference),
+        pendingPurchaseIndexKey,
+    ], [
+        entitlement.updatedAt,
+        '',
+        '',
+        paidAt,
+        JSON.stringify(payment),
+        JSON.stringify(auditEntry),
+        reference,
+        billingAnchor,
+        String(billingCyclesPaid),
+        validUntil,
+    ]);
+    if (!Array.isArray(result) || result[0] === 'NOT_FOUND') throw new Error('Monthly entitlement not found.');
+    if (result[0] === 'STALE') throw new Error('This monthly record changed during the payment update. Refresh and try again.');
+    if (result[0] === 'ARCHIVED' || result[0] === 'INACTIVE') throw new Error('Reactivate this monthly entitlement before recording a payment.');
+    if (result[0] === 'DUPLICATE') throw new Error('This payment reference has already been recorded.');
+    if (result[0] === 'PURCHASE_EXISTS') throw new Error('This payment reference is already linked to another entitlement.');
+    if (result[0] === 'PURCHASE_NOT_FOUND') throw new Error('The paid purchase could not be found.');
+    if (result[0] === 'PURCHASE_MISMATCH') throw new Error('The paid purchase does not match this customer.');
+    if (result[0] === 'PACKAGE_MISMATCH') throw new Error('Update the customer package to match this paid purchase before applying it.');
+    if (result[0] !== 'OK') throw new Error('Could not record the monthly payment.');
+    const updated = typeof result[1] === 'string' ? JSON.parse(result[1]) : result[1];
+    try {
+        const dispatch = await sendMonthlyCodeToClient({
+            entitlementId: id,
+            idempotencyKey: `monthly-renewal-${digest(reference).slice(0, 24)}`,
+        });
+        return { ...updated, emailStatus: dispatch.status };
+    } catch (error) {
+        console.error('[monthly renewal code email failed]', reference, error);
+        return {
+            ...updated,
+            emailError: error instanceof Error ? error.message : 'The monthly code email could not be sent.',
+        };
+    }
+}
+
+export async function getPendingMonthlyPurchasesForAdmin() {
+    const references = await redis.lrange(pendingPurchaseIndexKey, 0, -1);
+    const purchases = await Promise.all(references.map((reference) => redis.get(pendingPurchaseKey(reference))));
+    return purchases.filter(Boolean);
 }
 
 export async function updateMonthlyEntitlement(id, input) {
@@ -417,6 +977,17 @@ export async function updateMonthlyEntitlement(id, input) {
     const next = {
         ...existing,
         ...details,
+        billingAnchor: details.validFrom !== existing.validFrom
+            ? details.validFrom
+            : existing.billingAnchor || details.validFrom,
+        billingCyclesPaid: getBillingCycleCount(
+            details.validFrom !== existing.validFrom ? details.validFrom : (existing.billingAnchor || details.validFrom),
+            details.validUntil,
+        ) || Number(existing.billingCyclesPaid || 1),
+        creditsAvailable: Math.max(Number(existing.creditsAvailable ?? existing.monthlyAllowance) + details.monthlyAllowance - existing.monthlyAllowance, 0),
+        creditsReserved: Number(existing.creditsReserved || 0),
+        creditsUsedTotal: Number(existing.creditsUsedTotal || 0),
+        creditsGrantedTotal: Math.max(Number(existing.creditsGrantedTotal ?? existing.monthlyAllowance) + details.monthlyAllowance - existing.monthlyAllowance, 0),
         code,
         currentCodeDigest: replaceCode ? digest(code) : existing.currentCodeDigest,
         active,
@@ -443,14 +1014,22 @@ export async function updateMonthlyEntitlement(id, input) {
 export async function getMonthlyEntitlementsForAdmin() {
     const ids = await redis.smembers(ENTITLEMENT_INDEX_KEY);
     const today = getSouthAfricanDate();
-    const currentPeriod = today.slice(0, 7);
+    const now = new Date().toISOString();
 
     return Promise.all(ids.map(async (id) => {
-        const record = await redis.get(entitlementKey(id));
+        let record = await redis.get(entitlementKey(id));
         if (!record) return null;
-        const usageKey = periodUsageKey(id, currentPeriod);
-        const reservationsKey = periodReservationsKey(id, currentPeriod);
-        await redis.zremrangebyscore(reservationsKey, 0, Date.now());
+        const period = getBillingPeriod(today, record.billingAnchor || record.validFrom);
+        await migratePeriodHistory(id, period, record.billingAnchor || record.validFrom);
+        record = await ensureCreditLedger(record, period);
+        await redis.eval(CLEAN_EXPIRED_RESERVATIONS_SCRIPT, [
+            entitlementKey(id),
+            allReservationsKey(id),
+        ], [String(Date.now()), now]);
+        record = await redis.get(entitlementKey(id));
+        record = await ensureCreditLedger(record, period);
+        const usageKey = periodUsageKey(id, period.start);
+        const reservationsKey = periodReservationsKey(id, period.start);
         const [used, reserved, history, dispatchIds] = await Promise.all([
             redis.scard(usageKey),
             redis.zcard(reservationsKey),
@@ -464,15 +1043,18 @@ export async function getMonthlyEntitlementsForAdmin() {
         else if (!record.active) status = 'Deactivated';
         else if (record.validUntil && record.validUntil < today) status = 'Expired';
         else if (record.validFrom > today) status = 'Scheduled';
+        else if (Number(record.creditsAvailable) < 1) status = 'No credits';
         else if (Number(used) >= record.monthlyAllowance) status = 'Fully used';
         else if (Number(used) + Number(reserved) >= record.monthlyAllowance) status = 'Reserved';
 
         return {
             ...record,
-            period: currentPeriod,
+            period: period.start,
+            periodEnd: period.end,
             used: Number(used),
             reserved: Number(reserved),
-            remaining: Math.max(record.monthlyAllowance - Number(used) - Number(reserved), 0),
+            periodRemaining: Math.max(record.monthlyAllowance - Number(used) - Number(reserved), 0),
+            remaining: Number(record.creditsAvailable),
             status,
             history,
             distributionHistory,
@@ -651,9 +1233,11 @@ async function sendMonthlyClientCode(entitlementId, idempotencyKey, distribution
             clientType: entitlement.clientType,
             packageTier: entitlement.packageTier,
             monthlyAllowance: entitlement.monthlyAllowance,
+            creditsAvailable: entitlement.creditsAvailable,
+            billingAnchor: entitlement.billingAnchor,
             validUntil: entitlement.validUntil,
             code: snapshot?.code || entitlement.code,
-        }, `monthly-code-${distributionRunId || entitlementId}-${entitlementId}`);
+        }, `monthly-code-${distributionRunId || idempotencyKey}-${entitlementId}`);
     } catch (error) {
         await updateDispatch(dispatch, {
             status: 'failed',
@@ -835,7 +1419,13 @@ export async function reserveMonthlyWash({
     const entitlement = await getMonthlyPromoForCode(normalisedCode);
     if (!entitlement) return { status: 'NOT_FOUND' };
 
-    const period = getPeriod(bookingDate);
+    const billingAnchor = entitlement.billingAnchor || entitlement.validFrom;
+    const billingPeriod = getBillingPeriod(bookingDate, billingAnchor);
+    const currentPeriod = getBillingPeriod(getSouthAfricanDate(), billingAnchor);
+    await migratePeriodHistory(entitlement.id, billingPeriod, billingAnchor);
+    await migratePeriodHistory(entitlement.id, currentPeriod, billingAnchor);
+    const currentEntitlement = await ensureCreditLedger(entitlement, currentPeriod);
+    const period = billingPeriod.start;
     const expiresAt = Date.now() + MONTHLY_RESERVATION_TTL_SECONDS * 1000;
     const reservation = {
         ...bookingDetails,
@@ -844,6 +1434,7 @@ export async function reserveMonthlyWash({
         reference,
         period,
         bookingDate,
+        expiresAt,
         email: normalisedEmail,
         codeDigest: digest(normalisedCode),
         clientType: expectedClientType || '',
@@ -855,6 +1446,7 @@ export async function reserveMonthlyWash({
         periodUsageKey(entitlement.id, period),
         periodReservationsKey(entitlement.id, period),
         reservationKey(reservationId),
+        allReservationsKey(entitlement.id),
     ], [
         digest(normalisedCode),
         normalisedEmail,
@@ -867,11 +1459,12 @@ export async function reserveMonthlyWash({
         String(MONTHLY_RESERVATION_TTL_SECONDS),
         expectedClientType || '',
         expectedPackageTier || '',
+        new Date().toISOString(),
     ]);
 
     return {
         ...getRedisStatus(result),
-        entitlement,
+        entitlement: currentEntitlement,
         period,
         reservationId,
         expiresAt,
@@ -888,7 +1481,8 @@ export function getMonthlyReservationError(status) {
         PACKAGE_MISMATCH: { statusCode: 403, message: 'The selected Standard or Premium package does not match this monthly entitlement.' },
         NOT_YET_VALID: { statusCode: 403, message: 'This monthly wash package is not active for the selected booking date.' },
         EXPIRED: { statusCode: 410, message: 'This monthly wash package has expired.' },
-        LIMIT_REACHED: { statusCode: 409, message: 'All washes in this package allowance for the selected month are used or reserved. Choose another month or book at the normal price.' },
+        LIMIT_REACHED: { statusCode: 409, message: 'The booking limit for this monthly billing period is used or reserved. Choose a date in another billing period or book at the normal price.' },
+        CREDITS_EXHAUSTED: { statusCode: 409, message: 'There are no prepaid washes left on this monthly package. Contact the business to record a renewal payment.' },
         ALREADY_USED: { statusCode: 409, message: 'This booking has already used a monthly wash.' },
         ALREADY_RESERVED: { statusCode: 409, message: 'This booking already has a monthly wash reservation.' },
         INVALID_ALLOWANCE: { statusCode: 500, message: 'The monthly wash package is not configured correctly.' },
@@ -898,10 +1492,20 @@ export function getMonthlyReservationError(status) {
 }
 
 export async function releaseMonthlyWashReservation({ entitlementId, period, reservationId }) {
+    const [reservation, entitlement] = await Promise.all([
+        redis.get(reservationKey(reservationId)),
+        redis.get(entitlementKey(entitlementId)),
+    ]);
+    const effectivePeriod = reservation?.bookingDate && entitlement
+        ? getBillingPeriod(reservation.bookingDate, entitlement.billingAnchor || entitlement.validFrom).start
+        : period;
     return Boolean(await redis.eval(RELEASE_WASH_SCRIPT, [
         reservationKey(reservationId),
         periodReservationsKey(entitlementId, period),
-    ], [reservationId]));
+        allReservationsKey(entitlementId),
+        entitlementKey(entitlementId),
+        periodReservationsKey(entitlementId, effectivePeriod),
+    ], [reservationId, new Date().toISOString()]));
 }
 
 export async function confirmMonthlyWashReservation({
@@ -919,6 +1523,7 @@ export async function confirmMonthlyWashReservation({
         paymentStatus: 'covered',
         confirmedAt,
     };
+    let effectivePeriod = period;
     const historyRecord = {
         status: 'used',
         reference,
@@ -933,15 +1538,28 @@ export async function confirmMonthlyWashReservation({
         promoCode: booking.appliedPromo,
         confirmedAt,
     };
+    const entitlement = await redis.get(entitlementKey(entitlementId));
+    if (entitlement) {
+        const periodDetails = getBillingPeriod(booking.bookingDate, entitlement.billingAnchor || entitlement.validFrom);
+        effectivePeriod = periodDetails.start;
+        historyRecord.period = effectivePeriod;
+        await migratePeriodHistory(entitlementId, periodDetails, entitlement.billingAnchor || entitlement.validFrom);
+        await ensureCreditLedger(entitlement, periodDetails);
+        await redis.eval(CLEAN_EXPIRED_RESERVATIONS_SCRIPT, [
+            entitlementKey(entitlementId),
+            allReservationsKey(entitlementId),
+        ], [String(Date.now()), confirmedAt]);
+    }
     const result = await redis.eval(CONFIRM_WASH_SCRIPT, [
         entitlementKey(entitlementId),
-        periodUsageKey(entitlementId, period),
-        periodReservationsKey(entitlementId, period),
+        periodUsageKey(entitlementId, effectivePeriod),
+        periodReservationsKey(entitlementId, effectivePeriod),
         reservationKey(reservationId),
         historyKey(entitlementId),
         bookingKey(reference),
         bookingSlotKey(booking.bookingDate, booking.bookingTime),
         confirmedBookingKey(reference),
+        allReservationsKey(entitlementId),
     ], [
         reservationId,
         reference,
@@ -949,6 +1567,7 @@ export async function confirmMonthlyWashReservation({
         JSON.stringify(confirmedBooking),
         String(CONFIRMED_BOOKING_TTL_SECONDS),
         String(Date.now()),
+        confirmedAt,
     ]);
     return result;
 }

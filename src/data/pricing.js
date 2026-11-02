@@ -25,7 +25,7 @@ export const packageGroups = {
             {
                 id: 'private-standard',
                 title: 'Standard Package',
-                washes: '2 Washes A Month',
+                washes: '2 Washes Per Billing Period',
                 badge: 'Discounted Rates',
                 image: privateTwoWashesImage,
                 imageAlt: 'Private client two-wash monthly package',
@@ -42,7 +42,7 @@ export const packageGroups = {
                 twelveMonthNote: 'Save R2400 per month',
                 monthlyNote: 'Save R150 per month',
                 details: [
-                    '2 washes per month',
+                    'Up to 2 bookings per billing period',
                     'Save R150 per month',
                     'Includes the standard wash services',
                 ],
@@ -50,7 +50,7 @@ export const packageGroups = {
             {
                 id: 'private-premium',
                 title: 'Premium Package',
-                washes: '4 Washes A Month',
+                washes: '4 Washes Per Billing Period',
                 badge: 'Best Value',
                 image: privateFourWashesImage,
                 imageAlt: 'Private client four-wash monthly package',
@@ -67,7 +67,7 @@ export const packageGroups = {
                 twelveMonthNote: 'Save R2400 per month',
                 monthlyNote: 'Save R300 per month',
                 details: [
-                    '4 washes per month',
+                    'Up to 4 bookings per billing period',
                     'Save R300 per month',
                     'Includes the standard wash services',
                 ],
@@ -83,7 +83,7 @@ export const packageGroups = {
             {
                 id: 'business-standard',
                 title: 'Standard Package',
-                washes: '2 Washes A Month',
+                washes: '2 Washes Per Billing Period',
                 badge: 'Discounted Rates',
                 image: businessTwoWashesImage,
                 imageAlt: 'Business, fleet or family two-wash monthly package',
@@ -97,7 +97,7 @@ export const packageGroups = {
                 packageNote:
                     'Business, fleet and family vehicles must have a minimum of three vehicles at the same premises.',
                 details: [
-                    '2 washes per month',
+                    'Up to 2 bookings per billing period',
                     'Discounted fleet rates',
                     'Suitable for business, fleet and family vehicles',
                     'Includes the standard wash services',
@@ -106,7 +106,7 @@ export const packageGroups = {
             {
                 id: 'business-premium',
                 title: 'Premium Package',
-                washes: '4 Washes A Month',
+                washes: '4 Washes Per Billing Period',
                 badge: 'Best Value',
                 image: businessFourWashesImage,
                 imageAlt: 'Business, fleet or family four-wash monthly package',
@@ -120,7 +120,7 @@ export const packageGroups = {
                 packageNote:
                     'Business, fleet and family vehicles must have a minimum of three vehicles at the same premises.',
                 details: [
-                    '4 washes per month',
+                    'Up to 4 bookings per billing period',
                     'Discounted fleet rates',
                     'Suitable for business, fleet and family vehicles',
                     'Includes the standard wash services',

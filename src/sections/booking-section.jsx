@@ -15,7 +15,6 @@ import {
     Package,
     RefreshCw,
     ShieldCheck,
-    Smartphone,
     Sun,
     Tag,
     X,
@@ -227,7 +226,6 @@ export default function BookingSection({ bookingRequest }) {
     const [contractFileError, setContractFileError] = useState('');
     const [serviceAreaAccepted, setServiceAreaAccepted] = useState(false);
     const [serviceLocation, setServiceLocation] = useState(null);
-    const [paymentMethod, setPaymentMethod] = useState('online');
     const [customer, setCustomer] = useState({
         firstName: '',
         surname: '',
@@ -596,7 +594,6 @@ export default function BookingSection({ bookingRequest }) {
                     serviceAreaAccepted,
                     termsAccepted,
                     contractAccepted: isMonthly ? contractAccepted : false,
-                    paymentMethod,
                     customer: {
                         ...customer,
                         registration: customer.registration.trim().toUpperCase(),
@@ -859,13 +856,13 @@ export default function BookingSection({ bookingRequest }) {
                             ) : (
                                 <div className='grid gap-3 sm:grid-cols-2'>
                                     {[
-                                        { id: 'standard', title: 'Standard', washes: 2, note: '2 eligible washes each calendar month' },
-                                        { id: 'premium', title: 'Premium', washes: 4, note: '4 eligible washes each calendar month' },
+                                        { id: 'standard', title: 'Standard', washes: 2, note: 'Up to 2 eligible bookings per billing period' },
+                                        { id: 'premium', title: 'Premium', washes: 4, note: 'Up to 4 eligible bookings per billing period' },
                                     ].map((item) => (
                                         <button key={item.id} type='button' aria-pressed={monthlyPackageTier === item.id} onClick={() => setMonthlyPackageTier(item.id)} className={`min-h-36 rounded-2xl border p-4 text-left transition ${monthlyPackageTier === item.id ? 'border-[#31553c] bg-[#edf4ee] ring-2 ring-[#31553c]/15' : 'border-[#dce6de] bg-white hover:border-[#9db6a2] hover:bg-[#f8faf8]'}`}>
                                             <span className={`grid size-10 place-items-center rounded-xl ${monthlyPackageTier === item.id ? 'bg-[#dcebdd] text-[#31553c]' : 'bg-[#f0f3f0] text-[#52635a]'}`}><Package className='size-5' /></span>
                                             <span className='mt-3 flex items-center justify-between gap-2 text-sm font-bold text-[#1e3128]'>{item.title}<span className='text-xs font-semibold text-[#31553c]'>{item.washes} washes / month</span></span>
-                                            <span className='mt-1 block text-xs leading-5 text-[#68776e]'>{item.note}. Unused washes do not roll over.</span>
+                                            <span className='mt-1 block text-xs leading-5 text-[#68776e]'>{item.note}. Unused prepaid washes roll over while the subscription is active and paid.</span>
                                         </button>
                                     ))}
                                 </div>
@@ -982,13 +979,13 @@ export default function BookingSection({ bookingRequest }) {
                                 <div className='flex items-start justify-between gap-4'>
                                     <div>
                                         <p className='flex items-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-sage sm:text-[9px]'>
-                                            <CreditCard className='size-3.5' /> Secure checkout
+                                            <CreditCard className='size-3.5' /> Booking request
                                         </p>
                                         <h3 id='checkout-title' className='mt-1 font-display text-[24px] font-medium tracking-[-0.025em] text-ink sm:text-[30px]'>
-                                            Your booking details
+                                            Request a booking
                                         </h3>
                                         <p className='mt-1 max-w-xl text-[9px] leading-[1.5] text-body sm:text-[10px]'>
-                                            Complete the details below. Your information is used only to process and manage your booking.
+                                            Submit your details for business review. If approved, you can choose how to pay before the booking is finalised.
                                         </p>
                                     </div>
 
@@ -1197,48 +1194,10 @@ export default function BookingSection({ bookingRequest }) {
                                         </label>
                                     </div>
 
-                                    <div className='mt-4'>
-                                        <span className='mb-1.5 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>How would you like to pay?</span>
-                                        <div className='grid gap-2 sm:grid-cols-2'>
-                                            <button
-                                                type='button'
-                                                onClick={() => setPaymentMethod('online')}
-                                                aria-pressed={paymentMethod === 'online'}
-                                                className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${paymentMethod === 'online' ? 'border-[#294633] bg-[#eaf2eb] shadow-[0_8px_20px_-16px_rgba(20,26,22,.5)]' : 'border-line bg-white/80 hover:border-sage/40'}`}
-                                            >
-                                                <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${paymentMethod === 'online' ? 'bg-[#294633] text-white' : 'bg-sagelight text-sagedeep'}`}><CreditCard className='size-3.5' /></span>
-                                                <span className='min-w-0'>
-                                                    <span className='block text-[9.5px] font-semibold text-ink sm:text-[10.5px]'>Pay securely online now</span>
-                                                    <span className='mt-0.5 block text-[8px] leading-[1.4] text-body sm:text-[8.5px]'>Yoco secure checkout, right after you confirm your details.</span>
-                                                </span>
-                                            </button>
-
-                                            <button
-                                                type='button'
-                                                onClick={() => setPaymentMethod('onsite')}
-                                                aria-pressed={paymentMethod === 'onsite'}
-                                                className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${paymentMethod === 'onsite' ? 'border-[#294633] bg-[#eaf2eb] shadow-[0_8px_20px_-16px_rgba(20,26,22,.5)]' : 'border-line bg-white/80 hover:border-sage/40'}`}
-                                            >
-                                                <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${paymentMethod === 'onsite' ? 'bg-[#294633] text-white' : 'bg-sagelight text-sagedeep'}`}><Smartphone className='size-3.5' /></span>
-                                                <span className='min-w-0'>
-                                                    <span className='block text-[9.5px] font-semibold text-ink sm:text-[10.5px]'>Pay on-site on the day</span>
-                                                    <span className='mt-0.5 block text-[8px] leading-[1.4] text-body sm:text-[8.5px]'>Card machine (tap, chip &amp; PIN) or Google Pay / Apple Pay from your phone.</span>
-                                                </span>
-                                            </button>
-                                        </div>
+                                    <div className='mt-4 flex items-start gap-2 rounded-xl bg-sagelight/65 px-3 py-2.5'>
+                                        <ShieldCheck className='mt-0.5 size-3.5 shrink-0 text-sage' />
+                                        <p className='text-[8.5px] leading-[1.45] text-body sm:text-[9.5px]'>Your request will be reviewed before it is confirmed. No payment is taken while it is under review. If approved, you can choose secure Yoco payment or pay by card machine on-site.</p>
                                     </div>
-
-                                    {paymentMethod === 'online' ? (
-                                        <div className='mt-2.5 flex items-start gap-2 rounded-xl bg-sagelight/65 px-3 py-2.5'>
-                                            <ShieldCheck className='mt-0.5 size-3.5 shrink-0 text-sage' />
-                                            <p className='text-[8px] leading-[1.45] text-body sm:text-[9px]'>Yoco handles card details securely. A10tion To Detail stores only the booking/order details needed to provide the service and reconcile payment.</p>
-                                        </div>
-                                    ) : (
-                                        <div className='mt-2.5 flex items-start gap-2 rounded-xl bg-sagelight/65 px-3 py-2.5'>
-                                            <Smartphone className='mt-0.5 size-3.5 shrink-0 text-sage' />
-                                            <p className='text-[8px] leading-[1.45] text-body sm:text-[9px]'>No payment is taken now. Your slot is reserved immediately - simply have your card or phone ready for our technician when we arrive.</p>
-                                        </div>
-                                    )}
 
                                     <div className='sticky bottom-0 z-20 -mx-4 mt-3 shrink-0 border-t border-[#dfe6e0] bg-[#f7f8f5]/95 px-4 pb-[max(4px,env(safe-area-inset-bottom))] pt-3 backdrop-blur-md sm:-mx-7 sm:px-7 lg:-mx-10 lg:px-10 xl:-mx-14 xl:px-14'>
                                         {paymentError && (
@@ -1253,10 +1212,8 @@ export default function BookingSection({ bookingRequest }) {
                                             className='group flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 text-[10px] font-semibold text-white shadow-[0_10px_25px_-15px_rgba(20,26,22,.8)] transition hover:-translate-y-px hover:bg-[#18231d] disabled:cursor-wait disabled:opacity-60 sm:min-h-[49px] sm:text-[11px]'
                                         >
                                             {isSubmitting
-                                                ? <><LoaderCircle className='size-3.5 animate-spin' /> {paymentMethod === 'onsite' ? 'Confirming your booking…' : 'Preparing secure payment…'}</>
-                                                : paymentMethod === 'onsite'
-                                                  ? <>Confirm booking <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' /></>
-                                                  : <>Continue to secure payment <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' /></>}
+                                                ? <><LoaderCircle className='size-3.5 animate-spin' /> Submitting request…</>
+                                                : <>Submit booking request for review <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' /></>}
                                         </button>
                                     </div>
                                 </form>

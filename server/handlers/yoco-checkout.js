@@ -91,11 +91,12 @@ export default async function handler(req, res) {
             return;
         }
         approvalRequest = authorization.request;
-        if (approvalRequest.paymentMethod !== 'online') {
-            res.status(400).json({ message: 'This booking request was set up for on-site payment.' });
+        const selectedPaymentMethod = String(booking.paymentMethod || approvalRequest.paymentMethod || 'online');
+        if (selectedPaymentMethod !== 'online') {
+            res.status(400).json({ message: 'Choose online payment to continue to Yoco checkout.' });
             return;
         }
-        booking = approvalRequest.booking;
+        booking = { ...approvalRequest.booking, paymentMethod: selectedPaymentMethod };
 
         const {
             serviceLocation,
@@ -365,7 +366,7 @@ export default async function handler(req, res) {
                 },
                 createdAt: new Date().toISOString(),
             };
-            await startBookingRequestCheckout(approvalRequest.reference, continuationToken);
+            await startBookingRequestCheckout(approvalRequest.reference, continuationToken, selectedPaymentMethod);
             checkoutRequestStarted = true;
             const confirmation = await completeMonthlyBookingRequest(approvalRequest, bookingRecord);
             if (confirmation !== 'OK' && confirmation !== 'DUPLICATE') {
@@ -431,7 +432,7 @@ export default async function handler(req, res) {
 
         const siteUrl = process.env.SITE_URL || 'https://sage00101.github.io/atd/';
         const idempotencyKey = crypto.randomUUID();
-        await startBookingRequestCheckout(approvalRequest.reference, continuationToken);
+        await startBookingRequestCheckout(approvalRequest.reference, continuationToken, selectedPaymentMethod);
         checkoutRequestStarted = true;
 
         const yocoRes = await fetch('https://payments.yoco.com/api/checkouts', {

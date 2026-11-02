@@ -12,7 +12,7 @@ function packageLabel(booking) {
     if (booking.bookingType === 'monthly-entitlement') {
         const clientType = booking.monthlyClientType === 'business' ? 'Business / Fleet / Family' : 'Private Client';
         const tier = booking.monthlyPackageTier === 'premium' ? 'Premium' : 'Standard';
-        return `${clientType} — ${tier} (${booking.monthlyAllowance || (tier === 'Premium' ? 4 : 2)} washes/month)`;
+        return `${clientType} — ${tier} (${booking.monthlyAllowance || (tier === 'Premium' ? 4 : 2)} washes per billing period)`;
     }
     return booking.packageName || 'Single Wash';
 }
@@ -44,7 +44,7 @@ export function buildBookingRequestEmailHtml(request, { status, continuationUrl,
         ['Wash', booking.vehicleType],
         ['Registration', booking.customer?.registration],
         ['Date and time', `${booking.bookingDate} at ${booking.bookingTime}`],
-        ['Payment method', isMonthly ? 'Monthly package entitlement' : request.paymentMethod === 'onsite' ? 'Pay on arrival' : 'Online payment'],
+        ['Payment method', isMonthly ? 'Monthly package entitlement' : 'Choose after the request is approved'],
         ['Monthly code', isMonthly ? `Assigned entitlement ${request.monthlyReservation?.entitlementId?.slice(0, 8)?.toUpperCase() || ''}` : null],
     ].filter(([, value]) => value);
     const rows = fields.map(([label, value]) => `

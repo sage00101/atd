@@ -93,11 +93,12 @@ export default async function handler(req, res) {
             return;
         }
         approvalRequest = authorization.request;
-        if (approvalRequest.paymentMethod !== 'onsite') {
-            res.status(400).json({ message: 'This booking request was set up for online payment.' });
+        const selectedPaymentMethod = String(booking.paymentMethod || approvalRequest.paymentMethod || 'online');
+        if (selectedPaymentMethod !== 'onsite') {
+            res.status(400).json({ message: 'Choose on-site payment to confirm this booking.' });
             return;
         }
-        booking = approvalRequest.booking;
+        booking = { ...approvalRequest.booking, paymentMethod: selectedPaymentMethod };
 
         const {
             serviceLocation,
@@ -368,7 +369,7 @@ export default async function handler(req, res) {
         };
         const monthlyCovered = Boolean(reservedMonthlyWash);
         if (reservedMonthlyWash) {
-            await startBookingRequestCheckout(approvalRequest.reference, continuationToken);
+            await startBookingRequestCheckout(approvalRequest.reference, continuationToken, selectedPaymentMethod);
             checkoutRequestStarted = true;
             const confirmation = await completeMonthlyBookingRequest(approvalRequest, bookingRecord);
             if (confirmation !== 'OK' && confirmation !== 'DUPLICATE') {
@@ -385,7 +386,7 @@ export default async function handler(req, res) {
             }
             reservedMonthlyWash = null;
         } else {
-            await startBookingRequestCheckout(approvalRequest.reference, continuationToken);
+            await startBookingRequestCheckout(approvalRequest.reference, continuationToken, selectedPaymentMethod);
             checkoutRequestStarted = true;
             await saveOnsiteBooking(reference, bookingRecord);
             await markBookingRequestConfirmed(approvalRequest.reference);
