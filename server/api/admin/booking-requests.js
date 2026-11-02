@@ -3,6 +3,7 @@ import '../_lib/load-env.js';
 import { applyCors } from '../_lib/cors.js';
 import {
     getBookingRequestsForAdmin,
+    resendBookingRequestDecisionEmail,
     transitionBookingRequest,
 } from '../_lib/booking-requests.js';
 
@@ -35,6 +36,15 @@ export default async function handler(req, res) {
         }
         const reference = String(req.body?.reference || '').trim();
         const action = String(req.body?.action || '').trim();
+        if (action === 'resend-notification') {
+            if (!reference) {
+                res.status(400).json({ message: 'A booking reference is required.' });
+                return;
+            }
+            const request = await resendBookingRequestDecisionEmail(reference);
+            res.status(200).json({ request });
+            return;
+        }
         if (!reference || !['approve', 'decline'].includes(action)) {
             res.status(400).json({ message: 'A booking reference and approve/decline action are required.' });
             return;

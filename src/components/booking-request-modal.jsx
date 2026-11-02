@@ -25,7 +25,7 @@ const STATUS_CONTENT = {
 };
 
 export default function BookingRequestModal({ controller }) {
-    const { request, statusError, isCancelling, cancelRequest, refresh } = controller;
+    const { request, statusError, isCancelling, isRefreshing, cancelRequest, refresh } = controller;
     const [confirmCancel, setConfirmCancel] = useState(false);
 
     useEffect(() => setConfirmCancel(false), [request?.reference, request?.status]);
@@ -92,7 +92,7 @@ export default function BookingRequestModal({ controller }) {
                     {statusError && (
                         <div className='mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-900' role='alert'>
                             <XCircle className='mt-0.5 size-4 shrink-0' /> <span className='min-w-0 flex-1'>{statusError}</span>
-                            <button type='button' onClick={refresh} className='shrink-0 font-bold underline underline-offset-2'>Retry</button>
+                            <button type='button' disabled={isRefreshing} onClick={refresh} className='shrink-0 font-bold underline underline-offset-2 disabled:opacity-60'>{isRefreshing ? 'Checking…' : 'Retry'}</button>
                         </div>
                     )}
 
@@ -118,8 +118,8 @@ export default function BookingRequestModal({ controller }) {
                                     Continue securely <ArrowRight className='size-4' />
                                 </a>
                             )}
-                            <button type='button' onClick={refresh} className='inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#edf4ee] px-4 text-sm font-bold text-[#31553c] transition hover:bg-[#e1eee3]'>
-                                <RefreshCw className='size-4' /> Refresh status
+                            <button type='button' disabled={isRefreshing} onClick={refresh} className='inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#edf4ee] px-4 text-sm font-bold text-[#31553c] transition hover:bg-[#e1eee3] disabled:cursor-wait disabled:opacity-65'>
+                                <RefreshCw className={`size-4 ${isRefreshing ? 'animate-spin' : ''}`} /> {isRefreshing ? 'Refreshing…' : 'Refresh status'}
                             </button>
                         </div>
                     )}

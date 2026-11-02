@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, CheckCircle2, Clock3, LoaderCircle, ShieldCheck, XCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock3, LoaderCircle, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const REQUEST_ENDPOINT = `${API_BASE_URL}/api/bookings/requests`;
@@ -22,6 +22,7 @@ export default function BookingRequestPage() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
 
     const loadStatus = useCallback(async () => {
         if (!reference || !token) {
@@ -33,7 +34,7 @@ export default function BookingRequestPage() {
             const url = new URL(REQUEST_ENDPOINT, window.location.origin);
             url.searchParams.set('reference', reference);
             url.searchParams.set('token', token);
-            const response = await fetch(url);
+            const response = await fetch(url, { cache: 'no-store' });
             const result = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(result.message || 'Booking status could not be loaded.');
             setRequest(result);
@@ -48,10 +49,20 @@ export default function BookingRequestPage() {
     useEffect(() => {
         loadStatus();
         const timer = window.setInterval(() => {
-            if (request?.status === 'pending' || request?.status === 'payment_pending') loadStatus();
+            if (request?.status === 'pending' || request?.status === 'checkout_starting' || request?.status === 'payment_pending') loadStatus();
         }, 15_000);
         return () => window.clearInterval(timer);
     }, [loadStatus, request?.status]);
+
+    const refreshStatus = async () => {
+        if (refreshing) return;
+        setRefreshing(true);
+        try {
+            await loadStatus();
+        } finally {
+            setRefreshing(false);
+        }
+    };
 
     const continueBooking = async () => {
         setSubmitting(true);
@@ -113,10 +124,10 @@ export default function BookingRequestPage() {
                 {request?.expiresAt && !isConfirmed && (
                     <p className='mt-4 text-xs text-[#68776e]'>Secure link expires {formatExpiry(request.expiresAt)}.</p>
                 )}
-                {request?.status === 'approved' && (
+                {request?.canContinue && (
                     <button type='button' disabled={submitting} onClick={continueBooking} className='mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1e4931] px-5 text-sm font-semibold text-white disabled:opacity-60'>
                         {submitting ? <LoaderCircle className='size-4 animate-spin' /> : <ShieldCheck className='size-4' />}
-                        {submitting ? 'Preparing your booking…' : request.paymentMethod === 'onsite' ? 'Confirm booking · pay on arrival' : 'Continue to secure checkout'}
+                        {submitting ? 'Preparing your booking…' : request.status === 'checkout_starting' ? 'Retry secure checkout' : request.paymentMethod === 'onsite' ? 'Confirm booking · pay on arrival' : 'Continue to secure checkout'}
                         {!submitting && <ArrowRight className='size-4' />}
                     </button>
                 )}
@@ -126,6 +137,9 @@ export default function BookingRequestPage() {
                     </a>
                 )}
                 {error && <button type='button' onClick={loadStatus} className='mt-4 text-sm font-semibold text-[#31553c] underline'>Try again</button>}
+                <button type='button' disabled={refreshing || loading} onClick={refreshStatus} className='mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#dce6de] px-4 text-xs font-semibold text-[#31553c] disabled:cursor-wait disabled:opacity-60'>
+                    <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} /> {refreshing ? 'Refreshing status…' : 'Refresh status'}
+                </button>
                 <a href={import.meta.env.BASE_URL} className='mt-6 inline-flex items-center gap-2 text-sm font-semibold text-[#52635a]'>
                     Return to website
                 </a>

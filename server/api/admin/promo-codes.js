@@ -204,7 +204,9 @@ function renderBookingRequests(){
     const statusClass=String(item.status||'').toLowerCase().replace(/\\s+/g,'-');
     const actions=item.status==='pending'
       ? '<div class="entitlement-actions"><button type="button" data-action="approve" data-reference="'+escapeHtml(item.reference)+'">Approve request</button><button class="danger" type="button" data-action="decline" data-reference="'+escapeHtml(item.reference)+'">Decline</button></div>'
-      : '';
+      : ['approved','declined','checkout_starting','payment_pending'].includes(item.status)&&item.notificationSent!==true
+        ? '<div class="entitlement-actions"><button type="button" data-action="resend-notification" data-reference="'+escapeHtml(item.reference)+'">Resend outcome email</button></div>'
+        : '';
     return '<article class="entitlement-card" data-reference="'+escapeHtml(item.reference)+'">'+
       '<div class="entitlement-top"><div><h3 class="entitlement-name">'+escapeHtml(name)+'</h3><p class="entitlement-meta">'+escapeHtml(item.customer?.email)+' · '+escapeHtml(item.customer?.mobile)+'<br>'+escapeHtml(packageText)+'<br>'+escapeHtml(item.vehicleType)+' · '+escapeHtml(item.customer?.registration)+'<br>'+escapeHtml(item.bookingDate)+' at '+escapeHtml(item.bookingTime)+' · '+(item.paymentMethod==='onsite'?'Pay on arrival':'Online payment')+'</p></div><span class="status-pill '+statusClass+'">'+escapeHtml(item.status.replaceAll('_',' '))+'</span></div>'+
       '<div class="entitlement-code"><code>Reference '+escapeHtml(item.reference)+'</code><span>Expires '+escapeHtml(new Date(item.expiresAt).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg'}))+'</span></div>'+
@@ -467,7 +469,7 @@ bookingRequestCards.addEventListener('click',async event=>{
     const result=await bookingRequestApi('POST',{reference,action,reason:reason||''});
     await loadBookingRequests();
     const warning=result.request?.notificationError;
-    setStatus(warning?'Request '+(action==='approve'?'approved':'declined')+', but email notification needs attention: '+warning:action==='approve'?'Request approved and customer notified.':'Request declined and temporary reservations released.','ok');
+    setStatus(warning?(action==='resend-notification'?'Outcome email resend failed: ':'Request '+(action==='approve'?'approved':'declined')+', but email notification needs attention: ')+warning:action==='approve'?'Request approved and customer notified.':action==='decline'?'Request declined and temporary reservations released.':action==='resend-notification'?'Outcome email sent.':'Booking request updated.','ok');
   }catch(error){setStatus(error.message,'error');}
   finally{button.disabled=false;}
 });

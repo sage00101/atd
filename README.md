@@ -33,6 +33,9 @@ the temporary appointment slot and any monthly wash reservation. Single-wash
 codes are reserved only when an approved customer starts checkout and are
 redeemed after Yoco confirms payment. Monthly entitlement washes are reserved
 while approval is pending and counted only when the booking is confirmed.
+If an outcome email cannot be sent, the manager can retry it from the request
+card. A checkout interrupted during startup can be retried from the customer's
+secure status page after the in-progress attempt becomes stale.
 
 The request API is `/api/bookings/requests`; approval actions are protected by
 the existing `ADMIN_API_KEY` or `CALENDAR_API_KEY` at

@@ -22,10 +22,23 @@ import {
 import { getServiceAreaError } from './service-area.js';
 
 const REQUEST_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+const CHECKOUT_START_RETRY_MS = 90_000;
 const REQUEST_INDEX_KEY = 'booking:approval:index';
 const requestKey = (reference) => `booking:approval:${reference}`;
 const tokenDigest = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
 const customerRequestLockKey = (email) => `booking:approval:customer:${crypto.createHash('sha256').update(normaliseEmail(email)).digest('hex')}`;
+function decodeRedisRequest(value) {
+    if (value && typeof value === 'object') return value;
+    if (typeof value !== 'string') throw new Error('Booking request data returned from Redis is invalid.');
+    return JSON.parse(value);
+}
+
+function canRetryCheckoutStart(request) {
+    return request.status === 'checkout_starting'
+        && !request.checkoutUrl
+        && Date.now() - Date.parse(request.updatedAt) >= CHECKOUT_START_RETRY_MS;
+}
+
 function encryptContinuationToken(token) {
     const secret = process.env.BOOKING_TOKEN_ENCRYPTION_KEY
         || process.env.ADMIN_API_KEY
@@ -68,6 +81,9 @@ local raw = redis.call('GET', KEYS[1])
 if not raw then return {'NOT_FOUND'} end
 local request = cjson.decode(raw)
 if request.status ~= ARGV[1] then return {'STATUS', request.status, raw} end
+if ARGV[8] and ARGV[8] ~= '' and request.updatedAt ~= ARGV[8] then
+  return {'STATUS', request.status, raw}
+end
 if tonumber(request.expiresAt) <= tonumber(ARGV[3]) then
   request.status = 'expired'
   request.updatedAt = ARGV[4]
@@ -239,7 +255,7 @@ async function expireRequestIfNeeded(request) {
             await releaseRequestReservations(request);
             return { ...request, status: 'expired' };
         }
-        return result?.[2] ? JSON.parse(result[2]) : request;
+        return result?.[2] ? decodeRedisRequest(result[2]) : request;
     }
     return request;
 }
@@ -419,6 +435,7 @@ export async function getBookingRequestStatus(reference, token) {
         packageTier: request.booking.monthlyPackageTier || null,
         monthlyAllowance: request.booking.monthlyAllowance || null,
         checkoutUrl: request.status === 'payment_pending' ? request.checkoutUrl : null,
+        canContinue: request.status === 'approved' || canRetryCheckoutStart(request),
         message: request.status === 'pending' ? 'Your request is waiting for business approval.'
             : request.status === 'approved' ? 'Your request is approved. Continue to complete the booking.'
                 : request.status === 'checkout_starting' ? 'Your secure checkout is being prepared.'
@@ -433,26 +450,32 @@ export async function getBookingRequestStatus(reference, token) {
 export async function authorizeBookingContinuation(reference, token) {
     const request = await getValidRequest(reference, token);
     if (!request) return { error: 'This booking link is invalid or has expired.' };
-    if (request.status !== 'approved') return { error: 'This booking request is not approved or has already been processed.' };
+    if (request.status !== 'approved' && !canRetryCheckoutStart(request)) {
+        return { error: request.status === 'checkout_starting'
+            ? 'Your secure checkout is still being prepared. Please wait a moment and retry.'
+            : 'This booking request is not approved or has already been processed.' };
+    }
     return { request };
 }
 
 export async function startBookingRequestCheckout(reference, token) {
     const authorization = await authorizeBookingContinuation(reference, token);
     if (authorization.error) throw new Error(authorization.error);
+    const request = authorization.request;
     const transition = await redis.eval(REQUEST_TRANSITION_SCRIPT, [
         requestKey(reference),
-        customerRequestLockKey(authorization.request.booking.customer.email),
+        customerRequestLockKey(request.booking.customer.email),
     ], [
-        'approved',
+        request.status,
         'checkout_starting',
         String(Date.now()),
         new Date().toISOString(),
         '',
         '',
         reference,
+        request.status === 'checkout_starting' ? request.updatedAt : '',
     ]);
-    if (transition?.[0] === 'OK') return JSON.parse(transition[1]);
+    if (transition?.[0] === 'OK') return decodeRedisRequest(transition[1]);
     throw new Error('This approved booking is already being processed. Refresh this page in a moment.');
 }
 
@@ -490,7 +513,7 @@ export async function markBookingRequestConfirmed(reference) {
         requestKey(reference),
         customerRequestLockKey(request.booking.customer.email),
     ], [new Date().toISOString(), reference]);
-    return typeof updated === 'string' ? JSON.parse(updated) : updated;
+    return updated ? decodeRedisRequest(updated) : updated;
 }
 
 export async function markBookingRequestPaymentFailed(reference) {
@@ -543,7 +566,7 @@ export async function transitionBookingRequest(reference, action, reason = '') {
         const status = transition?.[1] || request.status;
         throw new Error(`This request is no longer pending approval (${status}).`);
     }
-    const updated = JSON.parse(transition[1]);
+    const updated = decodeRedisRequest(transition[1]);
     if (action === 'decline') await releaseRequestReservations(request);
     try {
         const continuationUrl = action === 'approve'
@@ -551,12 +574,40 @@ export async function transitionBookingRequest(reference, action, reason = '') {
             : null;
         const delivery = await sendBookingApprovalEmail(updated, continuationUrl, nextStatus);
         updated.notificationError = delivery.failed ? 'Some decision emails could not be sent.' : null;
+        updated.notificationSent = delivery.failed === 0;
+        await redis.set(requestKey(reference), updated);
     } catch (error) {
         console.error('[booking request decision email failed]', reference, error);
         updated.notificationError = error instanceof Error ? error.message : 'Decision email could not be sent.';
         await redis.set(requestKey(reference), updated);
     }
     return safeRequestForAdmin(updated);
+}
+
+export async function resendBookingRequestDecisionEmail(reference) {
+    const request = await redis.get(requestKey(reference));
+    if (!request) throw new Error('Booking request not found.');
+    if (!['approved', 'declined', 'checkout_starting', 'payment_pending'].includes(request.status)) {
+        throw new Error('An outcome email can only be resent after approval or decline.');
+    }
+    const outcome = request.status === 'declined' ? 'declined' : 'approved';
+
+    try {
+        const continuationUrl = outcome === 'approved'
+            ? getPublicSiteUrl(reference, decryptContinuationToken(request.tokenCiphertext))
+            : null;
+        const delivery = await sendBookingApprovalEmail(request, continuationUrl, outcome);
+        request.notificationError = delivery.failed ? 'Some decision emails could not be sent.' : null;
+        request.notificationSent = delivery.failed === 0;
+    } catch (error) {
+        console.error('[booking request decision email resend failed]', reference, error);
+        request.notificationError = error instanceof Error ? error.message : 'Decision email could not be sent.';
+        request.notificationSent = false;
+        await redis.set(requestKey(reference), request);
+        throw new Error(request.notificationError);
+    }
+    await redis.set(requestKey(reference), request);
+    return safeRequestForAdmin(request);
 }
 
 export async function cancelBookingApprovalRequest(reference, token) {

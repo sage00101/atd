@@ -27,6 +27,7 @@ export default function useBookingRequest() {
     const [request, setRequest] = useState(readStoredRequest);
     const [statusError, setStatusError] = useState('');
     const [isCancelling, setIsCancelling] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
     const clearRequest = useCallback(() => {
         clearStoredRequest();
@@ -140,12 +141,16 @@ export default function useBookingRequest() {
 
     const refresh = useCallback(async () => {
         if (!request) return;
+        if (isRefreshing) return;
+        setIsRefreshing(true);
         try {
             await refreshStatus(request);
         } catch (error) {
             setStatusError(error instanceof TypeError ? STATUS_UNAVAILABLE_MESSAGE : error.message || 'The booking status could not be refreshed.');
+        } finally {
+            setIsRefreshing(false);
         }
-    }, [refreshStatus, request]);
+    }, [isRefreshing, refreshStatus, request]);
 
-    return { request, statusError, isCancelling, saveRequest, cancelRequest, refresh };
+    return { request, statusError, isCancelling, isRefreshing, saveRequest, cancelRequest, refresh };
 }
