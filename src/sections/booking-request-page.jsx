@@ -50,7 +50,7 @@ export default function BookingRequestPage() {
         loadStatus();
         const timer = window.setInterval(() => {
             if (request?.status === 'pending' || request?.status === 'checkout_starting' || request?.status === 'payment_pending') loadStatus();
-        }, 15_000);
+        }, request?.status === 'checkout_starting' ? 5_000 : 15_000);
         return () => window.clearInterval(timer);
     }, [loadStatus, request?.status]);
 
@@ -92,8 +92,10 @@ export default function BookingRequestPage() {
     const isConfirmed = request?.status === 'confirmed';
     const isDeclined = request?.status === 'declined';
     const isExpired = request?.status === 'expired';
+    const isCheckoutStarting = request?.status === 'checkout_starting';
     const icon = loading
         ? <LoaderCircle className='size-8 animate-spin' />
+        : isCheckoutStarting ? <LoaderCircle className='size-8 animate-spin' />
         : isConfirmed ? <CheckCircle2 className='size-8' />
             : isDeclined || isExpired ? <XCircle className='size-8' />
                 : <Clock3 className='size-8' />;
@@ -101,6 +103,7 @@ export default function BookingRequestPage() {
         : isDeclined ? 'Request not approved'
             : isExpired ? 'Request link expired'
                 : request?.status === 'approved' ? 'Your request is approved'
+                    : isCheckoutStarting ? 'Checkout is being prepared'
                     : request?.status === 'payment_pending' ? 'Complete your payment'
                         : 'Booking request status';
 

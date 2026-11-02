@@ -35,7 +35,9 @@ redeemed after Yoco confirms payment. Monthly entitlement washes are reserved
 while approval is pending and counted only when the booking is confirmed.
 If an outcome email cannot be sent, the manager can retry it from the request
 card. A checkout interrupted during startup can be retried from the customer's
-secure status page after the in-progress attempt becomes stale.
+secure status page after the in-progress attempt becomes stale. Active requests
+remain available in a dismissible status drawer and a navbar shortcut appears
+once the request is approved or checkout has started.
 
 The request API is `/api/bookings/requests`; approval actions are protected by
 the existing `ADMIN_API_KEY` or `CALENDAR_API_KEY` at

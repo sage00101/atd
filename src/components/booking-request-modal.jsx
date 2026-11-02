@@ -1,81 +1,91 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, CheckCircle2, Clock3, LoaderCircle, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Clock3, LoaderCircle, RefreshCw, ShieldCheck, X, XCircle } from 'lucide-react';
 
 const STATUS_CONTENT = {
     pending: {
         title: 'Your request is under review',
-        description: 'We have received your booking request. It will remain reserved while the business reviews it. You cannot submit another request until this one is cancelled or decided.',
+        description: 'Your requested slot is held while the business reviews it. You cannot submit another request until this one is cancelled or decided.',
         label: 'Awaiting business decision',
     },
     approved: {
         title: 'Your booking is approved',
-        description: 'Continue using your secure booking link to complete the booking. You cannot cancel or submit another request after approval.',
+        description: 'Continue securely to complete this booking. The submitted appointment details are already saved; you do not need to submit the request again.',
         label: 'Approved · action required',
     },
     checkout_starting: {
-        title: 'Preparing your secure checkout',
-        description: 'Your approved booking is being processed. Continue from your secure booking link if needed.',
+        title: 'Checkout is being prepared',
+        description: 'Your approved booking is still being processed. If it does not continue, refresh the status or try the secure link again in a moment.',
         label: 'Processing',
     },
     payment_pending: {
-        title: 'Complete your booking',
-        description: 'Your approved booking is waiting for payment. Continue from the secure link to finish.',
+        title: 'Complete your payment',
+        description: 'Your approved booking is waiting for payment. Continue securely to finish checkout.',
         label: 'Payment pending',
     },
 };
 
 export default function BookingRequestModal({ controller }) {
-    const { request, statusError, isCancelling, isRefreshing, cancelRequest, refresh } = controller;
+    const {
+        request,
+        statusError,
+        isCancelling,
+        isRefreshing,
+        isPanelOpen,
+        cancelRequest,
+        refresh,
+        openPanel,
+        closePanel,
+    } = controller;
     const [confirmCancel, setConfirmCancel] = useState(false);
 
     useEffect(() => setConfirmCancel(false), [request?.reference, request?.status]);
-
-    const isOpen = Boolean(request);
-
-    useEffect(() => {
-        if (!isOpen) return undefined;
-        const previousOverflow = document.body.style.overflow;
-        const handleEscape = (event) => {
-            if (event.key === 'Escape') event.preventDefault();
-        };
-        document.body.style.overflow = 'hidden';
-        document.addEventListener('keydown', handleEscape);
-        return () => {
-            document.body.style.overflow = previousOverflow;
-            document.removeEventListener('keydown', handleEscape);
-        };
-    }, [isOpen]);
 
     if (!request) return null;
     const content = STATUS_CONTENT[request.status] || STATUS_CONTENT.pending;
     const isPending = request.status === 'pending';
 
     return (
-        <div className='fixed inset-0 z-[300] flex items-center justify-center overflow-y-auto bg-[#10251a]/75 px-3 py-5 backdrop-blur-sm sm:px-6' role='presentation'>
-            <section
-                role='dialog'
-                aria-modal='true'
-                aria-labelledby='booking-request-title'
-                className='my-auto w-full max-w-xl overflow-hidden rounded-[24px] border border-[#d6ead7] bg-white shadow-[0_30px_100px_rgba(0,0,0,.32)]'
+        <>
+            <button
+                type='button'
+                onClick={openPanel}
+                aria-label='Open booking request status'
+                aria-expanded={isPanelOpen}
+                className={`fixed right-0 top-1/2 z-[299] -translate-y-1/2 rounded-l-xl border border-r-0 border-[#d6ead7] bg-[#1e4931] px-2.5 py-4 text-[11px] font-bold text-white shadow-xl transition-all duration-300 hover:bg-[#294c37] sm:px-3 ${isPanelOpen ? 'translate-x-full opacity-0' : 'translate-x-0 opacity-100'}`}
+                style={{ writingMode: 'vertical-rl' }}
             >
-                <div className='relative overflow-hidden bg-gradient-to-br from-[#dff2d8] via-[#f2f8e9] to-[#fff3cb] px-5 pb-5 pt-6 sm:px-8 sm:pb-7 sm:pt-8'>
+                Booking status
+            </button>
+
+            <aside
+                role='dialog'
+                aria-modal='false'
+                aria-labelledby='booking-request-title'
+                aria-hidden={!isPanelOpen}
+                inert={!isPanelOpen}
+                className={`fixed bottom-3 right-3 top-3 z-[300] flex w-[min(30rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-[24px] border border-[#d6ead7] bg-white shadow-[0_24px_80px_rgba(0,0,0,.28)] transition-transform duration-300 ease-out sm:bottom-5 sm:right-5 sm:top-5 ${isPanelOpen ? 'translate-x-0' : 'pointer-events-none translate-x-[calc(100%+2rem)]'}`}
+            >
+                <div className='relative shrink-0 overflow-hidden bg-gradient-to-br from-[#dff2d8] via-[#f2f8e9] to-[#fff3cb] px-5 pb-5 pt-5 sm:px-7 sm:pb-6 sm:pt-7'>
                     <span className='pointer-events-none absolute -right-12 -top-20 size-48 rounded-full bg-white/70 blur-2xl' />
-                    <div className='relative flex items-start gap-4'>
-                        <div className='grid size-14 shrink-0 place-items-center rounded-2xl border border-white/80 bg-white/90 text-[#31553c] shadow-sm sm:size-16'>
-                            {isPending ? <Clock3 className='size-8' /> : request.status === 'approved' ? <CheckCircle2 className='size-8' /> : <ShieldCheck className='size-8' />}
+                    <div className='relative flex items-start gap-3'>
+                        <div className='grid size-12 shrink-0 place-items-center rounded-2xl border border-white/80 bg-white/90 text-[#31553c] shadow-sm'>
+                            {isPending ? <Clock3 className='size-6' /> : request.status === 'approved' ? <CheckCircle2 className='size-6' /> : <ShieldCheck className='size-6' />}
                         </div>
-                        <div className='min-w-0 pt-1'>
-                            <span className='inline-flex rounded-full border border-[#c8dfc7] bg-white/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[.13em] text-[#31553c] sm:text-[10px]'>{content.label}</span>
-                            <h2 id='booking-request-title' className='mt-2 font-display text-[22px] font-semibold leading-tight tracking-[-.02em] text-[#1e3128] sm:text-[30px]'>{content.title}</h2>
+                        <div className='min-w-0 flex-1 pt-0.5'>
+                            <span className='inline-flex rounded-full border border-[#c8dfc7] bg-white/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-[.13em] text-[#31553c]'>{content.label}</span>
+                            <h2 id='booking-request-title' className='mt-2 font-display text-[22px] font-semibold leading-tight tracking-[-.02em] text-[#1e3128] sm:text-[27px]'>{content.title}</h2>
                         </div>
+                        <button type='button' onClick={closePanel} aria-label='Close booking request panel' className='grid size-9 shrink-0 place-items-center rounded-full border border-[#31553c]/15 bg-white/75 text-[#31553c] transition hover:bg-white'>
+                            <X className='size-4' />
+                        </button>
                     </div>
-                    <p className='relative mt-4 max-w-lg text-[13px] leading-6 text-[#425749] sm:text-sm'>{content.description}</p>
+                    <p className='relative mt-3 text-[12px] leading-5 text-[#425749] sm:text-[13px]'>{content.description}</p>
                 </div>
 
-                <div className='px-5 py-5 sm:px-8 sm:py-7'>
+                <div className='min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6'>
                     {request.notificationSent === false && (
                         <p className='mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-900' role='status'>
-                            The request is saved, but we could not send the confirmation email. Keep this page open or contact the business with your reference.
+                            Your request is saved, but we could not send its email notification. Keep this panel available or contact the business with your reference.
                         </p>
                     )}
                     <div className='grid grid-cols-2 gap-3 rounded-2xl border border-[#e1e9e2] bg-[#f8faf7] p-4'>
@@ -113,19 +123,23 @@ export default function BookingRequestModal({ controller }) {
                                 <button type='button' onClick={() => setConfirmCancel(true)} className='inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-[#cbd9cf] bg-white px-4 text-sm font-bold text-[#36513f] transition hover:bg-[#f5f8f4]'>
                                     Cancel booking request
                                 </button>
-                            ) : (
+                            ) : request.status === 'approved' || request.canContinue ? (
                                 <a href={request.continuationUrl} className='inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1e4931] px-4 text-sm font-bold text-white transition hover:bg-[#294c37]'>
-                                    Continue securely <ArrowRight className='size-4' />
+                                    Continue to checkout <ArrowRight className='size-4' />
                                 </a>
-                            )}
+                            ) : request.status === 'payment_pending' && request.checkoutUrl ? (
+                                <a href={request.checkoutUrl} className='inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#1e4931] px-4 text-sm font-bold text-white transition hover:bg-[#294c37]'>
+                                    Continue secure payment <ArrowRight className='size-4' />
+                                </a>
+                            ) : null}
                             <button type='button' disabled={isRefreshing} onClick={refresh} className='inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#edf4ee] px-4 text-sm font-bold text-[#31553c] transition hover:bg-[#e1eee3] disabled:cursor-wait disabled:opacity-65'>
                                 <RefreshCw className={`size-4 ${isRefreshing ? 'animate-spin' : ''}`} /> {isRefreshing ? 'Refreshing…' : 'Refresh status'}
                             </button>
                         </div>
                     )}
-                    <p className='mt-4 flex items-center justify-center gap-1.5 text-center text-[10px] leading-4 text-[#718078]'><ShieldCheck className='size-3.5 shrink-0' /> This status is checked securely and will remain available on this device.</p>
+                    <p className='mt-4 text-center text-[10px] leading-4 text-[#718078]'>Your request status is checked securely and saved on this device.</p>
                 </div>
-            </section>
-        </div>
+            </aside>
+        </>
     );
 }

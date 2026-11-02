@@ -16,12 +16,14 @@ import PromoSection from './sections/promo-section';
 import FaqSection from './sections/faq-section';
 import MonthlyCheckoutPage from './sections/monthly-checkout-page';
 import BookingRequestPage from './sections/booking-request-page';
+import useBookingRequest from './hooks/use-booking-request';
 
 export default function App() {
     const [vacanciesOpen, setVacanciesOpen] = useState(false);
+    const bookingRequest = useBookingRequest();
 
     if (new URLSearchParams(window.location.search).get('monthly-checkout') === '1') {
-        return <MonthlyCheckoutPage />;
+        return <MonthlyCheckoutPage bookingRequest={bookingRequest} />;
     }
     if (new URLSearchParams(window.location.search).has('booking-request')) {
         return <BookingRequestPage />;
@@ -30,13 +32,16 @@ export default function App() {
     return (
         <>
             <LenisScroll />
-            <Navbar onOpenVacancies={() => setVacanciesOpen(true)} />
+            <Navbar
+                onOpenVacancies={() => setVacanciesOpen(true)}
+                bookingRequest={bookingRequest}
+            />
             <main>
                 <HeroSection />
                 <AboutSection />
                 <GallerySection />
                 <PricingSection />
-                <BookingSection />
+                <BookingSection bookingRequest={bookingRequest} />
                 <ReviewsSection />
                 <FaqSection />
                 <PromoSection />

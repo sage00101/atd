@@ -28,6 +28,7 @@ export default function useBookingRequest() {
     const [statusError, setStatusError] = useState('');
     const [isCancelling, setIsCancelling] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [isPanelOpen, setIsPanelOpen] = useState(false);
 
     const clearRequest = useCallback(() => {
         clearStoredRequest();
@@ -58,6 +59,7 @@ export default function useBookingRequest() {
             setStatusError('Your browser could not save this request between visits. Keep the secure status link from your email.');
         }
         setRequest(stored);
+        setIsPanelOpen(true);
         return stored;
     }, []);
 
@@ -152,5 +154,19 @@ export default function useBookingRequest() {
         }
     }, [isRefreshing, refreshStatus, request]);
 
-    return { request, statusError, isCancelling, isRefreshing, saveRequest, cancelRequest, refresh };
+    const openPanel = useCallback(() => setIsPanelOpen(true), []);
+    const closePanel = useCallback(() => setIsPanelOpen(false), []);
+
+    return {
+        request,
+        statusError,
+        isCancelling,
+        isRefreshing,
+        isPanelOpen,
+        saveRequest,
+        cancelRequest,
+        refresh,
+        openPanel,
+        closePanel,
+    };
 }

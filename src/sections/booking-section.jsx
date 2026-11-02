@@ -23,7 +23,6 @@ import {
     Droplet,
 } from 'lucide-react';
 import useReveal from '../hooks/use-reveal';
-import useBookingRequest from '../hooks/use-booking-request';
 import BookingRequestModal from '../components/booking-request-modal';
 import VehiclePromoModal from '../components/vehicle-promo-modal';
 import { packageGroups } from '../data/pricing';
@@ -187,9 +186,8 @@ function readStoredSelection() {
     }
 }
 
-export default function BookingSection() {
+export default function BookingSection({ bookingRequest }) {
     const ref = useReveal();
-    const bookingRequest = useBookingRequest();
     const checkoutDialogRef = useRef(null);
     const checkoutScrollRef = useRef(null);
     const lastAvailabilityRefreshRef = useRef(0);

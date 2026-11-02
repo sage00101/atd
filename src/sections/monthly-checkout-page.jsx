@@ -12,7 +12,6 @@ import {
     ShieldCheck,
 } from 'lucide-react';
 import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
-import useBookingRequest from '../hooks/use-booking-request';
 import BookingRequestModal from '../components/booking-request-modal';
 
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
@@ -92,8 +91,7 @@ function makeCalendarDays(month) {
     ];
 }
 
-export default function MonthlyCheckoutPage() {
-    const bookingRequest = useBookingRequest();
+export default function MonthlyCheckoutPage({ bookingRequest }) {
     const [selection] = useState(readSelection);
     const [now, setNow] = useState(() => new Date());
     const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
