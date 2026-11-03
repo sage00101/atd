@@ -22,7 +22,6 @@ import {
     Droplet,
 } from 'lucide-react';
 import useReveal from '../hooks/use-reveal';
-import BookingRequestModal from '../components/booking-request-modal';
 import VehiclePromoModal from '../components/vehicle-promo-modal';
 import { packageGroups } from '../data/pricing';
 import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
@@ -30,7 +29,8 @@ import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/servic
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-const BOOKING_REQUEST_ENDPOINT = `${API_BASE_URL}/api/bookings/requests`;
+const YOCO_CHECKOUT_ENDPOINT = `${API_BASE_URL}/api/payments/yoco/checkout`;
+const ONSITE_BOOKING_ENDPOINT = `${API_BASE_URL}/api/bookings/onsite`;
 const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
 const BOOKING_CLOCK_REFRESH_MS = 10_000;
@@ -185,7 +185,7 @@ function readStoredSelection() {
     }
 }
 
-export default function BookingSection({ bookingRequest }) {
+export default function BookingSection() {
     const ref = useReveal();
     const checkoutDialogRef = useRef(null);
     const checkoutScrollRef = useRef(null);
@@ -193,6 +193,7 @@ export default function BookingSection({ bookingRequest }) {
     const [now, setNow] = useState(() => new Date());
     const [paymentStatus, setPaymentStatus] = useState(null);
     const [paymentReference, setPaymentReference] = useState(null);
+    const [paymentMethod, setPaymentMethod] = useState('online');
     const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
     const [calendarInView, setCalendarInView] = useState(false);
     const [bookedSlots, setBookedSlots] = useState({});
@@ -540,7 +541,7 @@ export default function BookingSection({ bookingRequest }) {
 
     const beginSecurePayment = async (event) => {
         event.preventDefault();
-        if (missingSelection || isSubmitting || bookingRequest.request) return;
+        if (missingSelection || isSubmitting) return;
 
         if (!serviceLocationAllowed) {
             setPaymentError(serviceLocation
@@ -603,26 +604,34 @@ export default function BookingSection({ bookingRequest }) {
             formData.append('booking', JSON.stringify(bookingPayload));
             if (isMonthly) contractFiles.forEach((file) => formData.append('contract_files', file, file.name));
 
-            const response = await fetch(BOOKING_REQUEST_ENDPOINT, {
+            const endpoint = paymentMethod === 'onsite' ? ONSITE_BOOKING_ENDPOINT : YOCO_CHECKOUT_ENDPOINT;
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 body: formData,
             });
 
             const result = await response.json().catch(() => ({}));
-            if (!response.ok || !result.reference || !result.continuationUrl) {
-                throw new Error(result.message || 'Booking request could not be submitted.');
+            if (!response.ok || !result.reference) {
+                throw new Error(result.message || 'Booking could not be confirmed.');
             }
             setCheckoutOpen(false);
-            bookingRequest.saveRequest(result, {
-                bookingDate: bookingPayload.bookingDate,
-                bookingTime: bookingPayload.bookingTime,
-                bookingType: bookingPayload.bookingType || 'single',
-                customerType: bookingPayload.monthlyClientType || null,
-                packageTier: bookingPayload.monthlyPackageTier || null,
-            });
-            setIsSubmitting(false);
+            if (paymentMethod === 'onsite') {
+                setPaymentReference(result.reference);
+                setPaymentStatus(result.monthlyCovered ? 'covered' : result.receiptSent ? 'onsite' : 'onsiteEmailIssue');
+                return;
+            }
+            if (result.monthlyCovered) {
+                setPaymentReference(result.reference);
+                setPaymentStatus('covered');
+                return;
+            }
+            if (!result.redirectUrl) {
+                throw new Error('Secure payment could not be started. Please try again.');
+            }
+            window.location.assign(result.redirectUrl);
         } catch (error) {
             setPaymentError(error instanceof Error ? error.message : 'Secure payment could not be started. Please try again.');
+        } finally {
             setIsSubmitting(false);
         }
     };
@@ -779,7 +788,7 @@ export default function BookingSection({ bookingRequest }) {
 
                         <button
                             type='button'
-                            disabled={Boolean(bookingRequest.request) || (Boolean(missingSelection) && missingSelection !== 'Select your package to purchase')}
+                            disabled={Boolean(missingSelection) && missingSelection !== 'Select your package to purchase'}
                             onClick={() => {
                                 if (missingSelection === 'Select your package to purchase') {
                                     document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -795,7 +804,6 @@ export default function BookingSection({ bookingRequest }) {
                         </button>
                         <button
                             type='button'
-                            disabled={Boolean(bookingRequest.request)}
                             onClick={() => {
                                 setMonthlySelectionStep(1);
                                 setMonthlyClientType('');
@@ -953,7 +961,7 @@ export default function BookingSection({ bookingRequest }) {
                                         'Your selected monthly package and appointment.',
                                         'Your vehicle and service address details.',
                                         'Your completed package documents.',
-                                        'Secure payment through Yoco.',
+                                        'Secure Yoco checkout or payment on arrival.',
                                     ].map((step, index) => (
                                         <div key={step} className='flex items-start gap-3'>
                                             <span className='grid h-7 w-7 shrink-0 place-items-center rounded-full border border-white/15 bg-white/[0.06] text-[8px] font-semibold text-[#c9ddce]'>
@@ -979,13 +987,13 @@ export default function BookingSection({ bookingRequest }) {
                                 <div className='flex items-start justify-between gap-4'>
                                     <div>
                                         <p className='flex items-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-sage sm:text-[9px]'>
-                                            <CreditCard className='size-3.5' /> Booking request
+                                            <CreditCard className='size-3.5' /> Booking details
                                         </p>
                                         <h3 id='checkout-title' className='mt-1 font-display text-[24px] font-medium tracking-[-0.025em] text-ink sm:text-[30px]'>
-                                            Request a booking
+                                            Confirm your booking
                                         </h3>
                                         <p className='mt-1 max-w-xl text-[9px] leading-[1.5] text-body sm:text-[10px]'>
-                                            Submit your details for business review. If approved, you can choose how to pay before the booking is finalised.
+                                            Complete your details and confirm your appointment. Online payment is handled securely through Yoco.
                                         </p>
                                     </div>
 
@@ -1196,8 +1204,32 @@ export default function BookingSection({ bookingRequest }) {
 
                                     <div className='mt-4 flex items-start gap-2 rounded-xl bg-sagelight/65 px-3 py-2.5'>
                                         <ShieldCheck className='mt-0.5 size-3.5 shrink-0 text-sage' />
-                                        <p className='text-[8.5px] leading-[1.45] text-body sm:text-[9.5px]'>Your request will be reviewed before it is confirmed. No payment is taken while it is under review. If approved, you can choose secure Yoco payment or pay by card machine on-site.</p>
+                                        <p className='text-[8.5px] leading-[1.45] text-body sm:text-[9.5px]'>Choose secure online payment or pay by card machine on-site. Your booking is confirmed immediately; monthly-client washes covered by an active entitlement require no payment.</p>
                                     </div>
+
+                                    <fieldset className='mt-3'>
+                                        <legend className='mb-2 text-[9px] font-semibold text-ink sm:text-[10px]'>Payment method</legend>
+                                        <div className='grid grid-cols-2 gap-2'>
+                                            {[
+                                                { value: 'online', label: 'Pay online', detail: 'Secure Yoco checkout', Icon: CreditCard },
+                                                { value: 'onsite', label: 'Pay on arrival', detail: 'Card machine / phone', Icon: MapPin },
+                                            ].map(({ value, label, detail, Icon }) => (
+                                                <button
+                                                    key={value}
+                                                    type='button'
+                                                    aria-pressed={paymentMethod === value}
+                                                    onClick={() => setPaymentMethod(value)}
+                                                    className={`flex min-h-[54px] items-center gap-2 rounded-xl border px-3 py-2 text-left transition ${paymentMethod === value ? 'border-sagedeep bg-sagelight/50 text-ink' : 'border-line bg-white/80 text-body hover:border-sage'}`}
+                                                >
+                                                    <Icon className='size-4 shrink-0 text-sagedeep' />
+                                                    <span className='min-w-0'>
+                                                        <span className='block text-[9px] font-semibold sm:text-[10px]'>{label}</span>
+                                                        <span className='mt-0.5 block text-[8px] text-body/70 sm:text-[9px]'>{detail}</span>
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </fieldset>
 
                                     <div className='sticky bottom-0 z-20 -mx-4 mt-3 shrink-0 border-t border-[#dfe6e0] bg-[#f7f8f5]/95 px-4 pb-[max(4px,env(safe-area-inset-bottom))] pt-3 backdrop-blur-md sm:-mx-7 sm:px-7 lg:-mx-10 lg:px-10 xl:-mx-14 xl:px-14'>
                                         {paymentError && (
@@ -1212,8 +1244,8 @@ export default function BookingSection({ bookingRequest }) {
                                             className='group flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 text-[10px] font-semibold text-white shadow-[0_10px_25px_-15px_rgba(20,26,22,.8)] transition hover:-translate-y-px hover:bg-[#18231d] disabled:cursor-wait disabled:opacity-60 sm:min-h-[49px] sm:text-[11px]'
                                         >
                                             {isSubmitting
-                                                ? <><LoaderCircle className='size-3.5 animate-spin' /> Submitting request…</>
-                                                : <>Submit booking request for review <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' /></>}
+                                                ? <><LoaderCircle className='size-3.5 animate-spin' /> Confirming booking…</>
+                                                : <>{paymentMethod === 'online' ? 'Continue to secure payment' : 'Confirm booking · pay on arrival'} <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' /></>}
                                         </button>
                                     </div>
                                 </form>
@@ -1228,8 +1260,6 @@ export default function BookingSection({ bookingRequest }) {
                 onClose={() => setPromoRegistrationOpen(false)}
                 defaults={{ ...customer }}
             />
-            <BookingRequestModal controller={bookingRequest} />
-
         </section>
     );
 }

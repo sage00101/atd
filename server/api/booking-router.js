@@ -1,7 +1,6 @@
 import './_lib/load-env.js';
 import availability from '../handlers/bookings-availability.js';
 import onsite from '../handlers/bookings-onsite.js';
-import requests from '../handlers/bookings-requests.js';
 import confirmOnsitePayment from '../handlers/onsite-confirm-payment.js';
 import yocoCheckout from '../handlers/yoco-checkout.js';
 
@@ -10,7 +9,6 @@ export const config = { api: { bodyParser: false } };
 const handlers = {
     availability,
     onsite,
-    requests,
     'confirm-onsite-payment': confirmOnsitePayment,
     'yoco-checkout': yocoCheckout,
 };

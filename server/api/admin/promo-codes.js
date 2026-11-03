@@ -26,7 +26,6 @@ const adminPage = `<!doctype html>
 <p id="status" role="status" aria-live="polite"></p>
 <nav class="tabs" role="tablist" aria-label="Business manager sections">
   <button id="promoTab" class="tab" type="button" role="tab" aria-selected="true" aria-controls="promoPanel">Promo codes</button>
-  <button id="bookingRequestsTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="bookingRequestsPanel">Booking requests</button>
   <button id="calendarTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="calendarPanel">Calendar</button>
 </nav>
 <section id="promoPanel" class="tab-panel" role="tabpanel" aria-labelledby="promoTab">
@@ -90,15 +89,6 @@ const adminPage = `<!doctype html>
   </dialog>
 </section>
 </section>
-<section id="bookingRequestsPanel" class="tab-panel" role="tabpanel" aria-labelledby="bookingRequestsTab" hidden>
-  <p class="note">New website bookings arrive here as Pending Approval. Approving sends the customer a secure continuation link; a booking is not confirmed or charged until the customer completes the next step. Declining releases any temporary slot and monthly wash reservation.</p>
-  <div class="monthly-toolbar">
-    <input id="bookingRequestSearch" class="manager-search" type="search" placeholder="Search customer, email, reference or status" aria-label="Search booking requests">
-    <div class="buttons" style="margin:0"><button id="bookingRequestReload" class="secondary" type="button">Refresh requests</button></div>
-  </div>
-  <div id="bookingRequestCards" class="monthly-grid"></div>
-  <div id="bookingRequestEmpty" class="empty-state" hidden>No booking requests found.</div>
-</section>
 <section id="calendarPanel" class="tab-panel" role="tabpanel" aria-labelledby="calendarTab" hidden>
   <iframe id="calendarFrame" class="calendar-frame" title="Booking calendar manager" loading="lazy"></iframe>
 </section>
@@ -115,14 +105,8 @@ const connectButton=document.getElementById('connect');
 const calendarFrame=document.getElementById('calendarFrame');
 const promoTab=document.getElementById('promoTab');
 const calendarTab=document.getElementById('calendarTab');
-const bookingRequestsTab=document.getElementById('bookingRequestsTab');
 const promoPanel=document.getElementById('promoPanel');
-const bookingRequestsPanel=document.getElementById('bookingRequestsPanel');
 const calendarPanel=document.getElementById('calendarPanel');
-const bookingRequestSearch=document.getElementById('bookingRequestSearch');
-const bookingRequestReload=document.getElementById('bookingRequestReload');
-const bookingRequestCards=document.getElementById('bookingRequestCards');
-const bookingRequestEmpty=document.getElementById('bookingRequestEmpty');
 const singleWashTab=document.getElementById('singleWashTab');
 const monthlyWashTab=document.getElementById('monthlyWashTab');
 const singleWashPanel=document.getElementById('singleWashPanel');
@@ -147,19 +131,14 @@ let monthlyEntitlements=[];
 let monthlyDistributionRuns=[];
 let pendingMonthlyPurchases=[];
 let pendingBulkRunId='';
-let bookingRequests=[];
 const managerStorageKey='a10tion-admin-manager-key';
 function setStatus(message,type=''){statusNode.textContent=message;statusNode.className=type;}
 function activateTab(tab){
   const isCalendar=tab==='calendar';
-  const isBookingRequests=tab==='booking-requests';
-  promoTab.setAttribute('aria-selected',String(!isCalendar&&!isBookingRequests));
-  bookingRequestsTab.setAttribute('aria-selected',String(isBookingRequests));
+  promoTab.setAttribute('aria-selected',String(!isCalendar));
   calendarTab.setAttribute('aria-selected',String(isCalendar));
-  promoPanel.hidden=isCalendar||isBookingRequests;
-  bookingRequestsPanel.hidden=!isBookingRequests;
+  promoPanel.hidden=isCalendar;
   calendarPanel.hidden=!isCalendar;
-  if(isBookingRequests) loadBookingRequests();
   if(isCalendar&&!calendarFrame.src){
     if(!connectManagers()) return;
   }
@@ -196,49 +175,6 @@ async function monthlyRequest(method,body){
   const result=await response.json().catch(()=>({}));
   if(!response.ok) throw new Error(result.message||'Monthly entitlement request failed.');
   return result;
-}
-async function bookingRequestApi(method,body){
-  const response=await fetch('/api/admin/booking-requests',{method,headers:{'Accept':'application/json','Content-Type':'application/json','x-admin-key':keyInput.value.trim()},body:body?JSON.stringify(body):undefined});
-  const result=await response.json().catch(()=>({}));
-  if(!response.ok) throw new Error(result.message||'Booking request operation failed.');
-  return result;
-}
-function renderBookingRequests(){
-  const query=bookingRequestSearch.value.trim().toLowerCase();
-  const filtered=bookingRequests.filter(item=>[
-    item.reference,item.customer?.firstName,item.customer?.surname,item.customer?.email,item.customer?.mobile,item.status,item.customerType,item.monthlyPackageTier,
-  ].some(value=>String(value||'').toLowerCase().includes(query)));
-  bookingRequestEmpty.hidden=filtered.length>0;
-  bookingRequestCards.innerHTML=filtered.map(item=>{
-    const name=[item.customer?.firstName,item.customer?.surname].filter(Boolean).join(' ')||'Customer';
-    const packageText=item.customerType?item.customerType+' · '+(item.monthlyPackageTier||'').replace(/^./,char=>char.toUpperCase())+' · '+item.monthlyAllowance+' washes per billing period':item.packageName;
-    const history=(item.events||[]).map(event=>'<li><strong>'+escapeHtml(event.status)+'</strong> · '+escapeHtml(new Date(event.at).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg'}))+(event.reason?' · '+escapeHtml(event.reason):'')+'</li>').join('');
-    const statusClass=String(item.status||'').toLowerCase().replace(/\\s+/g,'-');
-    const actions=item.status==='pending'
-      ? '<div class="entitlement-actions"><button type="button" data-action="approve" data-reference="'+escapeHtml(item.reference)+'">Approve request</button><button class="danger" type="button" data-action="decline" data-reference="'+escapeHtml(item.reference)+'">Decline</button></div>'
-      : ['approved','declined','checkout_starting','payment_pending'].includes(item.status)&&item.notificationSent!==true
-        ? '<div class="entitlement-actions"><button type="button" data-action="resend-notification" data-reference="'+escapeHtml(item.reference)+'">Resend outcome email</button></div>'
-        : '';
-    return '<article class="entitlement-card" data-reference="'+escapeHtml(item.reference)+'">'+
-      '<div class="entitlement-top"><div><h3 class="entitlement-name">'+escapeHtml(name)+'</h3><p class="entitlement-meta">'+escapeHtml(item.customer?.email)+' · '+escapeHtml(item.customer?.mobile)+'<br>'+escapeHtml(packageText)+'<br>'+escapeHtml(item.vehicleType)+' · '+escapeHtml(item.customer?.registration)+'<br>'+escapeHtml(item.bookingDate)+' at '+escapeHtml(item.bookingTime)+' · '+(item.status==='pending'?'Payment chosen after approval':item.paymentMethod==='onsite'?'Pay on arrival':'Online payment')+'</p></div><span class="status-pill '+statusClass+'">'+escapeHtml(item.status.replaceAll('_',' '))+'</span></div>'+
-      '<div class="entitlement-code"><code>Reference '+escapeHtml(item.reference)+'</code><span>Expires '+escapeHtml(new Date(item.expiresAt).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg'}))+'</span></div>'+
-      actions+
-      '<details class="entitlement-history"><summary>Request history ('+(item.events||[]).length+')</summary><ul class="history-list">'+(history||'<li>No history.</li>')+'</ul></details>'+
-      (item.notificationError?'<p class="hint">'+escapeHtml(item.notificationError)+'</p>':'')+
-      '</article>';
-  }).join('');
-}
-async function loadBookingRequests(){
-  if(!keyInput.value.trim()){setStatus('Enter an admin or calendar API key to review booking requests.','error');return;}
-  bookingRequestCards.setAttribute('aria-busy','true');
-  bookingRequestCards.innerHTML='<div class="empty-state">Loading booking requests…</div>';
-  try{
-    const result=await bookingRequestApi('GET');
-    bookingRequests=Array.isArray(result.requests)?result.requests:[];
-    renderBookingRequests();
-    setStatus('Booking requests refreshed.','ok');
-  }catch(error){bookingRequestCards.innerHTML='';bookingRequestEmpty.hidden=false;bookingRequestEmpty.textContent=error.message;setStatus(error.message,'error');}
-  finally{bookingRequestCards.removeAttribute('aria-busy');}
 }
 async function finishDistributionRun(runId,action){
   let result=await monthlyRequest('POST',{action,runId});
@@ -513,25 +449,6 @@ document.querySelectorAll('.promo-tab').forEach((tab,index)=>tab.addEventListene
     next.click();
   }
 }));
-bookingRequestSearch.addEventListener('input',renderBookingRequests);
-bookingRequestReload.addEventListener('click',loadBookingRequests);
-bookingRequestCards.addEventListener('click',async event=>{
-  const button=event.target.closest('button[data-action]');
-  if(!button)return;
-  const action=button.dataset.action;
-  const reference=button.dataset.reference;
-  if(action==='approve'&&!window.confirm('Approve booking request '+reference+'? The customer will receive a secure continuation link.'))return;
-  const reason=action==='decline'?window.prompt('Optional reason for declining this request:'):'';
-  if(action==='decline'&&reason===null)return;
-  button.disabled=true;
-  try{
-    const result=await bookingRequestApi('POST',{reference,action,reason:reason||''});
-    await loadBookingRequests();
-    const warning=result.request?.notificationError;
-    setStatus(warning?(action==='resend-notification'?'Outcome email resend failed: ':'Request '+(action==='approve'?'approved':'declined')+', but email notification needs attention: ')+warning:action==='approve'?'Request approved and customer notified.':action==='decline'?'Request declined and temporary reservations released.':action==='resend-notification'?'Outcome email sent.':'Booking request updated.','ok');
-  }catch(error){setStatus(error.message,'error');}
-  finally{button.disabled=false;}
-});
 function connectManagers(){
   const key=keyInput.value.trim();
   if(!key){setStatus('Enter an admin or calendar API key to connect.','error');keyInput.focus();return false;}
@@ -549,9 +466,8 @@ connectButton.addEventListener('click',async()=>{
   finally{connectButton.disabled=false;}
 });
 promoTab.addEventListener('click',()=>activateTab('promo'));
-bookingRequestsTab.addEventListener('click',()=>activateTab('booking-requests'));
 calendarTab.addEventListener('click',()=>activateTab('calendar'));
-const managerTabs=[promoTab,bookingRequestsTab,calendarTab];
+const managerTabs=[promoTab,calendarTab];
 managerTabs.forEach((tab,index)=>tab.addEventListener('keydown',event=>{
   if(event.key==='ArrowLeft'||event.key==='ArrowRight'){
     event.preventDefault();
@@ -596,11 +512,7 @@ if(savedKey){
 }
 resetMonthlyForm();
 const initialTab=new URLSearchParams(location.search).get('tab');
-if(initialTab==='calendar'){
-activateTab('calendar');
-}else if(initialTab==='booking-requests'){
-  activateTab('booking-requests');
-}
+if(initialTab==='calendar') activateTab('calendar');
 </script>
 </body>
 </html>`;

@@ -4,7 +4,6 @@ import {
     Menu,
     X,
     ArrowUpRight,
-    ClipboardCheck,
 } from 'lucide-react';
 import navLogo from '../assets/logos/hero-logo.png';
 import navLogoClose from '../assets/logos/nav-logo-close.svg';
@@ -21,10 +20,9 @@ const links = [
 ];
 
 
-export default function Navbar({ onOpenVacancies, bookingRequest }) {
+export default function Navbar({ onOpenVacancies }) {
     const [isOpen, setIsOpen] = useState(false);
     const [isScrolled, setIsScrolled] = useState(false);
-    const checkoutIsActive = ['approved', 'checkout_starting', 'payment_pending'].includes(bookingRequest?.request?.status);
 
 
     /* =========================================
@@ -176,18 +174,6 @@ export default function Navbar({ onOpenVacancies, bookingRequest }) {
                             NAV ACTIONS
                         ================================================= */}
                         <div className='flex shrink-0 items-center gap-3'>
-
-                            {checkoutIsActive && (
-                                <button
-                                    type='button'
-                                    onClick={bookingRequest.openPanel}
-                                    aria-label='Resume checkout'
-                                    className='inline-flex min-h-9 items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-2.5 text-[10px] font-semibold text-white transition hover:bg-white/20 sm:min-h-10 sm:gap-2 sm:px-4 sm:text-[11px]'
-                                >
-                                    <ClipboardCheck className='size-4' />
-                                    <span className='hidden min-[390px]:inline'>Resume checkout</span>
-                                </button>
-                            )}
 
                             {/* Desktop Book Now */}
                             <a
@@ -661,20 +647,6 @@ export default function Navbar({ onOpenVacancies, bookingRequest }) {
                             BOTTOM CTA
                         ================================================= */}
                         <div className='mt-auto'>
-
-                            {checkoutIsActive && (
-                                <button
-                                    type='button'
-                                    onClick={() => {
-                                        closeMenu();
-                                        bookingRequest.openPanel();
-                                    }}
-                                    className='mb-2 inline-flex min-h-[45px] w-full items-center justify-center gap-2 rounded-[13px] border border-[#31553c]/20 bg-[#edf4ee] px-5 text-[11.5px] font-semibold text-[#1e4931] transition hover:bg-[#e1eee3]'
-                                >
-                                    <ClipboardCheck className='size-4' />
-                                    Resume checkout
-                                </button>
-                            )}
 
                             <a
                                 href='#booking'

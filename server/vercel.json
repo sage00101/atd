@@ -9,10 +9,6 @@
       "destination": "/api/booking-router?__route=onsite"
     },
     {
-      "source": "/api/bookings/requests",
-      "destination": "/api/booking-router?__route=requests"
-    },
-    {
       "source": "/api/bookings/onsite/confirm-payment",
       "destination": "/api/booking-router?__route=confirm-onsite-payment"
     },

@@ -24,39 +24,27 @@ delivery, configure a Resend webhook for `email.delivered`, `email.bounced`,
 `email.failed`, and `email.complained` at `/api/webhooks/resend`, and set the
 webhook signing secret as `RESEND_WEBHOOK_SECRET` in the deployment environment.
 
-## Booking approval workflow
+## Booking workflow
 
-Website bookings are saved as Redis-backed requests before payment or final
-confirmation. Review them in the Business Manager's **Booking requests** tab:
-approving sends the customer a secure continuation link, and declining releases
-the temporary appointment slot and any monthly wash reservation. Single-wash
-codes are reserved only when an approved customer starts checkout and are
-redeemed after Yoco confirms payment. Monthly entitlement washes are reserved
-while approval is pending and counted only when the booking is confirmed.
-Customers choose Yoco or on-site card-machine payment after approval. Requests
-are not confirmed and no payment is taken while they await review. Decline
-reasons are included in outcome emails and the secure status page.
-Customers can cancel while a request is pending, or after a checkout-start
-attempt has timed out without producing a payment link. This lets them release
-a stuck request without risking cancellation of an active payment session.
-Cancellation releases the held appointment slot and monthly wash reservation,
-returning that wash to the entitlement's available allowance. It does not revoke
-the customer's monthly entitlement code. A single-wash promo code is reserved at
-checkout and redeemed only after successful payment, so cancelling a request
-does not consume that code.
-If an outcome email cannot be sent, the manager can retry it from the request
-card. A checkout interrupted during startup can be retried from the customer's
-secure status page after the in-progress attempt becomes stale. Active requests
-remain available in a dismissible status drawer and a navbar shortcut appears
-once the request is approved or checkout has started.
+Customers book directly from the website and choose secure Yoco checkout or
+payment on arrival. On-site bookings are confirmed immediately; online bookings
+are confirmed by the Yoco payment webhook. A valid Monthly Clients entitlement
+confirms a covered wash immediately without collecting payment. Booking receipts
+are sent to the customer and business after confirmation.
+
+Single-wash promo codes are reserved when checkout starts and redeemed only
+after Yoco confirms payment. The Business Manager continues to manage promo
+batches, Monthly Clients and calendar availability; it does not review or
+approve individual bookings. Any appointment holds created by the retired
+former request process expire automatically within three days.
 
 The **Monthly Clients** manager tracks a customer's package, random access code,
 payment history, prepaid wash-credit balance, reservations, and confirmed
 bookings. A confirmed first monthly-package payment automatically creates the
 entitlement, grants its 2 (Standard) or 4 (Premium) wash credits, and emails the
-code. Each booking reserves one credit, confirmation consumes it, and
-cancellation or an expired request restores it. Unused credits roll over while
-the entitlement remains active and paid through. The booking cap is still 2 or
+code. Each booking reserves one credit and confirmation consumes it. Cancelled or
+expired reservations restore the credit. Unused credits roll over while the
+entitlement remains active and paid through. The booking cap is still 2 or
 4 confirmed/reserved appointments in each billing period, anchored to the
 customer's payment date; rollover credits do not increase that per-period cap.
 
@@ -71,13 +59,11 @@ allowance in their current billing period as the initial credit balance; their
 older historical monthly periods are not retroactively converted into rollover
 credits.
 
-The request API is `/api/bookings/requests`; approval actions are protected by
-the existing `ADMIN_API_KEY` or `CALENDAR_API_KEY` at
-`/api/admin/booking-requests`. Requests and their event history are retained in
-Upstash Redis; temporary requests/reservations expire after three days. Keep
-`BOOKING_TOKEN_ENCRYPTION_KEY` stable across deployments while requests are
-active (if absent, the backend falls back to `ADMIN_API_KEY`). Continue using
-the configured `SITE_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`,
+The booking availability, on-site, on-site payment confirmation, and Yoco
+checkout endpoints are routed through one Vercel function to stay within the
+Hobby plan's 12-function deployment limit. Keep the Vercel project root
+directory set to `server` so `server/vercel.json` rewrites are applied. Continue
+using the configured `SITE_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`,
 `YOCO_SECRET_KEY`, `YOCO_WEBHOOK_SECRET`, and Upstash Redis credentials.
 
 The booking availability, request, on-site, on-site payment confirmation, and
@@ -123,9 +109,8 @@ src/
     about-section.jsx
     services-section.jsx
     gallery-section.jsx
-    booking-section.jsx        date/time booking request and customer checkout
+    booking-section.jsx        date/time booking and customer checkout
     monthly-checkout-page.jsx  monthly entitlement booking flow
-    booking-request-page.jsx   secure request status and continuation page
     reviews-section.jsx        static mockup — see integration notes below
     service-area-section.jsx
     contact-section.jsx
@@ -150,9 +135,8 @@ src/
 
 ## Integration points (currently design-only, per brief)
 
-- **Booking** — appointment slots and approval are enforced by the Redis-backed
-  booking APIs. Customers can cancel pending requests; rescheduling is not currently
-  provided.
+- **Booking** — appointment slots and direct confirmations are enforced by the
+  Redis-backed booking APIs. Rescheduling is not currently provided.
 - **Reviews (`reviews-section.jsx`)** — `reviews` is a static array today. Replace
   with a live Google Places/Reviews API response (or a small serverless proxy) once
   the business has a Google Business Profile connected. Keep the same shape

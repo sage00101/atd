@@ -5,18 +5,13 @@ import { applyCors } from '../api/_lib/cors.js';
 import { sendReceiptEmail } from '../api/_lib/email.js';
 import { getServiceAreaError } from '../api/_lib/service-area.js';
 import {
-    authorizeBookingContinuation,
-    completeMonthlyBookingRequest,
-    markBookingRequestConfirmed,
-    resetBookingRequestCheckout,
-    startBookingRequestCheckout,
-} from '../api/_lib/booking-requests.js';
-import {
+    confirmMonthlyWashReservation,
     getMonthlyReservationError,
     releaseMonthlyWashReservation,
     reserveMonthlyWash,
 } from '../api/_lib/monthly-promos.js';
 import {
+    claimUniqueReferenceNumber,
     getSharedPromoCodeStatus,
     looksLikeEmail,
     looksLikeVehicleRegistration,
@@ -24,6 +19,7 @@ import {
     normaliseReg,
     releaseBookingSlot,
     releaseSharedPromoCode,
+    reserveBookingSlot,
     reserveSharedPromoCode,
     saveOnsiteBooking,
     MONTHLY_PACKAGE_CENTS,
@@ -67,8 +63,6 @@ export default async function handler(req, res) {
     let monthlyEntitlementDetails = null;
     let reservedSlotDate = null;
     let reservedSlotTime = null;
-    let approvalRequest = null;
-    let checkoutRequestStarted = false;
     try {
         const { fields, files } = await parseMultipart(req);
         const bookingRaw = Array.isArray(fields.booking) ? fields.booking[0] : fields.booking;
@@ -81,24 +75,15 @@ export default async function handler(req, res) {
             return;
         }
 
-        const approvalReference = String(booking.approvalReference || '').trim();
-        const continuationToken = String(booking.continuationToken || '');
-        if (!approvalReference || !continuationToken) {
-            res.status(403).json({ message: 'A business-approved booking request is required before finalising a booking.' });
-            return;
-        }
-        const authorization = await authorizeBookingContinuation(approvalReference, continuationToken);
-        if (authorization.error) {
-            res.status(403).json({ message: authorization.error });
-            return;
-        }
-        approvalRequest = authorization.request;
-        const selectedPaymentMethod = String(booking.paymentMethod || approvalRequest.paymentMethod || 'online');
-        if (selectedPaymentMethod !== 'onsite') {
-            res.status(400).json({ message: 'Choose on-site payment to confirm this booking.' });
-            return;
-        }
-        booking = { ...approvalRequest.booking, paymentMethod: selectedPaymentMethod };
+        booking = {
+            ...booking,
+            paymentMethod: 'onsite',
+            customer: {
+                ...booking.customer,
+                email: normaliseEmail(booking.customer?.email),
+                registration: normaliseReg(booking.customer?.registration),
+            },
+        };
 
         const {
             serviceLocation,
@@ -141,6 +126,12 @@ export default async function handler(req, res) {
             res.status(400).json({ message: 'Enter a valid email address and vehicle registration.' });
             return;
         }
+        if (!String(customer?.firstName || '').trim()
+            || !String(customer?.surname || '').trim()
+            || !String(customer?.mobile || '').trim()) {
+            res.status(400).json({ message: 'Enter your name and mobile number.' });
+            return;
+        }
         const isMonthly = purchaseType === 'monthly';
         if (bookingType && !isMonthlyWashBooking) {
             res.status(400).json({ message: 'Unknown booking type.' });
@@ -153,7 +144,7 @@ export default async function handler(req, res) {
             return;
         }
         if (isMonthlyWashBooking && (isMonthly || !['private', 'business'].includes(monthlyClientType)
-            || !['standard', 'premium'].includes(monthlyPackageTier) || !approvalRequest.monthlyReservation)) {
+            || !['standard', 'premium'].includes(monthlyPackageTier))) {
             res.status(400).json({ message: 'Select a valid monthly client package with an active wash reservation.' });
             return;
         }
@@ -161,7 +152,13 @@ export default async function handler(req, res) {
             res.status(400).json({ message: 'Promo codes are available for single washes only.' });
             return;
         }
-        const reference = approvalRequest.reference;
+        const reference = await claimUniqueReferenceNumber();
+        if (!await reserveBookingSlot(bookingDate, bookingTime, reference, 60 * 60 * 24 * 90)) {
+            res.status(409).json({ message: 'That time slot was just booked by someone else. Please choose another.' });
+            return;
+        }
+        reservedSlotDate = bookingDate;
+        reservedSlotTime = bookingTime;
 
         let contractFileBase64 = null;
         let contractFileName = null;
@@ -216,11 +213,36 @@ export default async function handler(req, res) {
             amountCents = originalAmountCents;
 
             if (isMonthlyWashBooking) {
-                if (!approvalRequest.monthlyReservation) {
-                    res.status(409).json({ message: 'The monthly wash reservation has expired. Submit a new booking request.' });
+                const reservationId = crypto.randomUUID();
+                const monthly = await reserveMonthlyWash({
+                    promoCode,
+                    email: customer.email,
+                    bookingDate,
+                    reservationId,
+                    reference,
+                    expectedClientType: monthlyClientType,
+                    expectedPackageTier: monthlyPackageTier,
+                    bookingDetails: {
+                        customerName: `${customer.firstName} ${customer.surname}`.trim(),
+                        vehicleType,
+                    },
+                });
+                if (monthly.status !== 'OK') {
+                    await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
+                    reservedSlotDate = null;
+                    reservedSlotTime = null;
+                    const error = getMonthlyReservationError(monthly.status);
+                    res.status(error.statusCode).json({ message: error.message });
                     return;
                 }
-                reservedMonthlyWash = approvalRequest.monthlyReservation;
+                reservedMonthlyWash = {
+                    entitlementId: monthly.entitlement.id,
+                    period: monthly.period,
+                    reservationId,
+                    clientType: monthly.entitlement.clientType,
+                    packageTier: monthly.entitlement.packageTier,
+                    monthlyAllowance: monthly.entitlement.monthlyAllowance,
+                };
                 monthlyEntitlementDetails = reservedMonthlyWash;
                 appliedPromo = `Monthly entitlement ${reservedMonthlyWash.entitlementId.slice(0, 8).toUpperCase()}`;
                 appliedPromoType = 'monthly-entitlement';
@@ -369,14 +391,14 @@ export default async function handler(req, res) {
         };
         const monthlyCovered = Boolean(reservedMonthlyWash);
         if (reservedMonthlyWash) {
-            await startBookingRequestCheckout(approvalRequest.reference, continuationToken, selectedPaymentMethod);
-            checkoutRequestStarted = true;
-            const confirmation = await completeMonthlyBookingRequest(approvalRequest, bookingRecord);
+            const confirmation = await confirmMonthlyWashReservation({
+                ...reservedMonthlyWash,
+                reference,
+                booking: bookingRecord,
+            });
             if (confirmation !== 'OK' && confirmation !== 'DUPLICATE') {
                 await releaseMonthlyWashReservation(reservedMonthlyWash);
                 reservedMonthlyWash = null;
-                await resetBookingRequestCheckout(approvalRequest.reference);
-                checkoutRequestStarted = false;
                 await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
                 reservedSlotDate = null;
                 reservedSlotTime = null;
@@ -385,11 +407,12 @@ export default async function handler(req, res) {
                 return;
             }
             reservedMonthlyWash = null;
+            reservedSlotDate = null;
+            reservedSlotTime = null;
         } else {
-            await startBookingRequestCheckout(approvalRequest.reference, continuationToken, selectedPaymentMethod);
-            checkoutRequestStarted = true;
             await saveOnsiteBooking(reference, bookingRecord);
-            await markBookingRequestConfirmed(approvalRequest.reference);
+            reservedSlotDate = null;
+            reservedSlotTime = null;
         }
 
         const formatZar = (cents) => `R${(cents / 100).toFixed(2)}`;
@@ -440,9 +463,6 @@ export default async function handler(req, res) {
         }
         if (reservedSlotDate && reservedSlotTime) {
             await releaseBookingSlot(reservedSlotDate, reservedSlotTime).catch(() => {});
-        }
-        if (checkoutRequestStarted && approvalRequest) {
-            await resetBookingRequestCheckout(approvalRequest.reference).catch(() => {});
         }
         console.error(err);
         res.status(500).json({ message: 'Booking could not be confirmed. Please try again.' });

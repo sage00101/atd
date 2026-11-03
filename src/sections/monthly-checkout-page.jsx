@@ -12,11 +12,10 @@ import {
     ShieldCheck,
 } from 'lucide-react';
 import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
-import BookingRequestModal from '../components/booking-request-modal';
 
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-const BOOKING_REQUEST_ENDPOINT = `${API_BASE_URL}/api/bookings/requests`;
+const YOCO_CHECKOUT_ENDPOINT = `${API_BASE_URL}/api/payments/yoco/checkout`;
 const AVAILABILITY_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000;
 const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 7);
@@ -91,7 +90,7 @@ function makeCalendarDays(month) {
     ];
 }
 
-export default function MonthlyCheckoutPage({ bookingRequest }) {
+export default function MonthlyCheckoutPage() {
     const [selection] = useState(readSelection);
     const [now, setNow] = useState(() => new Date());
     const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -115,6 +114,7 @@ export default function MonthlyCheckoutPage({ bookingRequest }) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [serviceAreaStatus, setServiceAreaStatus] = useState(null);
+    const [confirmation, setConfirmation] = useState(null);
 
     const allowance = selection?.packageTier === 'premium' ? 4 : 2;
     const customerTypeLabel = selection ? CUSTOMER_TYPES[selection.customerType] : '';
@@ -194,7 +194,7 @@ export default function MonthlyCheckoutPage({ bookingRequest }) {
 
     const submitBooking = async (event) => {
         event.preventDefault();
-        if (isSubmitting || !selection || bookingRequest.request) return;
+        if (isSubmitting || !selection) return;
         setError('');
         if (!selectedDate || !selectedTime) {
             setError('Choose an available booking date and time.');
@@ -256,18 +256,12 @@ export default function MonthlyCheckoutPage({ bookingRequest }) {
             };
             const body = new FormData();
             body.append('booking', JSON.stringify(booking));
-            const response = await fetch(BOOKING_REQUEST_ENDPOINT, { method: 'POST', body });
+            const response = await fetch(YOCO_CHECKOUT_ENDPOINT, { method: 'POST', body });
             const result = await response.json().catch(() => ({}));
-            if (!response.ok || !result.reference || !result.continuationUrl) {
-                throw new Error(result.message || 'The monthly booking request could not be submitted.');
+            if (!response.ok || !result.reference || !result.monthlyCovered) {
+                throw new Error(result.message || 'The monthly booking could not be confirmed.');
             }
-            bookingRequest.saveRequest(result, {
-                bookingDate: booking.bookingDate,
-                bookingTime: booking.bookingTime,
-                bookingType: 'monthly',
-                customerType: customerTypeLabel,
-                packageTier: packageLabel,
-            });
+            setConfirmation({ reference: result.reference, receiptSent: result.receiptSent });
         } catch (submitError) {
             setError(submitError.message || 'The monthly booking could not be confirmed.');
         } finally {
@@ -282,6 +276,22 @@ export default function MonthlyCheckoutPage({ bookingRequest }) {
                     <PackageCheck className='mx-auto size-10 text-[#31553c]' />
                     <h1 className='mt-4 font-display text-2xl font-semibold text-[#1e3128]'>Choose your monthly package</h1>
                     <p className='mt-2 text-sm leading-6 text-[#5b6560]'>Start from the booking page to select your customer type and monthly package.</p>
+                    <button type='button' onClick={() => clearMonthlyRoute(true)} className='mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1e3128] px-5 text-sm font-semibold text-white'>
+                        <ArrowLeft className='size-4' /> Back to booking
+                    </button>
+                </section>
+            </main>
+        );
+    }
+
+    if (confirmation) {
+        return (
+            <main className='min-h-screen bg-[#f5f7f3] px-4 py-10 sm:px-6'>
+                <section className='mx-auto max-w-xl rounded-3xl border border-[#dce6de] bg-white p-6 text-center shadow-xl sm:p-10'>
+                    <PackageCheck className='mx-auto size-10 text-[#31553c]' />
+                    <h1 className='mt-4 font-display text-2xl font-semibold text-[#1e3128]'>Monthly booking confirmed</h1>
+                    <p className='mt-2 text-sm leading-6 text-[#5b6560]'>Your wash is covered by your monthly entitlement. Your booking reference is <strong>{confirmation.reference}</strong>.</p>
+                    <p className='mt-2 text-xs text-[#68776e]'>{confirmation.receiptSent ? 'A receipt has been emailed to you.' : 'Your booking is confirmed. Please contact us if you need a receipt.'}</p>
                     <button type='button' onClick={() => clearMonthlyRoute(true)} className='mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1e3128] px-5 text-sm font-semibold text-white'>
                         <ArrowLeft className='size-4' /> Back to booking
                     </button>
@@ -398,7 +408,7 @@ export default function MonthlyCheckoutPage({ bookingRequest }) {
                             <span>I confirm my booking details and service location are accurate, and agree to the booking terms.</span>
                         </label>
                         {error && <p className='rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800' role='alert'>{error}</p>}
-                        <button type='submit' disabled={isSubmitting || Boolean(bookingRequest.request)} className='flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1e3128] px-4 text-sm font-bold text-white transition hover:bg-[#294c37] disabled:cursor-wait disabled:opacity-60'>
+                        <button type='submit' disabled={isSubmitting} className='flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1e3128] px-4 text-sm font-bold text-white transition hover:bg-[#294c37] disabled:cursor-wait disabled:opacity-60'>
                             {isSubmitting ? <><LoaderCircle className='size-4 animate-spin' /> Validating entitlement and confirming…</> : <>Confirm monthly booking · R0.00 <ArrowRight className='size-4' /></>}
                         </button>
                         <p className='flex items-center justify-center gap-1.5 text-[10px] text-[#68776e]'><ShieldCheck className='size-3.5' /> No Yoco payment required for a valid monthly wash.</p>
@@ -426,7 +436,6 @@ export default function MonthlyCheckoutPage({ bookingRequest }) {
                     </aside>
                 </div>
             </div>
-            <BookingRequestModal controller={bookingRequest} />
         </main>
     );
 }

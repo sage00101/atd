@@ -3,7 +3,6 @@ import { buildVehiclePromoApprovedEmailHtml } from './promo-email-template.js';
 import { buildSupportEmailHtml } from './support-email-template.js';
 import { buildMonthlyCodeEmailHtml } from './monthly-code-email-template.js';
 import { buildDistributionReportHtml } from './distribution-report-template.js';
-import { buildBookingRequestEmailHtml } from './booking-request-email-template.js';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const BOOKINGS_EMAIL = process.env.BUSINESS_EMAIL || 'bookings@a10tion.co.za';
@@ -35,9 +34,7 @@ async function sendBusinessBookingSms(receipt) {
     }
 
     const body = [
-        receipt.bookingRequest
-            ? `A10tion NEW BOOKING REQUEST: ${receipt.customerName || 'Customer'} ${receipt.packageName || 'wash'} awaiting approval.`
-            : `A10tion booking: ${receipt.customerName || 'Customer'} ${receipt.packageName || 'wash'} booked.`,
+        `A10tion booking: ${receipt.customerName || 'Customer'} ${receipt.packageName || 'wash'} booked.`,
         `Ref: ${receipt.reference}`,
         `Date: ${receipt.bookingDate} ${receipt.bookingTime}`,
         `Vehicle: ${receipt.registration || '—'}`,
@@ -132,69 +129,6 @@ export async function sendMonthlyDistributionReport(run) {
         replyTo: BOOKINGS_EMAIL,
         idempotencyKey: `monthly-distribution-report-${run.id}`,
         safeFailure: true,
-    });
-}
-
-export async function sendBookingApprovalEmail(request, continuationUrl, status) {
-    const isPending = status === 'pending';
-    const subject = status === 'pending'
-        ? `Booking request awaiting approval — ${request.reference}`
-        : status === 'approved'
-            ? `Booking request approved — ${request.reference}`
-            : `Booking request update — ${request.reference}`;
-    const jobs = [];
-    if (request.booking?.customer?.email) {
-        jobs.push(sendViaResend({
-            to: request.booking.customer.email,
-            subject,
-            html: buildBookingRequestEmailHtml(request, { status, continuationUrl }),
-            replyTo: BOOKINGS_EMAIL,
-            idempotencyKey: `booking-request-${request.reference}-${status}-customer`,
-            safeFailure: true,
-        }));
-    }
-    if (isPending) {
-        jobs.push(sendViaResend({
-            to: BOOKINGS_EMAIL,
-            subject: `Review booking request — ${request.reference}`,
-            html: buildBookingRequestEmailHtml(request, { status, businessCopy: true }),
-            replyTo: request.booking?.customer?.email || undefined,
-            idempotencyKey: `booking-request-${request.reference}-pending-business`,
-            safeFailure: true,
-        }));
-    }
-    if (!jobs.length) throw new Error('Booking request has no customer email address.');
-    const results = await Promise.allSettled(jobs);
-    const failures = results.filter((result) => result.status === 'rejected');
-    const skipped = results.filter((result) => result.status === 'fulfilled' && result.value?.skipped);
-    const sent = results.length - failures.length - skipped.length;
-    if (failures.length) {
-        failures.forEach((result) => console.error('[booking approval email failed]', request.reference, result.reason));
-    }
-    if (skipped.length) {
-        console.error('[booking approval email skipped — Resend is not configured]', request.reference);
-    }
-    if (sent === 0) throw failures[0]?.reason || new Error('Booking approval email service is not configured.');
-    return { sent, failed: failures.length + skipped.length };
-}
-
-export async function sendBookingRequestSms(request) {
-    const booking = request.booking;
-    const monthly = booking.bookingType === 'monthly-entitlement';
-    const clientType = booking.monthlyClientType === 'business' ? 'Business / Fleet / Family' : 'Private Client';
-    const tier = booking.monthlyPackageTier === 'premium' ? 'Premium' : 'Standard';
-    return sendBusinessBookingSms({
-        bookingRequest: true,
-        reference: request.reference,
-        customerName: `${booking.customer?.firstName || ''} ${booking.customer?.surname || ''}`.trim(),
-        customerEmail: booking.customer?.email,
-        customerMobile: booking.customer?.mobile,
-        packageName: monthly ? `${clientType} ${tier} monthly wash` : booking.packageName || 'Single Wash',
-        bookingDate: booking.bookingDate,
-        bookingTime: booking.bookingTime,
-        registration: booking.customer?.registration,
-        address: booking.customer?.address,
-        amountZar: monthly ? 'R0.00 after approval' : 'Pending approval',
     });
 }
 

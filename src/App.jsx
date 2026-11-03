@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import LenisScroll from './components/lenis-scroll';
 import Navbar from './components/navbar';
@@ -15,33 +15,32 @@ import ContactSection from './sections/contact-section';
 import PromoSection from './sections/promo-section';
 import FaqSection from './sections/faq-section';
 import MonthlyCheckoutPage from './sections/monthly-checkout-page';
-import BookingRequestPage from './sections/booking-request-page';
-import useBookingRequest from './hooks/use-booking-request';
 
 export default function App() {
     const [vacanciesOpen, setVacanciesOpen] = useState(false);
-    const bookingRequest = useBookingRequest();
+
+    useEffect(() => {
+        try {
+            window.localStorage.removeItem('a10tion-active-booking-request');
+        } catch (error) {
+            console.warn('Could not clear the retired booking-request state.', error);
+        }
+    }, []);
 
     if (new URLSearchParams(window.location.search).get('monthly-checkout') === '1') {
-        return <MonthlyCheckoutPage bookingRequest={bookingRequest} />;
-    }
-    if (new URLSearchParams(window.location.search).has('booking-request')) {
-        return <BookingRequestPage />;
+        return <MonthlyCheckoutPage />;
     }
 
     return (
         <>
             <LenisScroll />
-            <Navbar
-                onOpenVacancies={() => setVacanciesOpen(true)}
-                bookingRequest={bookingRequest}
-            />
+            <Navbar onOpenVacancies={() => setVacanciesOpen(true)} />
             <main>
                 <HeroSection />
                 <AboutSection />
                 <GallerySection />
                 <PricingSection />
-                <BookingSection bookingRequest={bookingRequest} />
+                <BookingSection />
                 <ReviewsSection />
                 <FaqSection />
                 <PromoSection />

@@ -3,10 +3,6 @@ import '../../_lib/load-env.js';
 import { applyCors } from '../../_lib/cors.js';
 import { sendReceiptEmail } from '../../_lib/email.js';
 import {
-    markBookingRequestConfirmed,
-    markBookingRequestPaymentFailed,
-} from '../../_lib/booking-requests.js';
-import {
     getBooking,
     getVehiclePromo,
     hasProcessedWebhook,
@@ -101,11 +97,7 @@ export default async function handler(req, res) {
         if (meta.promoCodeType === 'shared-code' && promo && reservationId) {
             await releaseSharedPromoCode(promo, reservationId);
         }
-        if (pending?.approvalReference) {
-            await markBookingRequestPaymentFailed(pending.approvalReference);
-        } else {
-            await releaseBookingSlot(meta.bookingDate || pending?.bookingDate, meta.bookingTime || pending?.bookingTime);
-        }
+        await releaseBookingSlot(meta.bookingDate || pending?.bookingDate, meta.bookingTime || pending?.bookingTime);
         await markWebhookProcessed(webhookId);
         res.status(200).send('ignored');
         return;
@@ -155,9 +147,6 @@ export default async function handler(req, res) {
         return;
     }
     const paidBooking = confirmedBooking || pending;
-    if (pending?.approvalReference) {
-        await markBookingRequestConfirmed(pending.approvalReference);
-    }
     if (pending?.purchaseType === 'monthly') {
         const provisioning = await provisionMonthlyEntitlementFromPaidPurchase(paidBooking);
         if (provisioning.status === 'needs_manager') {

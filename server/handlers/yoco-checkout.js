@@ -6,25 +6,21 @@ import { applyCors } from '../api/_lib/cors.js';
 import { sendReceiptEmail } from '../api/_lib/email.js';
 import { getServiceAreaError } from '../api/_lib/service-area.js';
 import {
-    authorizeBookingContinuation,
-    completeMonthlyBookingRequest,
-    markBookingRequestConfirmed,
-    resetBookingRequestCheckout,
-    saveBookingRequestCheckout,
-    startBookingRequestCheckout,
-} from '../api/_lib/booking-requests.js';
-import {
+    confirmMonthlyWashReservation,
     getMonthlyReservationError,
     releaseMonthlyWashReservation,
     reserveMonthlyWash,
 } from '../api/_lib/monthly-promos.js';
 import {
+    claimUniqueReferenceNumber,
     getSharedPromoCodeStatus,
     looksLikeEmail,
     looksLikeVehicleRegistration,
+    normaliseEmail,
     normaliseReg,
     releaseBookingSlot,
     releaseSharedPromoCode,
+    reserveBookingSlot,
     reserveSharedPromoCode,
     savePendingBooking,
     MONTHLY_PACKAGE_CENTS,
@@ -65,8 +61,6 @@ export default async function handler(req, res) {
     let monthlyEntitlementDetails = null;
     let reservedSlotDate = null;
     let reservedSlotTime = null;
-    let approvalRequest = null;
-    let checkoutRequestStarted = false;
     try {
         const { fields, files } = await parseMultipart(req);
         const bookingRaw = Array.isArray(fields.booking) ? fields.booking[0] : fields.booking;
@@ -79,24 +73,15 @@ export default async function handler(req, res) {
             return;
         }
 
-        const approvalReference = String(booking.approvalReference || '').trim();
-        const continuationToken = String(booking.continuationToken || '');
-        if (!approvalReference || !continuationToken) {
-            res.status(403).json({ message: 'A business-approved booking request is required before checkout.' });
-            return;
-        }
-        const authorization = await authorizeBookingContinuation(approvalReference, continuationToken);
-        if (authorization.error) {
-            res.status(403).json({ message: authorization.error });
-            return;
-        }
-        approvalRequest = authorization.request;
-        const selectedPaymentMethod = String(booking.paymentMethod || approvalRequest.paymentMethod || 'online');
-        if (selectedPaymentMethod !== 'online') {
-            res.status(400).json({ message: 'Choose online payment to continue to Yoco checkout.' });
-            return;
-        }
-        booking = { ...approvalRequest.booking, paymentMethod: selectedPaymentMethod };
+        booking = {
+            ...booking,
+            paymentMethod: 'online',
+            customer: {
+                ...booking.customer,
+                email: normaliseEmail(booking.customer?.email),
+                registration: normaliseReg(booking.customer?.registration),
+            },
+        };
 
         const {
             serviceLocation,
@@ -139,6 +124,13 @@ export default async function handler(req, res) {
             res.status(400).json({ message: 'Invalid vehicle registration format.' });
             return;
         }
+        if (!looksLikeEmail(customer?.email)
+            || !String(customer?.firstName || '').trim()
+            || !String(customer?.surname || '').trim()
+            || !String(customer?.mobile || '').trim()) {
+            res.status(400).json({ message: 'Enter your name, mobile number and a valid email address.' });
+            return;
+        }
         const isMonthly = purchaseType === 'monthly';
         if (bookingType && !isMonthlyWashBooking) {
             res.status(400).json({ message: 'Unknown booking type.' });
@@ -146,12 +138,13 @@ export default async function handler(req, res) {
         }
         if (isMonthlyWashBooking
             && (!looksLikeEmail(customer?.email) || !String(customer?.firstName || '').trim()
-                || !String(customer?.surname || '').trim() || !String(customer?.mobile || '').trim())) {
+                || !String(customer?.surname || '').trim() || !String(customer?.mobile || '').trim()
+                || !['private', 'business'].includes(monthlyClientType)
+                || !['standard', 'premium'].includes(monthlyPackageTier))) {
             res.status(400).json({ message: 'Enter your name, mobile number and assigned account email for the monthly booking.' });
             return;
         }
-        if (isMonthlyWashBooking && (isMonthly || !['private', 'business'].includes(monthlyClientType)
-            || !['standard', 'premium'].includes(monthlyPackageTier) || !approvalRequest.monthlyReservation)) {
+        if (isMonthlyWashBooking && isMonthly) {
             res.status(400).json({ message: 'Select a valid monthly client package with an active wash reservation.' });
             return;
         }
@@ -159,9 +152,13 @@ export default async function handler(req, res) {
             res.status(400).json({ message: 'Promo codes apply to single washes only. Monthly package purchases are charged at the package rate.' });
             return;
         }
-        const reference = approvalRequest.reference;
-        reservedSlotDate = null;
-        reservedSlotTime = null;
+        const reference = await claimUniqueReferenceNumber();
+        if (!await reserveBookingSlot(bookingDate, bookingTime, reference)) {
+            res.status(409).json({ message: 'That time slot was just booked by someone else. Please choose another.' });
+            return;
+        }
+        reservedSlotDate = bookingDate;
+        reservedSlotTime = bookingTime;
 
         let contractFileBase64 = null;
         let contractFileName = null;
@@ -216,11 +213,36 @@ export default async function handler(req, res) {
             amountCents = originalAmountCents;
 
             if (isMonthlyWashBooking) {
-                if (!approvalRequest.monthlyReservation) {
-                    res.status(409).json({ message: 'The monthly wash reservation has expired. Submit a new booking request.' });
+                const reservationId = crypto.randomUUID();
+                const monthly = await reserveMonthlyWash({
+                    promoCode,
+                    email: customer.email,
+                    bookingDate,
+                    reservationId,
+                    reference,
+                    expectedClientType: monthlyClientType,
+                    expectedPackageTier: monthlyPackageTier,
+                    bookingDetails: {
+                        customerName: `${customer.firstName} ${customer.surname}`.trim(),
+                        vehicleType,
+                    },
+                });
+                if (monthly.status !== 'OK') {
+                    await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
+                    reservedSlotDate = null;
+                    reservedSlotTime = null;
+                    const error = getMonthlyReservationError(monthly.status);
+                    res.status(error.statusCode).json({ message: error.message });
                     return;
                 }
-                reservedMonthlyWash = approvalRequest.monthlyReservation;
+                reservedMonthlyWash = {
+                    entitlementId: monthly.entitlement.id,
+                    period: monthly.period,
+                    reservationId,
+                    clientType: monthly.entitlement.clientType,
+                    packageTier: monthly.entitlement.packageTier,
+                    monthlyAllowance: monthly.entitlement.monthlyAllowance,
+                };
                 monthlyEntitlementDetails = reservedMonthlyWash;
                 appliedPromo = `Monthly entitlement ${reservedMonthlyWash.entitlementId.slice(0, 8).toUpperCase()}`;
                 appliedPromoType = 'monthly-entitlement';
@@ -366,14 +388,14 @@ export default async function handler(req, res) {
                 },
                 createdAt: new Date().toISOString(),
             };
-            await startBookingRequestCheckout(approvalRequest.reference, continuationToken, selectedPaymentMethod);
-            checkoutRequestStarted = true;
-            const confirmation = await completeMonthlyBookingRequest(approvalRequest, bookingRecord);
+            const confirmation = await confirmMonthlyWashReservation({
+                ...reservedMonthlyWash,
+                reference,
+                booking: bookingRecord,
+            });
             if (confirmation !== 'OK' && confirmation !== 'DUPLICATE') {
                 await releaseMonthlyWashReservation(reservedMonthlyWash);
                 reservedMonthlyWash = null;
-                await resetBookingRequestCheckout(approvalRequest.reference);
-                checkoutRequestStarted = false;
                 await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
                 reservedSlotDate = null;
                 reservedSlotTime = null;
@@ -382,6 +404,8 @@ export default async function handler(req, res) {
                 return;
             }
             reservedMonthlyWash = null;
+            reservedSlotDate = null;
+            reservedSlotTime = null;
 
             const formatZar = (cents) => `R${(cents / 100).toFixed(2)}`;
             const receipt = {
@@ -432,8 +456,6 @@ export default async function handler(req, res) {
 
         const siteUrl = process.env.SITE_URL || 'https://sage00101.github.io/atd/';
         const idempotencyKey = crypto.randomUUID();
-        await startBookingRequestCheckout(approvalRequest.reference, continuationToken, selectedPaymentMethod);
-        checkoutRequestStarted = true;
 
         const yocoRes = await fetch('https://payments.yoco.com/api/checkouts', {
             method: 'POST',
@@ -447,9 +469,9 @@ export default async function handler(req, res) {
                 currency: 'ZAR',
                 subtotalAmount: originalAmountCents,
                 totalDiscount: discountCents || undefined,
-                successUrl: `${siteUrl}?booking-request=${encodeURIComponent(reference)}&token=${encodeURIComponent(continuationToken)}&payment=success`,
-                cancelUrl: `${siteUrl}?booking-request=${encodeURIComponent(reference)}&token=${encodeURIComponent(continuationToken)}&payment=cancelled`,
-                failureUrl: `${siteUrl}?booking-request=${encodeURIComponent(reference)}&token=${encodeURIComponent(continuationToken)}&payment=failed`,
+                successUrl: `${siteUrl}?payment=success&ref=${encodeURIComponent(reference)}#booking`,
+                cancelUrl: `${siteUrl}?payment=cancelled&ref=${encodeURIComponent(reference)}#booking`,
+                failureUrl: `${siteUrl}?payment=failed&ref=${encodeURIComponent(reference)}#booking`,
                 metadata: {
                     reference,
                     packageId,
@@ -480,8 +502,6 @@ export default async function handler(req, res) {
             await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
             reservedSlotDate = null;
             reservedSlotTime = null;
-            await resetBookingRequestCheckout(approvalRequest.reference);
-            checkoutRequestStarted = false;
             console.error('Yoco error', yocoBody);
             res.status(502).json({ message: yocoBody.message || 'Could not start secure payment.' });
             return;
@@ -500,10 +520,8 @@ export default async function handler(req, res) {
             contractFileBase64,
             contractFileName,
             yocoCheckoutId: yocoBody.id,
-            approvalReference: approvalRequest.reference,
             createdAt: new Date().toISOString(),
         });
-        await saveBookingRequestCheckout(approvalRequest.reference, yocoBody.redirectUrl, yocoBody.id);
 
         res.status(200).json({ redirectUrl: yocoBody.redirectUrl, checkoutId: yocoBody.id, reference });
     } catch (err) {
@@ -515,9 +533,6 @@ export default async function handler(req, res) {
         }
         if (reservedSlotDate && reservedSlotTime) {
             await releaseBookingSlot(reservedSlotDate, reservedSlotTime).catch(() => {});
-        }
-        if (checkoutRequestStarted && approvalRequest) {
-            await resetBookingRequestCheckout(approvalRequest.reference).catch(() => {});
         }
         console.error(err);
         res.status(500).json({ message: 'Secure payment could not be started.' });
