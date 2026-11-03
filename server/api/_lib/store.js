@@ -15,6 +15,7 @@ const CALENDAR_BLOCK_INDEX_TTL_SECONDS = 60 * 60 * 24 * 365 * 5; // 5 years — 
 export const BOOKING_SLOT_TIMES = ['08:00', '10:30', '13:00', '15:30', '18:00'];
 
 const referenceKey = (reference) => `booking-ref:${reference}`;
+const cancellationTokenKey = (token) => `booking-cancel-token:${token}`;
 const calendarDateIndexKey = (date) => `calendar-blocks:${date}`;
 const calendarSlotKey = (date, time) => `calendar-slot:${date}:${time}`;
 const MARK_BOOKING_CONFIRMED_SCRIPT = `
@@ -22,6 +23,7 @@ local raw = redis.call('GET', KEYS[1])
 if not raw then return {'NOT_FOUND'} end
 local booking = cjson.decode(raw)
 if booking.status == 'paid' then return {'DUPLICATE'} end
+if booking.status ~= 'pending' then return {booking.status} end
 booking.status = 'paid'
 booking.confirmedAt = ARGV[1]
 redis.call('SET', KEYS[1], cjson.encode(booking), 'EX', ARGV[2])
@@ -29,6 +31,20 @@ if ARGV[3] ~= '' and ARGV[4] ~= '' then
   redis.call('EXPIRE', KEYS[2], ARGV[2])
 end
 return {'OK', cjson.encode(booking)}
+`;
+const CANCEL_PENDING_BOOKING_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return {'NOT_FOUND'} end
+local booking = cjson.decode(raw)
+if booking.status ~= 'pending' then return {booking.status, cjson.encode(booking)} end
+booking.status = 'cancelled'
+booking.cancelledAt = ARGV[1]
+redis.call('SET', KEYS[1], cjson.encode(booking), 'EX', ARGV[2])
+if redis.call('GET', KEYS[2]) == ARGV[3] then
+  redis.call('DEL', KEYS[2])
+  redis.call('SREM', KEYS[3], ARGV[4])
+end
+return {'CANCELLED', cjson.encode(booking)}
 `;
 const RELEASE_BOOKING_SLOT_IF_OWNED_SCRIPT = `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
@@ -291,6 +307,9 @@ export async function reserveBookingSlot(bookingDate, bookingTime, token, ttlSec
 /** Stores the booking record once the slot is already claimed via reserveBookingSlot. */
 export async function savePendingBooking(checkoutId, booking) {
     await redis.set(bookingKey(checkoutId), { ...booking, status: 'pending' }, { ex: PENDING_BOOKING_TTL_SECONDS });
+    if (booking.cancellationToken) {
+        await redis.set(cancellationTokenKey(booking.cancellationToken), checkoutId, { ex: PENDING_BOOKING_TTL_SECONDS });
+    }
 }
 
 /** Stores an onsite booking ticket and retains the slot until its appointment has passed. */
@@ -324,6 +343,30 @@ export async function markBookingConfirmed(checkoutId) {
         booking.bookingTime || '',
     ]);
     return result?.[0] === 'OK' ? JSON.parse(result[1]) : null;
+}
+
+/** Cancels only a pending online booking and releases its slot only if it still owns it. */
+export async function cancelPendingBookingByToken(token) {
+    if (!token) return null;
+    const checkoutId = await redis.get(cancellationTokenKey(token));
+    if (!checkoutId) return null;
+
+    const booking = await getBooking(checkoutId);
+    if (!booking) return null;
+    const result = await redis.eval(CANCEL_PENDING_BOOKING_SCRIPT, [
+        bookingKey(checkoutId),
+        slotKey(booking.bookingDate, booking.bookingTime),
+        dateIndexKey(booking.bookingDate),
+    ], [
+        new Date().toISOString(),
+        String(PENDING_BOOKING_TTL_SECONDS),
+        booking.reference || '',
+        booking.bookingTime || '',
+    ]);
+    return {
+        status: result?.[0] || 'NOT_FOUND',
+        booking: result?.[1] ? JSON.parse(result[1]) : booking,
+    };
 }
 
 /** Frees a reserved slot after a failed/cancelled payment so it goes back up for booking immediately. */

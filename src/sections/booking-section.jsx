@@ -30,6 +30,7 @@ const ServiceAreaPicker = lazy(() => import('../components/service-area-picker')
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const YOCO_CHECKOUT_ENDPOINT = `${API_BASE_URL}/api/payments/yoco/checkout`;
+const CANCEL_BOOKING_ENDPOINT = `${API_BASE_URL}/api/bookings/cancel`;
 const ONSITE_BOOKING_ENDPOINT = `${API_BASE_URL}/api/bookings/onsite`;
 const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
@@ -304,10 +305,25 @@ export default function BookingSection() {
         const params = new URLSearchParams(window.location.search);
         const status = params.get('payment');
         if (status && PAYMENT_STATUS_MESSAGES[status]) {
+            const reference = params.get('ref');
+            const cancellationToken = params.get('cancelToken');
             setPaymentStatus(status);
-            setPaymentReference(params.get('ref'));
+            setPaymentReference(reference);
+            if (cancellationToken && (status === 'cancelled' || status === 'failed')) {
+                fetch(CANCEL_BOOKING_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cancellationToken }),
+                }).then((response) => {
+                    if (!response.ok) throw new Error(`Booking cancellation returned ${response.status}.`);
+                    window.dispatchEvent(new Event('a10tion-booking-availability-refresh'));
+                }).catch((error) => {
+                    console.error('[booking cancellation request failed]', error);
+                });
+            }
             params.delete('payment');
             params.delete('ref');
+            params.delete('cancelToken');
             const cleanedSearch = params.toString();
             const cleanedUrl = `${window.location.pathname}${cleanedSearch ? `?${cleanedSearch}` : ''}${window.location.hash}`;
             window.history.replaceState(null, '', cleanedUrl);
@@ -380,10 +396,15 @@ export default function BookingSection() {
                 controller?.abort();
             }
         };
+        const refreshImmediately = () => {
+            lastAvailabilityRefreshRef.current = 0;
+            refresh();
+        };
 
         refresh();
         const timer = window.setInterval(refresh, AVAILABILITY_REFRESH_MS);
         window.addEventListener('focus', refresh);
+        window.addEventListener('a10tion-booking-availability-refresh', refreshImmediately);
         document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => {
             active = false;
@@ -391,6 +412,7 @@ export default function BookingSection() {
             window.clearTimeout(cooldownTimer);
             window.clearInterval(timer);
             window.removeEventListener('focus', refresh);
+            window.removeEventListener('a10tion-booking-availability-refresh', refreshImmediately);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, [calendarInView, calendarMonthKey, todayKey]);

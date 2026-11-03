@@ -30,7 +30,8 @@ Customers book directly from the website and choose secure Yoco checkout or
 payment on arrival. On-site bookings are confirmed immediately; online bookings
 are confirmed by the Yoco payment webhook. A valid Monthly Clients entitlement
 confirms a covered wash immediately without collecting payment. Booking receipts
-are sent to the customer and business after confirmation.
+are sent to the customer and business after confirmation. Returning from a
+cancelled or failed online checkout releases its pending time slot immediately.
 
 Single-wash promo codes are reserved when checkout starts and redeemed only
 after Yoco confirms payment. The Business Manager continues to manage promo
@@ -59,14 +60,14 @@ allowance in their current billing period as the initial credit balance; their
 older historical monthly periods are not retroactively converted into rollover
 credits.
 
-The booking availability, on-site, on-site payment confirmation, and Yoco
+The booking availability, cancellation, on-site, on-site payment confirmation, and Yoco
 checkout endpoints are routed through one Vercel function to stay within the
 Hobby plan's 12-function deployment limit. Keep the Vercel project root
 directory set to `server` so `server/vercel.json` rewrites are applied. Continue
 using the configured `SITE_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`,
 `YOCO_SECRET_KEY`, `YOCO_WEBHOOK_SECRET`, and Upstash Redis credentials.
 
-The booking availability, request, on-site, on-site payment confirmation, and
+The booking availability, cancellation, request, on-site, on-site payment confirmation, and
 Yoco checkout endpoints are routed through one Vercel function to stay within
 the Hobby plan's 12-function deployment limit. Keep the Vercel project root
 directory set to `server` so `server/vercel.json` rewrites are applied.

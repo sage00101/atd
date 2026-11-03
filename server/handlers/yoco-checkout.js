@@ -456,6 +456,7 @@ export default async function handler(req, res) {
 
         const siteUrl = process.env.SITE_URL || 'https://sage00101.github.io/atd/';
         const idempotencyKey = crypto.randomUUID();
+        const cancellationToken = crypto.randomUUID();
 
         const yocoRes = await fetch('https://payments.yoco.com/api/checkouts', {
             method: 'POST',
@@ -470,8 +471,8 @@ export default async function handler(req, res) {
                 subtotalAmount: originalAmountCents,
                 totalDiscount: discountCents || undefined,
                 successUrl: `${siteUrl}?payment=success&ref=${encodeURIComponent(reference)}#booking`,
-                cancelUrl: `${siteUrl}?payment=cancelled&ref=${encodeURIComponent(reference)}#booking`,
-                failureUrl: `${siteUrl}?payment=failed&ref=${encodeURIComponent(reference)}#booking`,
+                cancelUrl: `${siteUrl}?payment=cancelled&ref=${encodeURIComponent(reference)}&cancelToken=${encodeURIComponent(cancellationToken)}#booking`,
+                failureUrl: `${siteUrl}?payment=failed&ref=${encodeURIComponent(reference)}&cancelToken=${encodeURIComponent(cancellationToken)}#booking`,
                 metadata: {
                     reference,
                     packageId,
@@ -516,7 +517,13 @@ export default async function handler(req, res) {
             discountCents,
             appliedPromo,
             appliedPromoType,
-            promoReservationId,
+            cancellationToken,
+            monthlyEntitlementId: reservedMonthlyWash?.entitlementId,
+            monthlyUsagePeriod: reservedMonthlyWash?.period,
+            monthlyClientType: reservedMonthlyWash?.clientType,
+            monthlyPackageTier: reservedMonthlyWash?.packageTier,
+            monthlyAllowance: reservedMonthlyWash?.monthlyAllowance,
+            promoReservationId: reservedMonthlyWash?.reservationId || promoReservationId,
             contractFileBase64,
             contractFileName,
             yocoCheckoutId: yocoBody.id,

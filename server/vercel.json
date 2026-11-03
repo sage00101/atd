@@ -5,6 +5,10 @@
       "destination": "/api/booking-router?__route=availability"
     },
     {
+      "source": "/api/bookings/cancel",
+      "destination": "/api/booking-router?__route=cancel"
+    },
+    {
       "source": "/api/bookings/onsite",
       "destination": "/api/booking-router?__route=onsite"
     },
