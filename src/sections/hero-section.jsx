@@ -7,21 +7,23 @@ import {
     MapPin,
 } from 'lucide-react';
 import heroLogo from '../assets/logos/hero-logo.png';
-import heroImageDesktop from '../assets/images/hero-desktop.jpg';
-import heroImageMobile from '../assets/images/hero-mobile.jpg';
+import heroImage from '../assets/images/hero.jpeg';
 import PriceListModal from '../components/price-list-modal';
 
 /* ============================================================
    ASSETS
-   Point these at whatever paths your build serves them from.
+   One photo serves both layouts. object-cover fills each frame
+   (the short mobile banner and the tall desktop panel), and the
+   positions below choose which part of the photo stays in view.
 ============================================================ */
 const HERO_LOGO = heroLogo;
-const HERO_IMAGE_DESKTOP = heroImageDesktop;
-const HERO_IMAGE_MOBILE = heroImageMobile;
+const HERO_IMAGE_DESKTOP = heroImage;
+const HERO_IMAGE_MOBILE = heroImage;
 
-/* Nudge the photo inside its frame without touching markup. */
-const DESKTOP_IMAGE_POSITION = '48% 58%';
-const MOBILE_IMAGE_POSITION = '64% 52%';
+/* Nudge the photo inside its frame without touching markup.
+   Format: 'x% y%'. 0% = left/top edge, 100% = right/bottom edge. */
+const DESKTOP_IMAGE_POSITION = '50% 50%';
+const MOBILE_IMAGE_POSITION = '50% 50%';
 
 /* ============================================================
    PRIMARY BUTTON
@@ -171,7 +173,7 @@ export default function HeroSection() {
                     <picture>
                         <img
                             src={HERO_IMAGE_MOBILE}
-                            alt="A10tion To Detail — freshly detailed hatchback on a coastal Cape Town road"
+                            alt="A10tion To Detail — professional mobile car care in Cape Town"
                             className="hero-wipe absolute inset-0 h-full w-full object-cover [clip-path:polygon(0_0,100%_0,100%_94%,0_100%)]"
                             style={{ objectPosition: MOBILE_IMAGE_POSITION }}
                             draggable={false}
@@ -272,7 +274,7 @@ export default function HeroSection() {
                 <div className="relative w-[58%] overflow-hidden xl:w-[60%]">
                     <img
                         src={HERO_IMAGE_DESKTOP}
-                        alt="A10tion To Detail — freshly detailed hatchback on a coastal Cape Town road"
+                        alt="A10tion To Detail — professional mobile car care in Cape Town"
                         className="hero-wipe absolute inset-0 h-full w-full object-cover [clip-path:polygon(9%_0,100%_0,100%_100%,0_100%)]"
                         style={{ objectPosition: DESKTOP_IMAGE_POSITION }}
                         draggable={false}
