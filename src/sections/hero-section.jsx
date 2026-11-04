@@ -22,7 +22,7 @@ const HERO_IMAGE_MOBILE = heroImage;
 
 /* Nudge the photo inside its frame without touching markup.
    Format: 'x% y%'. 0% = left/top edge, 100% = right/bottom edge. */
-const DESKTOP_IMAGE_POSITION = '50% 100%';
+const DESKTOP_IMAGE_POSITION = '50% 80%';
 const MOBILE_IMAGE_POSITION = '50% 85%';
 
 /* ============================================================
