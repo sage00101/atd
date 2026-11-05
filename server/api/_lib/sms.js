@@ -76,8 +76,6 @@ export function buildBookingRequestSmsText(request) {
         `Date: ${`${booking.bookingDate || ''} ${booking.bookingTime || ''}`.trim() || '—'}`,
         `Contact: ${customer.mobile || customer.email || '—'}`,
         ...buildAddressSmsLines(customer.address),
-        `Ref: ${request.reference}`,
-        'Open the Business Manager to accept or decline.',
     ].join('\n');
 }
 
