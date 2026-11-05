@@ -26,6 +26,7 @@ import VehiclePromoModal from '../components/vehicle-promo-modal';
 import { packageGroups } from '../data/pricing';
 import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
 import { trackSubmittedRequest } from '../utils/booking-request-tracker';
+import { loadReturningCustomer, saveReturningCustomer } from '../utils/returning-customer';
 
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 
@@ -229,7 +230,8 @@ export default function BookingSection() {
     const [contractFileError, setContractFileError] = useState('');
     const [serviceAreaAccepted, setServiceAreaAccepted] = useState(false);
     const [serviceLocation, setServiceLocation] = useState(null);
-    const [customer, setCustomer] = useState({
+    const [returningCustomer] = useState(loadReturningCustomer);
+    const [customer, setCustomer] = useState(() => ({
         firstName: '',
         surname: '',
         mobile: '',
@@ -238,8 +240,9 @@ export default function BookingSection() {
         registration: '',
         address: '',
         notes: '',
-    });
-    const [confirmEmail, setConfirmEmail] = useState('');
+        ...returningCustomer,
+    }));
+    const [confirmEmail, setConfirmEmail] = useState(returningCustomer.email || '');
 
     useEffect(() => {
         const syncPromoCode = (event) => setPromoCode(event.detail?.promoCode || '');
@@ -639,6 +642,7 @@ export default function BookingSection() {
             }
             setCheckoutOpen(false);
             trackSubmittedRequest(result);
+            saveReturningCustomer(customer);
             setRequestConfirmation({
                 reference: result.reference,
                 statusUrl: result.statusUrl,

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
 import { trackSubmittedRequest } from '../utils/booking-request-tracker';
+import { loadReturningCustomer, saveReturningCustomer } from '../utils/returning-customer';
 
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -105,16 +106,19 @@ export default function MonthlyCheckoutPage() {
         status: 'idle',
         message: 'Enter your assigned code and email, then choose a booking date to check available washes.',
     });
-    const [customer, setCustomer] = useState({
-        firstName: '',
-        surname: '',
-        mobile: '',
-        email: '',
-        vehicleType: selection?.vehicleType || 'Sedan / Hatchback',
-        confirmEmail: '',
-        registration: '',
-        address: '',
-        notes: '',
+    const [customer, setCustomer] = useState(() => {
+        const saved = loadReturningCustomer();
+        return {
+            firstName: saved.firstName || '',
+            surname: saved.surname || '',
+            mobile: saved.mobile || '',
+            email: saved.email || '',
+            vehicleType: selection?.vehicleType || 'Sedan / Hatchback',
+            confirmEmail: saved.email || '',
+            registration: saved.registration || '',
+            address: '',
+            notes: '',
+        };
     });
     const [serviceLocation, setServiceLocation] = useState(null);
     const [termsAccepted, setTermsAccepted] = useState(false);
@@ -333,6 +337,7 @@ export default function MonthlyCheckoutPage() {
                 throw new Error(result.message || 'The monthly booking request could not be submitted.');
             }
             trackSubmittedRequest(result);
+            saveReturningCustomer(customer);
             setConfirmation({
                 reference: result.reference,
                 statusUrl: result.statusUrl,
