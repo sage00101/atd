@@ -563,6 +563,7 @@ function validateEntitlementInput(input) {
     const businessName = String(input?.businessName || '').trim();
     const clientType = String(input?.clientType || '');
     const packageTier = String(input?.packageTier || '');
+    const vehicleType = String(input?.vehicleType || '').trim();
     const validFrom = String(input?.validFrom || getSouthAfricanDate());
     const validUntil = String(input?.validUntil || '');
 
@@ -586,6 +587,12 @@ function validateEntitlementInput(input) {
     if (!['standard', 'premium'].includes(packageTier)) {
         throw new Error('Choose the Standard or Premium package.');
     }
+    if (vehicleType && !MONTHLY_VEHICLE_TYPES.includes(vehicleType)) {
+        throw new Error('Choose Sedan / Hatchback, SUV / Bakkie or Minibus / Van.');
+    }
+    if (input?.requireSeparateName && !vehicleType) {
+        throw new Error('Choose the vehicle category this monthly package was bought for.');
+    }
     if (!isValidDate(validFrom) || !isValidDate(validUntil, true)) {
         throw new Error('Enter valid start and end dates.');
     }
@@ -602,11 +609,14 @@ function validateEntitlementInput(input) {
         businessName,
         clientType,
         packageTier,
+        vehicleType,
         monthlyAllowance: packageTier === 'premium' ? 4 : 2,
         validFrom,
         validUntil: validUntil || null,
     };
 }
+
+export const MONTHLY_VEHICLE_TYPES = ['Sedan / Hatchback', 'SUV / Bakkie', 'Minibus / Van'];
 
 function getCalendarMonthsBetween(start, end) {
     const months = [];
@@ -1564,11 +1574,15 @@ export async function reserveMonthlyWash({
     bookingDetails,
     expectedClientType,
     expectedPackageTier,
+    expectedVehicleType,
 }) {
     const normalisedCode = String(promoCode || '').trim().toUpperCase();
     const normalisedEmail = normaliseEmail(email);
     const entitlement = await getMonthlyPromoForCode(normalisedCode);
     if (!entitlement) return { status: 'NOT_FOUND' };
+    if (expectedVehicleType && entitlement.vehicleType && entitlement.vehicleType !== expectedVehicleType) {
+        return { status: 'VEHICLE_MISMATCH' };
+    }
 
     const billingAnchor = entitlement.billingAnchor || entitlement.validFrom;
     const billingPeriod = getBillingPeriod(bookingDate, billingAnchor);
@@ -1630,6 +1644,7 @@ export function getMonthlyReservationError(status) {
         EMAIL_MISMATCH: { statusCode: 403, message: 'Use the email address assigned to this monthly wash package.' },
         CLIENT_TYPE_MISMATCH: { statusCode: 403, message: 'The selected customer type does not match this monthly entitlement.' },
         PACKAGE_MISMATCH: { statusCode: 403, message: 'The selected Standard or Premium package does not match this monthly entitlement.' },
+        VEHICLE_MISMATCH: { statusCode: 403, message: 'The selected vehicle category does not match the vehicle this monthly package was bought for.' },
         NOT_YET_VALID: { statusCode: 403, message: 'This monthly wash package is not active for the selected booking date.' },
         EXPIRED: { statusCode: 410, message: 'This monthly wash package has expired.' },
         LIMIT_REACHED: { statusCode: 409, message: 'The booking limit for this monthly billing period is used or reserved. Choose a date in another billing period or book at the normal price.' },
@@ -1648,6 +1663,7 @@ export async function checkMonthlyWashAvailability({
     bookingDate,
     expectedClientType,
     expectedPackageTier,
+    expectedVehicleType,
 }) {
     const normalisedCode = String(promoCode || '').trim().toUpperCase();
     const normalisedEmail = normaliseEmail(email);
@@ -1667,6 +1683,7 @@ export async function checkMonthlyWashAvailability({
     if (normaliseEmail(entitlement.email) !== normalisedEmail) return { status: 'EMAIL_MISMATCH' };
     if (expectedClientType && entitlement.clientType !== expectedClientType) return { status: 'CLIENT_TYPE_MISMATCH' };
     if (expectedPackageTier && entitlement.packageTier !== expectedPackageTier) return { status: 'PACKAGE_MISMATCH' };
+    if (expectedVehicleType && entitlement.vehicleType && entitlement.vehicleType !== expectedVehicleType) return { status: 'VEHICLE_MISMATCH' };
     if (entitlement.validFrom && bookingDate < entitlement.validFrom) return { status: 'NOT_YET_VALID' };
     if (entitlement.validUntil && bookingDate > entitlement.validUntil) return { status: 'EXPIRED' };
 
@@ -1706,6 +1723,30 @@ export async function checkMonthlyWashAvailability({
         availableWashes,
         period: period.start,
     };
+}
+
+/** Looks up what a monthly code was bought for, so the website can check it against the customer's selection. */
+export async function lookupMonthlyCodeProfile({ promoCode, clientType, packageTier, vehicleType }) {
+    const normalisedCode = String(promoCode || '').trim().toUpperCase();
+    if (!normalisedCode) throw new Error('Enter your monthly access code.');
+    const entitlement = await getMonthlyPromoForCode(normalisedCode);
+    if (!entitlement) return { status: 'NOT_FOUND' };
+    const codeDigest = digest(normalisedCode);
+    const validCode = entitlement.codeDigests
+        ? entitlement.codeDigests.includes(codeDigest)
+        : entitlement.currentCodeDigest === codeDigest;
+    if (!validCode) return { status: 'REPLACED' };
+    if (entitlement.archived) return { status: 'ARCHIVED' };
+    if (!entitlement.active) return { status: 'INACTIVE' };
+    const profile = {
+        clientType: entitlement.clientType,
+        packageTier: entitlement.packageTier,
+        vehicleType: entitlement.vehicleType || '',
+    };
+    if (clientType && clientType !== profile.clientType) return { status: 'CLIENT_TYPE_MISMATCH', profile };
+    if (packageTier && packageTier !== profile.packageTier) return { status: 'PACKAGE_MISMATCH', profile };
+    if (vehicleType && profile.vehicleType && vehicleType !== profile.vehicleType) return { status: 'VEHICLE_MISMATCH', profile };
+    return { status: 'OK', profile };
 }
 
 export async function releaseMonthlyWashReservation({ entitlementId, period, reservationId }) {

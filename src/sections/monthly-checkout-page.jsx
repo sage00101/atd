@@ -100,7 +100,7 @@ export default function MonthlyCheckoutPage() {
     const [selectedTime, setSelectedTime] = useState('');
     const [bookedSlots, setBookedSlots] = useState({});
     const [availabilityError, setAvailabilityError] = useState('');
-    const [promoCode, setPromoCode] = useState('');
+    const [promoCode, setPromoCode] = useState(() => String(selection?.promoCode || '').toUpperCase());
     const [codeCheck, setCodeCheck] = useState({
         status: 'idle',
         message: 'Enter your assigned code and email, then choose a booking date to check available washes.',
@@ -110,6 +110,7 @@ export default function MonthlyCheckoutPage() {
         surname: '',
         mobile: '',
         email: '',
+        vehicleType: selection?.vehicleType || 'Sedan / Hatchback',
         confirmEmail: '',
         registration: '',
         address: '',
@@ -201,6 +202,7 @@ export default function MonthlyCheckoutPage() {
                         bookingDate: selectedDateKey,
                         clientType: selection.customerType,
                         packageTier: selection.packageTier,
+                        vehicleType: customer.vehicleType,
                     }),
                     signal: controller.signal,
                 });
@@ -224,7 +226,7 @@ export default function MonthlyCheckoutPage() {
             window.clearTimeout(timer);
             controller.abort();
         };
-    }, [customer.email, promoCode, selectedDateKey, selection]);
+    }, [customer.email, customer.vehicleType, promoCode, selectedDateKey, selection]);
 
     useEffect(() => {
         if (!selectedDate || !selectedTime) return;
@@ -452,7 +454,7 @@ export default function MonthlyCheckoutPage() {
                                 <label className='text-[11px] font-semibold text-[#35483b]'>Vehicle registration<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-base font-normal sm:text-sm uppercase outline-none focus:border-[#31553c]' name='registration' value={customer.registration} onChange={updateCustomer} required /></label>
                                 <label className='text-[11px] font-semibold text-[#35483b]'>Email address<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-base font-normal sm:text-sm outline-none focus:border-[#31553c]' name='email' type='email' value={customer.email} onChange={updateCustomer} autoComplete='email' required /></label>
                                 <label className='text-[11px] font-semibold text-[#35483b]'>Confirm email<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-base font-normal sm:text-sm outline-none focus:border-[#31553c]' name='confirmEmail' type='email' value={customer.confirmEmail} onChange={updateCustomer} autoComplete='email' required /></label>
-                                <label className='text-[11px] font-semibold text-[#35483b] sm:col-span-2'>Vehicle category<select className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] bg-white px-3 text-base font-normal sm:text-sm outline-none focus:border-[#31553c]' name='vehicleType' value={customer.vehicleType || 'Sedan / Hatchback'} onChange={updateCustomer}><option>Sedan / Hatchback</option><option>SUV / Bakkie</option><option>Minibus / Van</option></select></label>
+                                <label className='text-[11px] font-semibold text-[#35483b] sm:col-span-2'>Vehicle category<select className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] bg-white px-3 text-base font-normal sm:text-sm outline-none focus:border-[#31553c] disabled:bg-[#f0f3f0] disabled:text-[#52635a]' name='vehicleType' value={customer.vehicleType || 'Sedan / Hatchback'} onChange={updateCustomer} disabled={Boolean(selection?.vehicleType)}><option>Sedan / Hatchback</option><option>SUV / Bakkie</option><option>Minibus / Van</option></select></label>
                                 <label className='text-[11px] font-semibold text-[#35483b] sm:col-span-2'>Booking message <span className='font-normal text-[#68776e]'>(optional)</span><textarea className='mt-1.5 min-h-20 w-full resize-y rounded-lg border border-[#cbd9cf] px-3 py-2 text-base font-normal outline-none sm:text-sm focus:border-[#31553c]' name='notes' value={customer.notes} onChange={updateCustomer} maxLength={300} /></label>
                             </div>
                         </section>

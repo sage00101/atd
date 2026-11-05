@@ -32,6 +32,8 @@ const ServiceAreaPicker = lazy(() => import('../components/service-area-picker')
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const CANCEL_BOOKING_ENDPOINT = `${API_BASE_URL}/api/bookings/cancel`;
 const BOOKING_REQUEST_ENDPOINT = `${API_BASE_URL}/api/bookings/request`;
+const MONTHLY_VALIDATION_ENDPOINT = `${API_BASE_URL}/api/monthly/validate`;
+const MONTHLY_VEHICLE_OPTIONS = ['Sedan / Hatchback', 'SUV / Bakkie', 'Minibus / Van'];
 const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
 const BOOKING_CLOCK_REFRESH_MS = 10_000;
@@ -213,6 +215,9 @@ export default function BookingSection() {
     const [monthlyClientType, setMonthlyClientType] = useState('');
     const [monthlyPackageTier, setMonthlyPackageTier] = useState('');
     const [monthlySelectionError, setMonthlySelectionError] = useState('');
+    const [monthlyVehicleType, setMonthlyVehicleType] = useState('');
+    const [monthlyCode, setMonthlyCode] = useState('');
+    const [monthlyCodeChecking, setMonthlyCodeChecking] = useState(false);
     const [promoRegistrationOpen, setPromoRegistrationOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [paymentError, setPaymentError] = useState('');
@@ -824,6 +829,8 @@ export default function BookingSection() {
                                 setMonthlySelectionStep(1);
                                 setMonthlyClientType('');
                                 setMonthlyPackageTier('');
+                                setMonthlyVehicleType('');
+                                setMonthlyCode('');
                                 setMonthlySelectionError('');
                                 setMonthlySelectionOpen(true);
                             }}
@@ -844,14 +851,17 @@ export default function BookingSection() {
                         <header className='bg-gradient-to-br from-[#14251c] to-[#294c37] px-5 py-5 text-white sm:px-7 sm:py-6'>
                             <div className='flex items-start justify-between gap-4'>
                                 <div>
-                                    <p className='text-[9px] font-bold uppercase tracking-[.17em] text-[#c5d9c9]'>Monthly wash booking · Step {monthlySelectionStep} of 2</p>
+                                    <p className='text-[9px] font-bold uppercase tracking-[.17em] text-[#c5d9c9]'>Monthly wash booking · Step {monthlySelectionStep} of 4</p>
                                     <h2 id='monthly-selection-title' className='mt-2 font-display text-xl font-semibold sm:text-2xl'>
-                                        {monthlySelectionStep === 1 ? 'Who is the package for?' : 'Choose your monthly package'}
+                                        {['Who is the package for?', 'Choose your monthly package', 'Which vehicle did you buy for?', 'Enter your access code'][monthlySelectionStep - 1]}
                                     </h2>
                                     <p className='mt-1.5 max-w-md text-xs leading-5 text-white/70'>
-                                        {monthlySelectionStep === 1
-                                            ? 'Select the customer type assigned to your monthly entitlement.'
-                                            : `Select the package assigned to your ${monthlyClientType === 'business' ? 'Business / Fleet / Family' : 'Private Client'} entitlement.`}
+                                        {[
+                                            'Select the customer type assigned to your monthly entitlement.',
+                                            `Select the package assigned to your ${monthlyClientType === 'business' ? 'Business / Fleet / Family' : 'Private Client'} entitlement.`,
+                                            'Select the vehicle category you purchased your monthly package for.',
+                                            'We will check your code against the package and vehicle you selected.',
+                                        ][monthlySelectionStep - 1]}
                                     </p>
                                 </div>
                                 <button type='button' onClick={() => setMonthlySelectionOpen(false)} className='grid size-9 shrink-0 place-items-center rounded-full border border-white/20 text-white transition hover:bg-white/10' aria-label='Close'>
@@ -859,7 +869,7 @@ export default function BookingSection() {
                                 </button>
                             </div>
                             <div className='mt-5 flex gap-2' aria-hidden='true'>
-                                {[1, 2].map((step) => <span key={step} className={`h-1 flex-1 rounded-full ${monthlySelectionStep >= step ? 'bg-[#d6ead9]' : 'bg-white/20'}`} />)}
+                                {[1, 2, 3, 4].map((step) => <span key={step} className={`h-1 flex-1 rounded-full ${monthlySelectionStep >= step ? 'bg-[#d6ead9]' : 'bg-white/20'}`} />)}
                             </div>
                         </header>
 
@@ -877,6 +887,29 @@ export default function BookingSection() {
                                         </button>
                                     ))}
                                 </div>
+                            ) : monthlySelectionStep === 3 ? (
+                                <div className='grid gap-3 sm:grid-cols-3'>
+                                    {MONTHLY_VEHICLE_OPTIONS.map((option) => (
+                                        <button key={option} type='button' aria-pressed={monthlyVehicleType === option} onClick={() => setMonthlyVehicleType(option)} className={`rounded-2xl border p-4 text-left transition ${monthlyVehicleType === option ? 'border-[#31553c] bg-[#edf4ee] ring-2 ring-[#31553c]/15' : 'border-[#dce6de] bg-white hover:border-[#9db6a2] hover:bg-[#f8faf8]'}`}>
+                                            <span className={`grid size-10 place-items-center rounded-xl ${monthlyVehicleType === option ? 'bg-[#dcebdd] text-[#31553c]' : 'bg-[#f0f3f0] text-[#52635a]'}`}><CarFront className='size-5' /></span>
+                                            <span className='mt-3 block text-sm font-bold text-[#1e3128]'>{option}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : monthlySelectionStep === 4 ? (
+                                <label className='block text-xs font-semibold text-[#35483b]'>
+                                    Monthly access code
+                                    <input
+                                        type='text'
+                                        value={monthlyCode}
+                                        autoFocus
+                                        autoCapitalize='characters'
+                                        autoComplete='off'
+                                        onChange={(event) => { setMonthlyCode(event.target.value.toUpperCase()); setMonthlySelectionError(''); }}
+                                        placeholder='Enter your code'
+                                        className='mt-2 min-h-12 w-full rounded-xl border border-[#dce6de] px-4 text-base uppercase tracking-widest text-[#1e3128] outline-none focus:border-[#31553c]'
+                                    />
+                                </label>
                             ) : (
                                 <div className='grid gap-3 sm:grid-cols-2'>
                                     {[
@@ -894,8 +927,8 @@ export default function BookingSection() {
 
                             {monthlySelectionError && <p className='mt-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700' role='alert'>{monthlySelectionError}</p>}
                             <div className='mt-6 flex flex-col-reverse gap-2 border-t border-[#edf1ed] pt-4 sm:flex-row sm:justify-between'>
-                                {monthlySelectionStep === 2 ? (
-                                    <button type='button' onClick={() => { setMonthlySelectionStep(1); setMonthlyPackageTier(''); }} className='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#dce6de] px-4 text-sm font-semibold text-[#35483b] transition hover:bg-[#f5f7f3]'>
+                                {monthlySelectionStep > 1 ? (
+                                    <button type='button' onClick={() => { setMonthlySelectionError(''); if (monthlySelectionStep === 2) setMonthlyPackageTier(''); if (monthlySelectionStep === 3) setMonthlyVehicleType(''); setMonthlySelectionStep(monthlySelectionStep - 1); }} className='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#dce6de] px-4 text-sm font-semibold text-[#35483b] transition hover:bg-[#f5f7f3]'>
                                         <ChevronLeft className='size-4' /> Back
                                     </button>
                                 ) : (
@@ -905,14 +938,49 @@ export default function BookingSection() {
                                     <button type='button' disabled={!monthlyClientType} onClick={() => setMonthlySelectionStep(2)} className='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1e3128] px-5 text-sm font-bold text-white transition hover:bg-[#294c37] disabled:cursor-not-allowed disabled:opacity-40'>
                                         Continue <ArrowRight className='size-4' />
                                     </button>
+                                ) : monthlySelectionStep === 2 ? (
+                                    <button type='button' disabled={!monthlyPackageTier} onClick={() => setMonthlySelectionStep(3)} className='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1e3128] px-5 text-sm font-bold text-white transition hover:bg-[#294c37] disabled:cursor-not-allowed disabled:opacity-40'>
+                                        Continue <ArrowRight className='size-4' />
+                                    </button>
+                                ) : monthlySelectionStep === 3 ? (
+                                    <button type='button' disabled={!monthlyVehicleType} onClick={() => setMonthlySelectionStep(4)} className='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1e3128] px-5 text-sm font-bold text-white transition hover:bg-[#294c37] disabled:cursor-not-allowed disabled:opacity-40'>
+                                        Continue <ArrowRight className='size-4' />
+                                    </button>
                                 ) : (
                                     <button
                                         type='button'
-                                        disabled={!monthlyPackageTier}
-                                        onClick={() => {
+                                        disabled={!monthlyCode.trim() || monthlyCodeChecking}
+                                        onClick={async () => {
+                                            setMonthlyCodeChecking(true);
+                                            setMonthlySelectionError('');
+                                            try {
+                                                const response = await fetch(MONTHLY_VALIDATION_ENDPOINT, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        lookup: true,
+                                                        promoCode: monthlyCode.trim(),
+                                                        clientType: monthlyClientType,
+                                                        packageTier: monthlyPackageTier,
+                                                        vehicleType: monthlyVehicleType,
+                                                    }),
+                                                });
+                                                const data = await response.json().catch(() => ({}));
+                                                if (!response.ok || data.status !== 'OK') {
+                                                    setMonthlySelectionError(data.message || data.error || 'We could not verify this code. Please try again.');
+                                                    return;
+                                                }
+                                            } catch {
+                                                setMonthlySelectionError('We could not reach the server to verify your code. Please try again.');
+                                                return;
+                                            } finally {
+                                                setMonthlyCodeChecking(false);
+                                            }
                                             const selected = {
                                                 customerType: monthlyClientType,
                                                 packageTier: monthlyPackageTier,
+                                                vehicleType: monthlyVehicleType,
+                                                promoCode: monthlyCode.trim(),
                                             };
                                             try {
                                                 sessionStorage.setItem('a10tion-monthly-checkout-selection', JSON.stringify(selected));

@@ -375,6 +375,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
     <label class="field-label">Cell number<input class="manager-input" name="customerPhone" type="tel" autocomplete="tel" required></label>
     <label class="field-label">Package type<select class="manager-select" name="clientType" required><option value="private">Private Client</option><option value="business">Business / Fleet / Family</option></select></label>
     <label class="field-label">Package level<select class="manager-select" name="packageTier" required><option value="standard">Standard · 2 washes per billing period</option><option value="premium">Premium · 4 washes per billing period</option></select></label>
+    <label class="field-label">Vehicle category<select class="manager-select" name="vehicleType" required><option value="">Choose vehicle…</option><option>Sedan / Hatchback</option><option>SUV / Bakkie</option><option>Minibus / Van</option></select></label>
     <label class="field-label">Active from<input class="manager-input" name="validFrom" type="date" required></label>
     <label class="field-label">Active until <span class="optional">(optional)</span><input class="manager-input" name="validUntil" type="date"></label>
     <div class="field-full manager-form-actions">
@@ -863,10 +864,10 @@ function renderEntitlementCard(record){
     ?'<div class="entitlement-code"><code>'+escapeHtml(record.code)+'</code><button type="button" data-action="copy" data-code="'+escapeHtml(record.code)+'">Copy</button></div>'
     :'<p class="hint" role="status">'+(record.active?'No active code. Generate a new code to restore customer access.':'Access code revoked. Reactivate, then generate a fresh code if needed.')+'</p>';
   return '<article class="entitlement-card" data-id="'+escapeHtml(record.id)+'">'+
-    '<div class="entitlement-top"><div><div class="entitlement-title"><h3 class="entitlement-name">'+escapeHtml(record.customerName)+'</h3><span class="status-pill '+slug+'">'+escapeHtml(isArchivedRecord(record)&&record.active===false?'Deactivated':record.status)+'</span></div><p class="entitlement-meta">'+escapeHtml(record.email)+' · '+escapeHtml(record.customerPhone||'No phone')+'<br>'+escapeHtml(packageLabel(record))+'</p></div></div>'+
+    '<div class="entitlement-top"><div><div class="entitlement-title"><h3 class="entitlement-name">'+escapeHtml(record.customerName)+'</h3><span class="status-pill '+slug+'">'+escapeHtml(isArchivedRecord(record)&&record.active===false?'Deactivated':record.status)+'</span></div><p class="entitlement-meta">'+escapeHtml(record.email)+' · '+escapeHtml(record.customerPhone||'No phone')+'<br>'+escapeHtml(packageLabel(record))+(record.vehicleType?' · '+escapeHtml(record.vehicleType):'')+'</p></div></div>'+
     ''+
     '<details class="account-collapse"><summary aria-label="Expand or collapse account"></summary><div class="account-collapse-body">'+
-    '<p class="entitlement-meta">'+escapeHtml(record.businessName||'')+(record.businessName?'<br>':'')+escapeHtml(dateRange)+(record.vehicleType?'<br>'+escapeHtml(record.vehicleType):'')+(record.contractOption?'<br>'+escapeHtml(record.contractOption)+' contract':'')+'</p>'+
+    '<p class="entitlement-meta">'+escapeHtml(record.businessName||'')+(record.businessName?'<br>':'')+escapeHtml(dateRange)+(record.contractOption?'<br>'+escapeHtml(record.contractOption)+' contract':'')+'</p>'+
     codeBlock+(additionalCodes?'<details class="entitlement-history"><summary>Other account codes ('+(record.codes.length-1)+')</summary><ul class="history-list">'+additionalCodes+'</ul></details>':'')+
     '<div class="usage-grid"><div class="usage-cell"><strong>'+record.monthlyAllowance+'</strong><span>Booking cap · '+escapeHtml(formatMonth(record.period))+'</span></div><div class="usage-cell"><strong>'+record.used+'</strong><span>Used this period'+(record.reserved?' · '+record.reserved+' pending':'')+'</span></div><div class="usage-cell"><strong>'+record.periodRemaining+'</strong>    <span>Booking slots left</span></div></div>'+
     '<p class="hint" style="margin:8px 0 0">Billing period: '+escapeHtml(record.period)+' to '+escapeHtml(record.periodEnd||'')+'</p>'+
@@ -955,6 +956,7 @@ function editMonthlyEntitlement(record){
   monthlyForm.elements.customerPhone.value=record.customerPhone||'';
   monthlyForm.elements.clientType.value=record.clientType;
   monthlyForm.elements.packageTier.value=record.packageTier;
+  monthlyForm.elements.vehicleType.value=record.vehicleType||'';
   monthlyForm.elements.validFrom.value=record.validFrom;
   monthlyForm.elements.validUntil.value=record.validUntil||'';
   document.getElementById('monthlyFormTitle').textContent='Edit monthly entitlement';

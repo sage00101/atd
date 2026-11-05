@@ -276,6 +276,7 @@ export async function validateBookingRequest(booking) {
             bookingDate,
             expectedClientType: booking.monthlyClientType,
             expectedPackageTier: booking.monthlyPackageTier,
+            expectedVehicleType: booking.vehicleType,
         });
         if (eligibility.status !== 'OK') {
             throw new BookingRequestError(eligibility.status === 'CREDITS_EXHAUSTED'

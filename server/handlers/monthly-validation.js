@@ -1,6 +1,7 @@
 import { applyCors } from '../api/_lib/cors.js';
 import {
     checkMonthlyWashAvailability,
+    lookupMonthlyCodeProfile,
     getMonthlyReservationError,
 } from '../api/_lib/monthly-promos.js';
 
@@ -12,12 +13,33 @@ export default async function handler(req, res) {
     }
 
     try {
+        if (req.body?.lookup === true) {
+            const found = await lookupMonthlyCodeProfile({
+                promoCode: req.body?.promoCode,
+                clientType: req.body?.clientType,
+                packageTier: req.body?.packageTier,
+                vehicleType: req.body?.vehicleType,
+            });
+            const label = { standard: 'Standard', premium: 'Premium' };
+            const clientLabel = { private: 'Private Client', business: 'Business / Fleet / Family' };
+            const actual = found.profile
+                ? `Your code is for a ${clientLabel[found.profile.clientType]} · ${label[found.profile.packageTier]} package${found.profile.vehicleType ? ' · ' + found.profile.vehicleType : ''}.`
+                : '';
+            const message = found.status === 'OK'
+                ? `Code verified. ${actual}`
+                : ['CLIENT_TYPE_MISMATCH', 'PACKAGE_MISMATCH', 'VEHICLE_MISMATCH'].includes(found.status)
+                    ? `This code does not match your selection. ${actual} Go back and choose what you bought.`
+                    : getMonthlyReservationError(found.status).message;
+            res.status(200).json({ ...found, message });
+            return;
+        }
         const eligibility = await checkMonthlyWashAvailability({
             promoCode: req.body?.promoCode,
             email: req.body?.email,
             bookingDate: req.body?.bookingDate,
             expectedClientType: req.body?.clientType,
             expectedPackageTier: req.body?.packageTier,
+            expectedVehicleType: req.body?.vehicleType,
         });
         const message = eligibility.status === 'OK'
             ? `Code verified. ${eligibility.availableWashes} prepaid wash${eligibility.availableWashes === 1 ? '' : 'es'} available for this billing period.`

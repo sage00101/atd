@@ -266,6 +266,7 @@ export default async function handler(req, res) {
                     reference,
                     expectedClientType: monthlyClientType,
                     expectedPackageTier: monthlyPackageTier,
+                    expectedVehicleType: vehicleType,
                     bookingDetails: {
                         customerName: `${customer.firstName} ${customer.surname}`.trim(),
                         vehicleType,
@@ -303,6 +304,7 @@ export default async function handler(req, res) {
                     reference,
                     expectedClientType: isMonthlyWashBooking ? monthlyClientType : '',
                     expectedPackageTier: isMonthlyWashBooking ? monthlyPackageTier : '',
+                    expectedVehicleType: isMonthlyWashBooking ? vehicleType : '',
                     bookingDetails: {
                         customerName: `${customer.firstName || ''} ${customer.surname || ''}`.trim(),
                         vehicleType,
