@@ -25,6 +25,10 @@ body{margin:0;padding:28px 18px 56px;min-height:100vh;background:radial-gradient
 .auth-card h2{margin:16px 0 6px;font-size:26px;letter-spacing:-.04em}
 .auth-card p{margin:0 0 20px;color:var(--muted);font-size:13px;line-height:1.55}
 .auth-card .field-label{text-align:left}
+.inline-notice{margin:10px 0 0;padding:11px 14px;border-radius:11px;font-size:13px;font-weight:650;line-height:1.5;border:1px solid var(--line-2);background:var(--surface-3);color:var(--ink-2)}
+.inline-notice[hidden]{display:none}
+.inline-notice.ok{background:var(--accent-soft);border-color:rgba(77,139,94,.35);color:var(--accent-2)}
+.inline-notice.error{background:var(--danger-soft);border-color:rgba(180,71,64,.3);color:var(--danger)}
 .auth-card #connect{position:relative;width:100%;margin-top:22px;padding:15px 20px;border:0;border-radius:14px;background:linear-gradient(135deg,#5aa06d 0%,#39764d 55%,#2f6542 100%);color:#fff;font-size:15px;font-weight:700;letter-spacing:.03em;box-shadow:0 14px 28px -12px rgba(47,101,66,.65),inset 0 1px 0 rgba(255,255,255,.25);overflow:hidden;cursor:pointer;transition:transform .18s,box-shadow .18s,filter .18s}
 .auth-card #connect::after{content:"→";display:inline-block;margin-left:10px;transition:transform .2s}
 .auth-card #connect::before{content:"";position:absolute;top:0;left:-70%;width:50%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-20deg);transition:left .6s}
@@ -378,6 +382,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
       <button id="monthlyCancel" class="secondary" type="button">Cancel</button>
       <button id="monthlyReload" class="secondary" type="button">Refresh dashboard</button>
     </div>
+    <p id="monthlyFormNotice" class="inline-notice field-full" role="status" aria-live="polite" hidden></p>
   </form>
   <section class="distribution-panel" style="display:block" aria-label="Paid monthly purchases requiring review">
     <div><h3>Paid purchases needing review</h3><p>Purchases for an existing customer appear here so you can apply the payment to the correct entitlement.</p></div>
@@ -387,6 +392,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
     <div><h3>Email monthly access codes</h3><p>Preview active clients before sending. Delivery status updates when Resend confirms it.</p></div>
     <button id="bulkEmail" type="button">Preview bulk email</button>
   </section>
+  <p id="bulkEmailNotice" class="inline-notice" role="status" aria-live="polite" hidden></p>
   <div class="monthly-toolbar">
     <input id="monthlySearch" class="manager-search" type="search" placeholder="Search customer, email, package or code" aria-label="Search monthly entitlements">
     <span id="monthlyCount" class="hint" aria-live="polite"></span>
@@ -566,6 +572,8 @@ const monthlyStatsNode=document.getElementById('monthlyStats');
 const connStateNode=document.getElementById('connState');
 const monthlyEmpty=document.getElementById('monthlyEmpty');
 const monthlySubmit=document.getElementById('monthlySubmit');
+const monthlyFormNotice=document.getElementById('monthlyFormNotice');
+const bulkEmailNotice=document.getElementById('bulkEmailNotice');
 const monthlyCancel=document.getElementById('monthlyCancel');
 const bulkEmailButton=document.getElementById('bulkEmail');
 const distributionHistory=document.getElementById('distributionHistory');
@@ -582,6 +590,7 @@ let bookingRequests=[];
 let selectedDeclineRequestId='';
 let selectedPaymentEntitlementId='';
 const managerStorageKey='a10tion-admin-manager-key';
+function showNotice(node,message,type=''){node.textContent=message;node.className='inline-notice'+(type?' '+type:'');node.hidden=!message;}
 function setStatus(message,type=''){statusNode.textContent=message;statusNode.className=type;}
 function setConn(isOn){connStateNode.dataset.state=isOn?'on':'off';connStateNode.textContent=isOn?'Connected':'Not connected';}
 function isArchivedRecord(record){return Boolean(record.archived)||record.active===false;}
@@ -956,14 +965,17 @@ monthlyForm.addEventListener('submit',async event=>{
   event.preventDefault();
   monthlySubmit.disabled=true;
   setStatus('Saving monthly entitlement…');
+  showNotice(monthlyFormNotice,'Saving…');
   const id=document.getElementById('monthlyId').value;
   const payload=Object.fromEntries(new FormData(monthlyForm).entries());
   try{
     const result=await monthlyRequest(id?'PUT':'POST',id?{...payload,id}:{...payload});
     resetMonthlyForm();
     await loadMonthlyEntitlements();
-    setStatus(id?'Monthly client details saved.':'Monthly client saved and random access code generated. Copy it from the customer card to share it securely.','ok');
-  }catch(error){setStatus(error.message,'error');}
+    const savedMessage=id?'Monthly client details saved.':'Monthly client saved and random access code generated. Copy it from the customer card to share it securely.';
+    setStatus(savedMessage,'ok');
+    showNotice(monthlyFormNotice,'✓ '+savedMessage,'ok');
+  }catch(error){setStatus(error.message,'error');showNotice(monthlyFormNotice,error.message,'error');}
   finally{monthlySubmit.disabled=false;}
 });
 monthlyCancel.addEventListener('click',resetMonthlyForm);
@@ -1117,9 +1129,13 @@ bulkConfirmButton.addEventListener('click',async()=>{
     const result=await finishDistributionRun(pendingBulkRunId,'send-bulk');
     bulkConfirmDialog.close();
     pendingBulkRunId='';
+    const sentCount=(result.run?.results||[]).filter(entry=>entry.status!=='failed').length;
+    const bulkOk=!['completed_with_failures','needs_review'].includes(result.run?.status);
+    const bulkMessage=bulkOk?'✓ Bulk email sent successfully to '+(sentCount||result.run?.recipientCount||0)+' client'+((sentCount||result.run?.recipientCount||0)===1?'':'s')+'.':result.run?.status==='needs_review'?'A send has an uncertain provider status; review its history before sending again.':'Bulk email finished with some failures. Review the run in the Activity tab to retry failed messages.';
+    showNotice(bulkEmailNotice,bulkMessage,bulkOk?'ok':'error');
     setStatus(result.run?.status==='completed_with_failures'?'Bulk email completed with failures. Review the run below to retry failed messages.':result.run?.status==='needs_review'?'A send has an uncertain provider status; review its history before sending again.':'Bulk email run completed. Provider acceptance is recorded; delivery status may follow by webhook.',result.run?.status==='completed_with_failures'||result.run?.status==='needs_review'?'error':'ok');
     await loadMonthlyEntitlements();
-  }catch(error){setStatus(error.message,'error');}
+  }catch(error){setStatus(error.message,'error');showNotice(bulkEmailNotice,error.message,'error');}
   finally{bulkConfirmButton.disabled=false;}
 });
 singleWashTab.addEventListener('click',()=>activatePromoTab('single'));
