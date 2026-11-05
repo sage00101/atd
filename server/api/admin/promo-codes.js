@@ -200,6 +200,13 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 .entitlement-card{min-width:0;padding:20px;border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:0 12px 30px -24px rgba(32,54,38,.24);transition:transform .2s,border-color .2s,box-shadow .2s}
 .entitlement-card:hover{transform:translateY(-2px);border-color:var(--line-2);box-shadow:0 16px 34px -24px rgba(32,54,38,.28)}
 .entitlement-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.bin-button{display:inline-grid;place-items:center;flex:0 0 auto;width:36px;height:36px;margin-left:auto;padding:0;border:1px solid #f0c8c8;border-radius:10px;background:#fff;color:var(--danger);cursor:pointer;transition:background .15s,border-color .15s}
+.bin-button:hover{background:#fdeeee;border-color:#e59a9a}
+.bin-button svg{width:17px;height:17px}
+.top-end{display:flex;align-items:center;gap:8px;margin-left:auto}
+.drawer-tools{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:6px}
+.drawer-tools .hint{margin:0}
+.drawer-tools button{padding:7px 12px;font-size:12px}
 .entitlement-name{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em;line-height:1.25;color:var(--ink)}
 .entitlement-meta{margin:7px 0 0;color:var(--muted);font-size:12.5px;line-height:1.6;overflow-wrap:anywhere}
 .status-pill{display:inline-flex;flex:0 0 auto;align-items:center;gap:6px;border-radius:999px;padding:5px 11px;background:var(--accent-soft);color:var(--accent);border:1px solid rgba(95,224,122,.28);font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
@@ -496,9 +503,19 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
     <p id="authStatus" class="auth-status" role="alert" aria-live="polite"></p>
   </form>
 </div>
+<dialog id="confirmDialog" class="manager-dialog">
+  <div class="manager-dialog-inner">
+    <h2>Are you sure?</h2>
+    <p id="confirmMessage"></p>
+    <div class="dialog-actions">
+      <button id="confirmNo" class="secondary" type="button">No</button>
+      <button id="confirmYes" class="danger" type="button">Yes</button>
+    </div>
+  </div>
+</dialog>
 <aside id="notificationDrawer" class="notification-drawer" aria-label="Important notifications" aria-hidden="true">
   <div class="drawer-head"><h2>Important notifications</h2><button id="notificationClose" class="drawer-close" type="button" aria-label="Close notifications">×</button></div>
-  <p class="hint">Accounts that need attention appear here.</p>
+  <div class="drawer-tools"><p class="hint">Accounts that need attention appear here.</p><button id="notificationClearAll" class="secondary" type="button" hidden>Clear all</button></div>
   <div id="notificationList" class="notification-list"></div>
 </aside>
 <script>
@@ -584,6 +601,33 @@ let bookingRequests=[];
 let selectedDeclineRequestId='';
 let selectedPaymentEntitlementId='';
 const managerStorageKey='a10tion-admin-manager-key';
+const binIcon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+const confirmDialog=document.getElementById('confirmDialog');
+const confirmMessage=document.getElementById('confirmMessage');
+const notificationClearAll=document.getElementById('notificationClearAll');
+function askYesNo(message){
+  return new Promise(resolve=>{
+    confirmMessage.textContent=message;
+    const finish=answer=>{
+      confirmYesButton.removeEventListener('click',onYes);
+      confirmNoButton.removeEventListener('click',onNo);
+      confirmDialog.removeEventListener('cancel',onNo);
+      if(confirmDialog.open)confirmDialog.close();
+      resolve(answer);
+    };
+    const onYes=()=>finish(true);
+    const onNo=()=>finish(false);
+    const confirmYesButton=document.getElementById('confirmYes');
+    const confirmNoButton=document.getElementById('confirmNo');
+    confirmYesButton.addEventListener('click',onYes);
+    confirmNoButton.addEventListener('click',onNo);
+    confirmDialog.addEventListener('cancel',onNo);
+    confirmDialog.showModal();
+  });
+}
+const dismissedStorageKey='a10tion-dismissed-notifications';
+function readDismissedNotifications(){try{return JSON.parse(localStorage.getItem(dismissedStorageKey)||'[]');}catch{return [];}}
+let currentNotificationKeys=[];
 function showNotice(node,message,type=''){node.textContent=message;node.className='inline-notice'+(type?' '+type:'');node.hidden=!message;}
 function setStatus(message,type=''){statusNode.textContent=message;statusNode.className=type;}
 function setConn(isOn){connStateNode.dataset.state=isOn?'on':'off';connStateNode.textContent=isOn?'Connected':'Not connected';}
@@ -681,7 +725,7 @@ function renderBookingRequestCard(record,showActions=false){
         ?'<div class="booking-request-actions"><button type="button" data-request-action="resend-email" data-id="'+escapeHtml(record.id)+'">Resend customer decision email</button></div>'
         :'';
     const occurredAt=record.approvedAt||record.declinedAt||record.updatedAt||record.submittedAt;
-    return '<article class="booking-request-card" data-id="'+escapeHtml(record.id)+'"><div class="entitlement-top"><div><h3>'+escapeHtml(identity)+'</h3><p class="booking-request-meta">'+escapeHtml(customer.email||'')+' · '+escapeHtml(record.reference)+'</p></div><span class="status-pill">'+escapeHtml(record.publicStatus||record.status)+'</span></div>'+(showActions?'':'<p class="booking-request-meta">Activity · '+escapeHtml(occurredAt||'')+'</p>')+'<details><summary>Open full request details</summary><dl class="booking-request-details">'+details+'</dl></details>'+actions+'</article>';
+    return '<article class="booking-request-card" data-id="'+escapeHtml(record.id)+'"><div class="entitlement-top"><div><h3>'+escapeHtml(identity)+'</h3><p class="booking-request-meta">'+escapeHtml(customer.email||'')+' · '+escapeHtml(record.reference)+'</p></div><span class="top-end"><span class="status-pill">'+escapeHtml(record.publicStatus||record.status)+'</span>'+(showActions?'':'<button type="button" class="bin-button" data-request-action="delete" data-id="'+escapeHtml(record.id)+'" aria-label="Delete permanently" title="Delete permanently">'+binIcon+'</button>')+'</span></div>'+(showActions?'':'<p class="booking-request-meta">Activity · '+escapeHtml(occurredAt||'')+'</p>')+'<details><summary>Open full request details</summary><dl class="booking-request-details">'+details+'</dl></details>'+actions+'</article>';
 }
 function renderBookingRequests(){
   const pending=bookingRequests.filter(record=>record.status==='pending_approval');
@@ -705,17 +749,20 @@ function renderNotifications(){
   const exhausted=monthlyEntitlements.filter(record=>!isArchivedRecord(record)&&record.active&&Number(record.creditsAvailable)<1);
   const expired=bookingRequests.filter(record=>['expired','cancelled'].includes(record.status));
   const pending=bookingRequests.filter(record=>record.status==='pending_approval');
-  const items=[
-    ...exhausted.map(record=>'<article class="notification-item"><strong>Wash credits exhausted</strong><span>'+escapeHtml(record.customerName)+' · '+escapeHtml(record.email)+' has no prepaid washes remaining.</span><button type="button" data-open-tab="clients">Open monthly clients</button></article>'),
-    ...(expired.length?['<article class="notification-item"><strong>'+expired.length+' expired or cancelled request'+(expired.length===1?'':'s')+'</strong><span>Review requests that can no longer be completed.</span><button type="button" data-open-tab="expired">Review expired requests</button></article>']:[]),
-    ...(pending.length?['<article class="notification-item"><strong>'+pending.length+' request'+(pending.length===1?'':'s')+' awaiting review</strong><span>New bookings are waiting for an accept or decline decision.</span><button type="button" data-open-tab="requests">Open new requests</button></article>']:[]),
+  const entries=[
+    ...exhausted.map(record=>({key:'credits:'+record.id,html:'<article class="notification-item"><strong>Wash credits exhausted</strong><span>'+escapeHtml(record.customerName)+' · '+escapeHtml(record.email)+' has no prepaid washes remaining.</span><button type="button" data-open-tab="clients">Open monthly clients</button></article>'})),
+    ...(expired.length?[{key:'expired:'+expired.map(record=>record.id).sort().join(','),html:'<article class="notification-item"><strong>'+expired.length+' expired or cancelled request'+(expired.length===1?'':'s')+'</strong><span>Review requests that can no longer be completed.</span><button type="button" data-open-tab="expired">Review expired requests</button></article>'}]:[]),
+    ...(pending.length?[{key:'pending:'+pending.map(record=>record.id).sort().join(','),html:'<article class="notification-item"><strong>'+pending.length+' request'+(pending.length===1?'':'s')+' awaiting review</strong><span>New bookings are waiting for an accept or decline decision.</span><button type="button" data-open-tab="requests">Open new requests</button></article>'}]:[]),
   ];
-  const count=items.length;
+  const dismissed=readDismissedNotifications();
+  const visible=entries.filter(entry=>!dismissed.includes(entry.key));
+  currentNotificationKeys=entries.map(entry=>entry.key);
+  const count=visible.length;
   notificationCount.textContent=count>99?'99+':String(count);
   notificationCount.hidden=count===0;
-  notificationList.innerHTML=items.join('')||'<div class="notification-empty">You’re all caught up. No important notifications.</div>';
-}
-function renderBookingDashboards(){
+  notificationClearAll.hidden=count===0;
+  notificationList.innerHTML=visible.map(entry=>entry.html).join('')||'<div class="notification-empty">You’re all caught up. No important notifications.</div>';
+}function renderBookingDashboards(){
   renderBookingRequests();
   renderExpiredRequests();
   renderBookingActivity();
@@ -854,7 +901,7 @@ function renderEntitlementCard(record){
     ?'<div class="entitlement-code"><code>'+escapeHtml(record.code)+'</code><button type="button" data-action="copy" data-code="'+escapeHtml(record.code)+'">Copy</button></div>'
     :'<p class="hint" role="status">'+(record.active?'No active code. Generate a new code to restore customer access.':'Access code revoked. Reactivate, then generate a fresh code if needed.')+'</p>';
   return '<article class="entitlement-card" data-id="'+escapeHtml(record.id)+'">'+
-    '<div class="entitlement-top"><div><div class="entitlement-title"><h3 class="entitlement-name">'+escapeHtml(record.customerName)+'</h3><span class="status-pill '+slug+'">'+escapeHtml(isArchivedRecord(record)&&record.active===false?'Deactivated':record.status)+'</span></div><p class="entitlement-meta">'+escapeHtml(record.email)+' · '+escapeHtml(record.customerPhone||'No phone')+'<br>'+escapeHtml(packageLabel(record))+(record.vehicleType?' · '+escapeHtml(record.vehicleType):'')+'</p></div></div>'+
+    '<div class="entitlement-top"><div><div class="entitlement-title"><h3 class="entitlement-name">'+escapeHtml(record.customerName)+'</h3><span class="status-pill '+slug+'">'+escapeHtml(isArchivedRecord(record)&&record.active===false?'Deactivated':record.status)+'</span></div><p class="entitlement-meta">'+escapeHtml(record.email)+' · '+escapeHtml(record.customerPhone||'No phone')+'<br>'+escapeHtml(packageLabel(record))+(record.vehicleType?' · '+escapeHtml(record.vehicleType):'')+'</p></div>'+(isArchivedRecord(record)?'<button type="button" class="bin-button" data-action="delete-permanent" aria-label="Delete account permanently" title="Delete account permanently">'+binIcon+'</button>':'')+'</div>'+
     ''+
     '<details class="account-collapse"><summary aria-label="Expand or collapse account"></summary><div class="account-collapse-body">'+
     '<p class="entitlement-meta">'+escapeHtml(record.businessName||'')+(record.businessName?'<br>':'')+escapeHtml(dateRange)+(record.contractOption?'<br>'+escapeHtml(record.contractOption)+' contract':'')+'</p>'+
@@ -985,6 +1032,13 @@ async function handleMonthlyCardAction(event){
     if(button.dataset.action==='copy'){
       await navigator.clipboard.writeText(button.dataset.code);
       setStatus('Monthly code copied.','ok');
+      return;
+    }
+    if(button.dataset.action==='delete-permanent'){
+      if(!await askYesNo('This will permanently delete '+record.customerName+' and all of their saved information from the system. This cannot be undone.'))return;
+      await monthlyRequest('POST',{action:'delete-permanently',id:record.id});
+      await loadMonthlyEntitlements();
+      setStatus(record.customerName+' was permanently deleted.','ok');
       return;
     }
     if(button.dataset.action==='generate-code'){
@@ -1231,6 +1285,24 @@ managerTabs.forEach(tab=>{
   });
 });
 bookingRequestsReload.addEventListener('click',loadBookingRequests);
+async function handleRequestDelete(event){
+  const button=event.target.closest('button[data-request-action="delete"]');
+  if(!button||button.disabled)return;
+  if(!await askYesNo('This will permanently delete this request from the manager. This cannot be undone.'))return;
+  button.disabled=true;
+  try{
+    await bookingRequestsApi({action:'delete',id:button.dataset.id});
+    await loadBookingRequests();
+    setStatus('Request deleted.','ok');
+  }catch(error){setStatus(error.message,'error');button.disabled=false;}
+}
+expiredRequestCards.addEventListener('click',handleRequestDelete);
+activityCards.addEventListener('click',handleRequestDelete);
+notificationClearAll.addEventListener('click',async()=>{
+  if(!await askYesNo('Clear all notifications?'))return;
+  try{localStorage.setItem(dismissedStorageKey,JSON.stringify([...new Set([...readDismissedNotifications(),...currentNotificationKeys])].slice(-500)));}catch{}
+  renderNotifications();
+});
 bookingRequestCards.addEventListener('click',event=>{
   const button=event.target.closest('button[data-request-action]');
   if(!button||button.disabled)return;

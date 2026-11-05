@@ -1172,6 +1172,39 @@ export async function updateMonthlyEntitlement(id, input) {
     return next;
 }
 
+/** Permanently removes an archived client and its codes, usage and email history. Payment records are kept. */
+export async function deleteMonthlyEntitlementPermanently(id) {
+    const entitlementId = String(id || '').trim();
+    const existing = entitlementId ? await redis.get(entitlementKey(entitlementId)) : null;
+    if (!existing) throw new Error('Monthly entitlement not found.');
+    if (!existing.archived && existing.active !== false) {
+        throw new Error('Deactivate this account first. Only archived accounts can be deleted permanently.');
+    }
+    const keys = new Set([
+        entitlementKey(entitlementId),
+        customerKey(existing.email),
+        historyKey(entitlementId),
+        allReservationsKey(entitlementId),
+        emailDispatchIndexKey(entitlementId),
+    ]);
+    const digests = new Set([...(existing.codeDigests || []), existing.currentCodeDigest].filter(Boolean));
+    digests.forEach((codeDigest) => keys.add(`promo:monthly:code:${codeDigest}`));
+    const reservationIds = await redis.zrange(allReservationsKey(entitlementId), 0, -1).catch(() => []);
+    (reservationIds || []).forEach((reservationId) => keys.add(reservationKey(reservationId)));
+    for (const pattern of [`promo:monthly:used:${entitlementId}:*`, `promo:monthly:reservations:${entitlementId}:*`]) {
+        const matches = await redis.keys(pattern).catch(() => []);
+        (matches || []).forEach((key) => keys.add(key));
+    }
+    const dispatchIds = await redis.lrange(emailDispatchIndexKey(entitlementId), 0, -1).catch(() => []);
+    (dispatchIds || []).forEach((dispatchId) => keys.add(emailDispatchKey(dispatchId)));
+    // The customer key may now belong to a different record; only drop it when it still points here.
+    const customerOwner = await redis.get(customerKey(existing.email));
+    if (customerOwner && customerOwner !== entitlementId) keys.delete(customerKey(existing.email));
+    await redis.srem(ENTITLEMENT_INDEX_KEY, entitlementId);
+    await redis.del(...keys);
+    return { id: entitlementId };
+}
+
 export async function getMonthlyEntitlementsForAdmin() {
     const ids = await redis.smembers(ENTITLEMENT_INDEX_KEY);
     const today = getSouthAfricanDate();

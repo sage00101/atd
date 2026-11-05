@@ -3,6 +3,7 @@ import '../_lib/load-env.js';
 import { applyCors } from '../_lib/cors.js';
 import {
     createMonthlyEntitlement,
+    deleteMonthlyEntitlementPermanently,
     createMonthlyCodeDistributionForClient,
     createMonthlyDistributionPreview,
     getMonthlyEntitlementsForAdmin,
@@ -56,6 +57,11 @@ export default async function handler(req, res) {
                 paymentDate: String(req.body?.paymentDate || '').trim(),
             });
             res.status(200).json({ entitlement });
+            return;
+        }
+
+        if (req.method === 'POST' && req.body?.action === 'delete-permanently') {
+            res.status(200).json(await deleteMonthlyEntitlementPermanently(req.body?.id));
             return;
         }
 

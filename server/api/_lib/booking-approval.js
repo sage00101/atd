@@ -377,9 +377,33 @@ export async function listBookingRequests() {
     const ids = await redis.lrange(REQUEST_INDEX_KEY, 0, 999);
     const records = await Promise.all(ids.map(async (id) => {
         const request = await expireRequestIfNeeded(await redis.get(requestKey(id)));
-        return request ? publicRequest(request) : null;
+        return request && !request.hiddenFromAdmin ? publicRequest(request) : null;
     }));
     return records.filter(Boolean);
+}
+
+/**
+ * Removes a request from the manager. Finished requests are deleted outright; live or confirmed ones are
+ * only hidden so the held slot and the customer's email stay available for later cancellation.
+ */
+export async function deleteBookingRequestFromAdmin(id) {
+    const requestId = String(id || '').trim();
+    const request = requestId ? await redis.get(requestKey(requestId)) : null;
+    if (!request) throw new Error('Booking request not found.');
+    if (['pending_approval', 'processing'].includes(request.status)) {
+        throw new Error('This request is still active and cannot be deleted. Accept or decline it first.');
+    }
+    if (['declined', 'expired', 'cancelled'].includes(request.status)) {
+        await redis.del(
+            requestKey(requestId),
+            request.statusTokenDigest ? statusTokenKey(request.statusTokenDigest) : 'booking:request-status:none',
+            request.continuationTokenDigest ? continuationTokenKey(request.continuationTokenDigest) : 'booking:request-continuation:none',
+        );
+        await redis.lrem(REQUEST_INDEX_KEY, 0, requestId);
+        return { id: requestId, removed: 'deleted' };
+    }
+    await redis.set(requestKey(requestId), { ...request, hiddenFromAdmin: true }, { keepTtl: true });
+    return { id: requestId, removed: 'hidden' };
 }
 
 export async function getBookingRequestForAdmin(id) {
