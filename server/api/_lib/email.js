@@ -2,6 +2,7 @@ import { buildReceiptEmailHtml } from './email-template.js';
 import { buildVehiclePromoApprovedEmailHtml } from './promo-email-template.js';
 import { buildSupportEmailHtml } from './support-email-template.js';
 import { buildMonthlyCodeEmailHtml } from './monthly-code-email-template.js';
+import { buildPassphraseEmailHtml } from './passphrase-email-template.js';
 import { buildDistributionReportHtml } from './distribution-report-template.js';
 import {
     buildBookingApprovedEmail,
@@ -124,6 +125,23 @@ export async function sendMonthlyAccessCodeEmail(client, idempotencyKey) {
         html,
         replyTo: BOOKINGS_EMAIL,
         idempotencyKey,
+        safeFailure: true,
+    });
+}
+
+export async function sendPassphraseEmail({ recipientName, email, passphrase, promoCode, message }) {
+    const html = buildPassphraseEmailHtml({
+        recipientName,
+        passphrase,
+        promoCode,
+        message,
+        siteUrl: process.env.SITE_URL || 'https://sage00101.github.io/atd/',
+    });
+    return sendViaResend({
+        to: email,
+        subject: 'Your A10tion To Detail access details',
+        html,
+        replyTo: BOOKINGS_EMAIL,
         safeFailure: true,
     });
 }

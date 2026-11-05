@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { applyCors } from '../_lib/cors.js';
-import { getSharedPromoBatchForAdmin, saveSharedPromoBatch } from '../_lib/store.js';
+import { getSharedPromoBatchForAdmin, saveSharedPromoBatch, looksLikeEmail } from '../_lib/store.js';
+import { sendPassphraseEmail } from '../_lib/email.js';
 
 const managerLogoUrl = new URL(
     'assets/android-chrome-192x192.png',
@@ -365,6 +366,18 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 <p class="hint">Passwords are exact and case-sensitive. Duplicate promo codes are allowed, but that promo code can only be redeemed once across the batch.</p>
 <div class="buttons"><button id="save" type="button">Save active batch</button></div>
 <pre id="summary"></pre>
+<section class="distribution-panel" style="display:block" aria-label="Email a passphrase">
+  <div><h3>Email a passphrase</h3><p>Send a passphrase, and optionally its promo code, to a customer in the A10tion To Detail branded email.</p></div>
+  <form id="passphraseForm" class="manager-form">
+    <label class="field-label">Recipient name <span class="optional">(optional)</span><input class="manager-input" name="recipientName" maxlength="80" autocomplete="off"></label>
+    <label class="field-label">Recipient email<input class="manager-input" name="email" type="email" autocomplete="off" required></label>
+    <label class="field-label">Passphrase<input class="manager-input" name="passphrase" maxlength="120" autocomplete="off" spellcheck="false" required></label>
+    <label class="field-label">Promo code <span class="optional">(optional)</span><input class="manager-input" name="promoCode" maxlength="120" autocomplete="off" spellcheck="false"></label>
+    <label class="field-label field-full">Personal message <span class="optional">(optional)</span><textarea name="message" maxlength="600" rows="3" placeholder="Add a short note to include above the passphrase"></textarea></label>
+    <div class="field-full manager-form-actions"><button id="passphraseSend" type="submit">Send email</button><button id="passphraseClear" class="secondary" type="button">Clear</button></div>
+    <p id="passphraseNotice" class="inline-notice field-full" role="status" aria-live="polite" hidden></p>
+  </form>
+</section>
 </section>
 <section id="monthlyWashPanel" class="promo-panel" role="tabpanel" aria-labelledby="clientsTab" hidden>
   <p class="note">A confirmed first package payment automatically creates and emails a random access code. Standard permits up to 2 bookings per billing period and Premium up to 4. Unused prepaid washes roll over, but the per-period booking cap remains. Each recorded payment creates a fresh access code, and emails the customer.</p>
@@ -1184,6 +1197,23 @@ bulkConfirmButton.addEventListener('click',async()=>{
   }catch(error){setStatus(error.message,'error');showNotice(bulkEmailNotice,error.message,'error');}
   finally{bulkConfirmButton.disabled=false;}
 });
+const passphraseForm=document.getElementById('passphraseForm');
+const passphraseNotice=document.getElementById('passphraseNotice');
+passphraseForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  if(!passphraseForm.reportValidity())return;
+  const sendButton=document.getElementById('passphraseSend');
+  const data=Object.fromEntries(new FormData(passphraseForm).entries());
+  sendButton.disabled=true;
+  showNotice(passphraseNotice,'Sending…','');
+  try{
+    await request('POST',{action:'email-passphrase',recipientName:data.recipientName,email:data.email,passphrase:data.passphrase,promoCode:data.promoCode,message:data.message});
+    showNotice(passphraseNotice,'✓ Email sent to '+data.email+'.','ok');
+    passphraseForm.reset();
+  }catch(error){showNotice(passphraseNotice,'Email was NOT sent: '+error.message,'error');}
+  finally{sendButton.disabled=false;}
+});
+document.getElementById('passphraseClear').addEventListener('click',()=>{passphraseForm.reset();showNotice(passphraseNotice,'');});
 function connectManagers(){
   const key=keyInput.value.trim();
   if(!key){authStatus.textContent='Enter an admin or calendar API key to connect.';keyInput.focus();return false;}
@@ -1400,7 +1430,7 @@ export default async function handler(req, res) {
     }
 
     if (applyCors(req, res)) return;
-    if (!['GET', 'PUT'].includes(req.method)) {
+    if (!['GET', 'PUT', 'POST'].includes(req.method)) {
         res.status(405).json({ message: 'Method not allowed.' });
         return;
     }
@@ -1414,6 +1444,33 @@ export default async function handler(req, res) {
     try {
         if (req.method === 'GET') {
             res.status(200).json(await getSharedPromoBatchForAdmin());
+            return;
+        }
+
+        if (req.method === 'POST') {
+            if (req.body?.action !== 'email-passphrase') {
+                res.status(400).json({ message: 'Unknown promo code action.' });
+                return;
+            }
+            const email = String(req.body?.email || '').trim();
+            const passphrase = String(req.body?.passphrase || '').trim();
+            const promoCode = String(req.body?.promoCode || '').trim();
+            const recipientName = String(req.body?.recipientName || '').trim().slice(0, 80);
+            const message = String(req.body?.message || '').trim().slice(0, 600);
+            if (!looksLikeEmail(email)) {
+                res.status(400).json({ message: 'Enter a valid recipient email address.' });
+                return;
+            }
+            if (!passphrase || passphrase.length > 120 || promoCode.length > 120) {
+                res.status(400).json({ message: 'Enter the passphrase to send (up to 120 characters).' });
+                return;
+            }
+            const sent = await sendPassphraseEmail({ recipientName, email, passphrase, promoCode, message });
+            if (sent?.skipped) {
+                res.status(502).json({ message: 'Email is not configured on the server (RESEND_API_KEY / RESEND_FROM_EMAIL missing).' });
+                return;
+            }
+            res.status(200).json({ sent: true });
             return;
         }
 
