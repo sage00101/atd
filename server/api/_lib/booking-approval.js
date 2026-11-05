@@ -15,7 +15,7 @@ import {
     releaseBookingSlotIfOwned,
     reserveBookingSlot,
 } from './store.js';
-import { checkMonthlyWashAvailability } from './monthly-promos.js';
+import { checkMonthlyWashAvailability, refundMonthlyWashForCancelledBooking } from './monthly-promos.js';
 
 const REQUEST_TTL_SECONDS = 60 * 60 * 24 * 365;
 const REQUEST_SLOT_TTL_SECONDS = 60 * 60 * 24 * 3;
@@ -673,9 +673,25 @@ export async function cancelBookedSlotRecords(request) {
     }
     const { bookingDate, bookingTime } = current.booking;
     await releaseBookingSlotIfOwned(bookingDate, bookingTime, current.reference);
+    const stored = await redis.get(`booking:${current.reference}`).catch(() => null);
     await Promise.all([
         markStoredBookingCancelled(current.reference),
         markStoredBookingCancelled(current.checkoutId),
     ]);
-    return await loadSavedRecord(result[1], current.id);
+    let monthlyRefund = { status: 'NOT_MONTHLY' };
+    const entitlementId = stored?.monthlyEntitlementId || current.booking.monthlyEntitlementId;
+    if (entitlementId && (current.booking.bookingType === 'monthly-entitlement' || stored?.bookingType === 'monthly-entitlement')) {
+        try {
+            monthlyRefund = await refundMonthlyWashForCancelledBooking({
+                entitlementId,
+                reference: current.reference,
+                bookingDate,
+                bookingTime,
+            });
+        } catch (error) {
+            console.error('[monthly refund failed]', error);
+            monthlyRefund = { status: 'FAILED' };
+        }
+    }
+    return { ...(await loadSavedRecord(result[1], current.id)), monthlyRefund };
 }

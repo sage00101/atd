@@ -454,6 +454,21 @@ redis.call('SET', KEYS[8], '1', 'EX', ARGV[5])
 return 'OK'
 `;
 
+const REFUND_WASH_SCRIPT = `
+if redis.call('EXISTS', KEYS[4]) == 1 then return 'ALREADY_REFUNDED' end
+if redis.call('SREM', KEYS[2], ARGV[1]) ~= 1 then return 'NOT_USED' end
+local raw = redis.call('GET', KEYS[1])
+if not raw then return 'NOT_FOUND' end
+local entitlement = cjson.decode(raw)
+entitlement.creditsAvailable = tonumber(entitlement.creditsAvailable or 0) + 1
+entitlement.creditsUsedTotal = math.max(tonumber(entitlement.creditsUsedTotal or 1) - 1, 0)
+entitlement.updatedAt = ARGV[3]
+redis.call('SET', KEYS[1], cjson.encode(entitlement))
+redis.call('LPUSH', KEYS[3], ARGV[2])
+redis.call('SET', KEYS[4], '1', 'EX', ARGV[4])
+return 'OK'
+`;
+
 function getSouthAfricanDate(date = new Date()) {
     const parts = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'Africa/Johannesburg',
@@ -1806,6 +1821,34 @@ export async function releaseMonthlyWashReservation({ entitlementId, period, res
         entitlementKey(entitlementId),
         periodReservationsKey(entitlementId, effectivePeriod),
     ], [reservationId, new Date().toISOString()]));
+}
+
+/** Gives a used wash back to the monthly account when its booked slot is cancelled. Safe to call more than once. */
+export async function refundMonthlyWashForCancelledBooking({ entitlementId, reference, bookingDate, bookingTime }) {
+    const entitlement = entitlementId ? await redis.get(entitlementKey(entitlementId)) : null;
+    if (!entitlement || !reference) return { status: 'NOT_MONTHLY' };
+    const period = getBillingPeriod(bookingDate, entitlement.billingAnchor || entitlement.validFrom).start;
+    const now = new Date().toISOString();
+    const status = await redis.eval(REFUND_WASH_SCRIPT, [
+        entitlementKey(entitlementId),
+        periodUsageKey(entitlementId, period),
+        historyKey(entitlementId),
+        `promo:monthly:refunded:${reference}`,
+    ], [
+        reference,
+        JSON.stringify({
+            status: 'refunded',
+            reference,
+            period,
+            bookingDate,
+            bookingTime,
+            note: 'Wash credit refunded because the booked slot was cancelled.',
+            confirmedAt: now,
+        }),
+        now,
+        String(CONFIRMED_BOOKING_TTL_SECONDS),
+    ]);
+    return { status };
 }
 
 export async function confirmMonthlyWashReservation({

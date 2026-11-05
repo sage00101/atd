@@ -719,8 +719,11 @@ export default async function handler(req, res) {
                 res.status(502).json({ message: 'The cancellation email could not be sent' + (sent?.reason ? ' (' + sent.reason + ')' : '') + ', so the slot was NOT cancelled.' });
                 return;
             }
-            await cancelBookedSlotRecords(request);
-            res.status(200).json({ message: 'Booking cancelled and ' + email + ' was emailed.', emailSent: true });
+            const cancelled = await cancelBookedSlotRecords(request);
+            const refundStatus = cancelled?.monthlyRefund?.status;
+            const refundNote = refundStatus === 'OK' ? ' The monthly wash credit was refunded.'
+                : refundStatus === 'FAILED' ? ' WARNING: the monthly wash credit could not be refunded automatically.' : '';
+            res.status(200).json({ message: 'Booking cancelled and ' + email + ' was emailed.' + refundNote, emailSent: true });
         } catch (error) {
             res.status(409).json({ message: error instanceof Error ? error.message : 'Could not cancel the booking.' });
         }
