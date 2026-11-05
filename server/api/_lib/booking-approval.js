@@ -148,9 +148,9 @@ function bookingKind(booking) {
 function publicStatus(status) {
     return ({
         pending_approval: 'Pending Approval',
-        approved: 'Approved – Awaiting Completion',
-        processing: 'Approved – Awaiting Completion',
-        awaiting_completion: 'Approved – Awaiting Completion',
+        approved: 'Approved â€“ Awaiting Completion',
+        processing: 'Approved â€“ Awaiting Completion',
+        awaiting_completion: 'Approved â€“ Awaiting Completion',
         confirmed: 'Confirmed',
         declined: 'Declined',
         expired: 'Expired or Cancelled',
@@ -207,7 +207,7 @@ async function expireRequestIfNeeded(request) {
     if (changed?.[0] === 'OK') {
         await releaseBookingSlotIfOwned(request.booking.bookingDate, request.booking.bookingTime, request.reference);
         if (request.continuationTokenDigest) await redis.del(continuationTokenKey(request.continuationTokenDigest));
-        return JSON.parse(changed[1]);
+        return parseScriptRecord(changed[1]);
     }
     return await redis.get(requestKey(request.id)) || request;
 }
@@ -420,7 +420,11 @@ export async function acceptBookingRequest(id, adminName) {
         }
         throw new Error(getRequestError(result?.[0] || 'ERROR'));
     }
-    return { request: JSON.parse(result[1]), continuationToken };
+    return { request: parseScriptRecord(result[1]), continuationToken };
+}
+
+function parseScriptRecord(value) {
+    return typeof value === 'string' ? JSON.parse(value) : value;
 }
 
 export async function declineBookingRequest(id, adminName, reason) {
@@ -448,7 +452,7 @@ export async function declineBookingRequest(id, adminName, reason) {
         throw new Error(getRequestError(result?.[0] || 'ERROR'));
     }
     await releaseBookingSlotIfOwned(request.booking.bookingDate, request.booking.bookingTime, request.reference);
-    return JSON.parse(result[1]);
+    return parseScriptRecord(result[1]);
 }
 
 export async function beginBookingContinuation(token) {
@@ -463,7 +467,7 @@ export async function beginBookingContinuation(token) {
         String(REQUEST_TTL_SECONDS),
     ]);
     if (result?.[0] === 'EXISTING_CHECKOUT') {
-        return { status: result[0], request: JSON.parse(result[1]) };
+        return { status: result[0], request: parseScriptRecord(result[1]) };
     }
     if (result?.[0] !== 'OK') {
         if (result?.[0] === 'EXPIRED') {
@@ -474,7 +478,7 @@ export async function beginBookingContinuation(token) {
         }
         throw new Error(getRequestError(result?.[0] || 'ERROR'));
     }
-    return { status: 'OK', request: JSON.parse(result[1]) };
+    return { status: 'OK', request: parseScriptRecord(result[1]) };
 }
 
 export async function completeBookingContinuation(id, { status, checkoutId = '', checkoutUrl = '' }) {
@@ -527,7 +531,7 @@ export async function markBookingRequestConfirmed(reference) {
                 String(REQUEST_TTL_SECONDS),
                 '0',
             ]);
-            return result?.[0] === 'OK' ? JSON.parse(result[1]) : null;
+            return result?.[0] === 'OK' ? parseScriptRecord(result[1]) : null;
         }
     }
     return null;
@@ -559,7 +563,7 @@ export async function markBookingRequestCancelled(reference) {
             await redis.del(continuationTokenKey(request.continuationTokenDigest));
         }
         await releaseBookingSlotIfOwned(request.booking.bookingDate, request.booking.bookingTime, request.reference);
-        return JSON.parse(result[1]);
+        return parseScriptRecord(result[1]);
     }
     return null;
 }

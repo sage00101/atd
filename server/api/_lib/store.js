@@ -347,7 +347,7 @@ export async function markBookingConfirmed(checkoutId) {
         booking.bookingDate || '',
         booking.bookingTime || '',
     ]);
-    return result?.[0] === 'OK' ? JSON.parse(result[1]) : null;
+    return result?.[0] === 'OK' ? (typeof result[1] === 'string' ? JSON.parse(result[1]) : result[1]) : null;
 }
 
 /** Cancels only a pending online booking and releases its slot only if it still owns it. */
@@ -370,7 +370,7 @@ export async function cancelPendingBookingByToken(token) {
     ]);
     return {
         status: result?.[0] || 'NOT_FOUND',
-        booking: result?.[1] ? JSON.parse(result[1]) : booking,
+        booking: result?.[1] ? (typeof result[1] === 'string' ? JSON.parse(result[1]) : result[1]) : booking,
     };
 }
 

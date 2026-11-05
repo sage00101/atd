@@ -16,6 +16,7 @@ import PromoSection from './sections/promo-section';
 import FaqSection from './sections/faq-section';
 import MonthlyCheckoutPage from './sections/monthly-checkout-page';
 import BookingRequestStatusPage from './sections/booking-request-status';
+import BookingRequestBanner from './components/booking-request-banner';
 
 export default function App() {
     const [vacanciesOpen, setVacanciesOpen] = useState(false);
@@ -58,6 +59,7 @@ export default function App() {
                 onClose={() => setVacanciesOpen(false)}
             />
             <CookieConsent />
+            <BookingRequestBanner />
         </>
     );
 }

@@ -25,6 +25,7 @@ import useReveal from '../hooks/use-reveal';
 import VehiclePromoModal from '../components/vehicle-promo-modal';
 import { packageGroups } from '../data/pricing';
 import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
+import { trackSubmittedRequest } from '../utils/booking-request-tracker';
 
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 
@@ -637,6 +638,7 @@ export default function BookingSection() {
                 throw new Error(result.message || 'Booking request could not be submitted.');
             }
             setCheckoutOpen(false);
+            trackSubmittedRequest(result);
             setRequestConfirmation({
                 reference: result.reference,
                 statusUrl: result.statusUrl,
@@ -1280,7 +1282,7 @@ export default function BookingSection() {
                         <div className='mx-auto grid size-12 place-items-center rounded-full bg-[#edf4ee] text-[#31553c]'><CheckCircle2 className='size-6' /></div>
                         <h2 id='booking-request-received-title' className='mt-4 font-display text-2xl font-semibold text-[#1e3128]'>Booking Request Received!</h2>
                         <p className='mt-3 text-sm leading-6 text-[#5b6560]'>Thank you for submitting your booking request. Your details have been sent to our team for review.</p>
-                        <p className='mt-2 text-sm leading-6 text-[#5b6560]'>Your booking is not yet confirmed. We’ll notify you by email as soon as your request has been reviewed. Once approved, you’ll receive a link to continue and complete your booking.</p>
+                        <p className='mt-2 text-sm leading-6 text-[#5b6560]'>We’ll notify you by email as soon as your request has been reviewed. Once approved, you’ll receive a link to continue and complete your booking.</p>
                         <p className='mt-4 text-sm font-semibold text-[#35483b]'>Reference: {requestConfirmation.reference}</p>
                         {!requestConfirmation.emailSent && <p className='mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900'>We could not confirm email delivery. Save this private status link to check your request.</p>}
                         {!requestConfirmation.businessEmailSent && <p className='mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900'>Our team notification email could not be confirmed. Please contact us if you do not hear back.</p>}

@@ -12,6 +12,7 @@ import {
     ShieldCheck,
 } from 'lucide-react';
 import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
+import { trackSubmittedRequest } from '../utils/booking-request-tracker';
 
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -329,6 +330,7 @@ export default function MonthlyCheckoutPage() {
             if (!response.ok || !result.reference || !result.statusUrl) {
                 throw new Error(result.message || 'The monthly booking request could not be submitted.');
             }
+            trackSubmittedRequest(result);
             setConfirmation({
                 reference: result.reference,
                 statusUrl: result.statusUrl,
