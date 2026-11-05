@@ -116,13 +116,16 @@ body{margin:0;padding:28px 18px 56px;min-height:100vh;background:radial-gradient
 .auth-row input:focus,.manager-input:focus,.manager-select:focus,.manager-search:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);background:#fff}
 .manager-select{appearance:none;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23718076' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
 .manager-select option{background:#fff;color:var(--ink)}
-.pairs-grid{display:grid;grid-template-columns:44px minmax(0,1fr) minmax(0,1fr) 36px;gap:8px;margin-top:8px;padding:14px;border:1px solid var(--line-2);border-radius:14px;background:#fff}
+.pairs-grid{display:grid;grid-template-columns:44px minmax(0,1fr) minmax(0,1fr) 92px 36px;gap:8px;margin-top:8px;padding:14px;border:1px solid var(--line-2);border-radius:14px;background:#fff}
 .pairs-grid .pg-head{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#6b7a70);padding:0 4px 2px}
 .pairs-grid .pg-num{align-self:center;text-align:center;font:600 12px ui-monospace,Consolas,monospace;color:var(--muted,#6b7a70)}
 .pairs-grid input{padding:9px 12px;font:13px ui-monospace,SFMono-Regular,Consolas,Menlo,monospace}
+.pairs-grid .pg-status{align-self:center;justify-self:start;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;background:#eef2ef;color:#6b7a70}
+.pairs-grid .pg-status.available{background:#e3f2e7;color:#2f6a43}
+.pairs-grid .pg-status.redeemed{background:#fbeaea;color:#a33}
 .pairs-grid .pg-del{border:0;background:transparent;color:#a33;font-size:18px;cursor:pointer;border-radius:8px}
 .pairs-grid .pg-del:hover{background:#fbeaea}
-@media(max-width:600px){.pairs-grid{grid-template-columns:30px minmax(0,1fr) minmax(0,1fr) 28px;gap:6px;padding:10px}}
+@media(max-width:600px){.pairs-grid{grid-template-columns:26px minmax(0,1fr) minmax(0,1fr) 70px 24px;gap:6px;padding:10px}}
 textarea{display:block;min-height:300px;margin-top:8px;padding:14px 16px;font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,Menlo,monospace;white-space:pre;overflow:auto;resize:vertical}
 label{display:block;margin-top:20px;font-size:13px;font-weight:700;color:var(--ink-2)}
 .field-label{display:block;margin:0;font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--ink-2)}
@@ -550,16 +553,16 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 const keyInput=document.getElementById('adminKey');
 const adminNameInput=document.getElementById('adminName');
 const pairsGrid=document.getElementById('pairs');
-function pairRowHtml(number,password,code){
-  return '<div class="pg-num">'+number+'</div><input class="pg-pass" type="text" spellcheck="false" autocomplete="off" placeholder="Passphrase" value="'+escapeHtml(password)+'"><input class="pg-code" type="text" spellcheck="false" autocomplete="off" placeholder="Promo code" value="'+escapeHtml(code)+'"><button class="pg-del" type="button" aria-label="Remove row">×</button>';
+function pairRowHtml(number,password,code,used){
+  return '<div class="pg-num">'+number+'</div><input class="pg-pass" type="text" spellcheck="false" autocomplete="off" placeholder="Passphrase" value="'+escapeHtml(password)+'"><input class="pg-code" type="text" spellcheck="false" autocomplete="off" placeholder="Promo code" value="'+escapeHtml(code)+'" data-used="'+(used===true?"1":used===false?"0":"")+'"><span class="pg-status '+(used===true?"redeemed":used===false?"available":"")+'">'+(used===true?"Redeemed":used===false?"Available":"New")+'</span><button class="pg-del" type="button" aria-label="Remove row">×</button>';
 }
 function renderPairRows(rows){
-  const list=rows.length?rows:[['','']];
-  pairsGrid.innerHTML='<div class="pg-head">#</div><div class="pg-head">Passphrase</div><div class="pg-head">Promo code</div><div></div>'+list.map((row,index)=>pairRowHtml(String(index+1).padStart(2,'0'),row[0],row[1])).join('');
+  const list=rows.length?rows:[['','',null]];
+  pairsGrid.innerHTML='<div class="pg-head">#</div><div class="pg-head">Passphrase</div><div class="pg-head">Promo code</div><div class="pg-head">Status</div><div></div>'+list.map((row,index)=>pairRowHtml(String(index+1).padStart(2,'0'),row[0],row[1],row[2])).join('');
 }
 function readPairRows(){
   const passes=[...pairsGrid.querySelectorAll('.pg-pass')],codes=[...pairsGrid.querySelectorAll('.pg-code')];
-  return passes.map((input,index)=>[input.value,codes[index].value]);
+  return passes.map((input,index)=>{const flag=codes[index].dataset.used;return [input.value,codes[index].value,flag==='1'?true:flag==='0'?false:null];});
 }
 const rowsInput={
   get value(){return readPairRows().filter(row=>row[0].trim()||row[1].trim()).map((row,index)=>[String(index+1).padStart(2,'0'),row[0].trim(),row[1].trim()].join('\\t')).join('\\n');},
@@ -1433,7 +1436,7 @@ async function loadBatch(){
   loadButton.disabled=true;setStatus('Loading current batch…');
   try{
     const result=await request('GET');
-    rowsInput.value=(result.pairs||[]).map((pair,index)=>[String(index+1).padStart(2,'0'),pair.password,pair.promoCode].join('\\t')).join('\\n');
+    renderPairRows((result.pairs||[]).map(pair=>[pair.password,pair.promoCode,Boolean(pair.used)]));
     setConn(true);
     setStatus('Current batch loaded.','ok');
     return true;
@@ -1449,7 +1452,7 @@ saveButton.addEventListener('click',async()=>{
   try{
     const pairs=parseRows(rowsInput.value);
     const result=await request('PUT',{pairs});
-    rowsInput.value=(result.pairs||[]).map((pair,index)=>[String(index+1).padStart(2,'0'),pair.password,pair.promoCode].join('\\t')).join('\\n');
+    renderPairRows((result.pairs||[]).map(pair=>[pair.password,pair.promoCode,Boolean(pair.used)]));
     setStatus('Batch saved. Promo codes are ready to reveal.','ok');
   }catch(error){setStatus(error.message,'error');}
   finally{saveButton.disabled=false;}
