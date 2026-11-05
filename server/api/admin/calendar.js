@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import { applyCors } from '../_lib/cors.js';
+import { cancelBookedSlotRecords, findBookingRequestBySlot } from '../_lib/booking-approval.js';
+import { sendBookingCancelledEmail } from '../_lib/email.js';
 import {
     BOOKING_SLOT_TIMES,
     appendCalendarHistory,
@@ -298,7 +300,7 @@ const adminPage = `<!doctype html>
 
     const rows = state.history.slice(0, 12).map((entry) => {
       const stamp = entry.timestamp ? new Date(entry.timestamp).toLocaleString('en-ZA', { dateStyle: 'short', timeStyle: 'short' }) : 'now';
-      return '<div style="padding:6px 0;border-bottom:1px solid var(--line)"><strong>' + entry.action + '</strong> · ' + entry.date + ' ' + (entry.time || 'all slots') + ' · ' + stamp + '</div>';
+      return '<div style="padding:6px 0;border-bottom:1px solid var(--line)"><strong>' + entry.action + '</strong> Â· ' + entry.date + ' ' + (entry.time || 'all slots') + ' Â· ' + stamp + '</div>';
     }).join('');
     historyNode.innerHTML = '<strong>Recent activity</strong>' + rows;
   }
@@ -327,7 +329,7 @@ const adminPage = `<!doctype html>
   function toggleSlot(date, time, reason = 'toggle') {
     if ((state.bookedSlots[date] || []).includes(time)) {
       state.isDragging = false;
-      setStatus('A customer has booked or reserved ' + date + ' ' + time + '. This slot cannot be freed.', 'error');
+      if (reason !== 'drag') cancelBooking(date, time);
       return;
     }
 
@@ -357,7 +359,7 @@ const adminPage = `<!doctype html>
       const booked = new Set(state.bookedSlots[date] || []);
       const occupiedCount = new Set([...blocked, ...booked]).size;
       const percent = Math.min((occupiedCount / slots.length) * 100, 100);
-      const label = blocked.size + ' blocked · ' + booked.size + ' booked';
+      const label = blocked.size + ' blocked Â· ' + booked.size + ' booked';
       return '<button type="button" data-date="' + date + '" class="month-day" title="' + label + '"><span class="month-day-label">' + formatDate(dateFromIso(date)).replace(', ', ' ') + '</span><span class="month-bar"><span class="month-bar-fill" style="width:' + percent + '%"></span></span><span class="month-day-meta">' + label + '</span></button>';
     }).join('');
     return '<div class="month-grid">' + cells + '</div>';
@@ -381,7 +383,7 @@ const adminPage = `<!doctype html>
         const booked = bookedSet.has(time);
         const slotClass = booked ? 'booked' : blocked ? 'blocked' : '';
         const slotStatus = booked ? 'Booked' : blocked ? 'Blocked' : 'Open';
-        const label = booked ? 'Booked by a customer; cannot be freed' : blocked ? 'Manually blocked' : 'Available';
+        const label = booked ? 'Booked by a customer; click to cancel' : blocked ? 'Manually blocked' : 'Available';
         return '<button class="slot ' + slotClass + '" type="button" data-date="' + date + '" data-time="' + time + '" data-booked="' + booked + '" aria-disabled="' + booked + '" aria-label="' + date + ' ' + time + ', ' + label + '" title="' + label + '"><span>' + time + '</span><span class="slot-status">' + slotStatus + '</span></button>';
       }).join('');
 
@@ -493,7 +495,7 @@ const adminPage = `<!doctype html>
     const visibleCount = dates.length * slots.length;
     const occupiedCount = dates.reduce((sum, date) => sum + new Set([...(state.blockedSlots[date] || []), ...(state.bookedSlots[date] || [])]).size, 0);
     const availableCount = Math.max(visibleCount - occupiedCount, 0);
-    summaryNode.textContent = 'Visible schedule: ' + visibleCount + ' slots · ' + blockedCount + ' blocked · ' + bookedCount + ' booked · ' + availableCount + ' available';
+    summaryNode.textContent = 'Visible schedule: ' + visibleCount + ' slots Â· ' + blockedCount + ' blocked Â· ' + bookedCount + ' booked Â· ' + availableCount + ' available';
   }
 
   async function callApi(method, body) {
@@ -511,12 +513,26 @@ const adminPage = `<!doctype html>
     return result;
   }
 
+  async function cancelBooking(date, time) {
+    if (!confirm('Cancel the booking on ' + date + ' at ' + time + '?\\n\\nThe customer will be emailed first. The slot is only cancelled if that email is sent.')) return;
+    const reason = prompt('Optional message to include in the customer email (e.g. why it is being cancelled):', '');
+    if (reason === null) return;
+    setStatus('Emailing the customer and cancelling ' + date + ' ' + time + '...');
+    try {
+      const result = await callApi('POST', { date, time, reason });
+      setStatus(result.message, 'ok');
+      await loadCalendar();
+    } catch (error) {
+      setStatus(error.message, 'error');
+    }
+  }
+
   async function loadCalendar() {
     const button = document.getElementById('load');
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
-    button.textContent = 'Loading…';
-    setStatus('Connecting to the live calendar…', 'loading');
+    button.textContent = 'Loadingâ€¦';
+    setStatus('Connecting to the live calendarâ€¦', 'loading');
     try {
       const result = await callApi('GET');
       state.blockedSlots = result.blockedSlots || {};
@@ -540,8 +556,8 @@ const adminPage = `<!doctype html>
     const button = document.getElementById('save');
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
-    button.textContent = 'Saving…';
-    setStatus('Saving calendar changes…', 'loading');
+    button.textContent = 'Savingâ€¦';
+    setStatus('Saving calendar changesâ€¦', 'loading');
     try {
       const payload = { blocks: state.blockedSlots, history: state.history.slice(0, 25) };
       const result = await callApi('PUT', payload);
@@ -661,7 +677,7 @@ export default async function handler(req, res) {
     }
 
     if (applyCors(req, res)) return;
-    if (!['GET', 'PUT'].includes(req.method)) {
+    if (!['GET', 'PUT', 'POST'].includes(req.method)) {
         res.status(405).json({ message: 'Method not allowed.' });
         return;
     }
@@ -670,6 +686,44 @@ export default async function handler(req, res) {
     const expectedKeys = getExpectedKeys();
     if (!suppliedKey || !expectedKeys.some((expectedKey) => safeEqual(suppliedKey, expectedKey))) {
         res.status(401).json({ message: 'Calendar key is missing or invalid.' });
+        return;
+    }
+
+    if (req.method === 'POST') {
+        try {
+            const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+            const date = String(body.date || '');
+            const time = String(body.time || '');
+            const reason = String(body.reason || '').trim().slice(0, 500);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !BOOKING_SLOT_TIMES.includes(time)) {
+                res.status(400).json({ message: 'A valid date and time are required.' });
+                return;
+            }
+            const { owner, request } = await findBookingRequestBySlot(date, time);
+            if (!owner) {
+                res.status(404).json({ message: 'This slot is not booked. Refresh the calendar.' });
+                return;
+            }
+            const email = request?.booking?.customer?.email;
+            if (!request || !email) {
+                res.status(409).json({ message: 'No customer email was found for this slot, so it was NOT cancelled. The customer must be contacted manually.' });
+                return;
+            }
+            let sent;
+            try {
+                sent = await sendBookingCancelledEmail(request, reason, crypto.randomBytes(4).toString('hex'));
+            } catch (error) {
+                sent = { skipped: true, reason: error instanceof Error ? error.message : 'Email failed.' };
+            }
+            if (!sent || sent.skipped) {
+                res.status(502).json({ message: 'The cancellation email could not be sent' + (sent?.reason ? ' (' + sent.reason + ')' : '') + ', so the slot was NOT cancelled.' });
+                return;
+            }
+            await cancelBookedSlotRecords(request);
+            res.status(200).json({ message: 'Booking cancelled and ' + email + ' was emailed.', emailSent: true });
+        } catch (error) {
+            res.status(409).json({ message: error instanceof Error ? error.message : 'Could not cancel the booking.' });
+        }
         return;
     }
 

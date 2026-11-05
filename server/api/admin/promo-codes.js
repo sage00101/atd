@@ -342,7 +342,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 <pre id="summary"></pre>
 </section>
 <section id="monthlyWashPanel" class="promo-panel" role="tabpanel" aria-labelledby="monthlyWashTab" hidden>
-  <p class="note">A confirmed first package payment automatically creates and emails a random access code. Standard permits up to 2 bookings per billing period and Premium up to 4. Unused prepaid washes roll over, but the per-period booking cap remains. Each recorded payment adds the package credits, creates a fresh access code, and emails the customer.</p>
+  <p class="note">A confirmed first package payment automatically creates and emails a random access code. Standard permits up to 2 bookings per billing period and Premium up to 4. Unused prepaid washes roll over, but the per-period booking cap remains. Each recorded payment creates a fresh access code, and emails the customer.</p>
   <div id="monthlyStats" class="stat-row" hidden></div>
   <h2 id="monthlyFormTitle" class="section-title">Create monthly entitlement</h2>
   <form id="monthlyForm" class="manager-form">
@@ -563,13 +563,12 @@ const managerStorageKey='a10tion-admin-manager-key';
 function setStatus(message,type=''){statusNode.textContent=message;statusNode.className=type;}
 function setConn(isOn){connStateNode.dataset.state=isOn?'on':'off';connStateNode.textContent=isOn?'Connected':'Not connected';}
 function renderMonthlyStats(){
-  const activeCount=monthlyEntitlements.filter(record=>record.status==='Active').length;
-  const credits=monthlyEntitlements.reduce((sum,record)=>sum+(Number(record.creditsAvailable)||0),0);
+  const liveClients=monthlyEntitlements.filter(record=>!record.archived);
+  const activeCount=liveClients.filter(record=>record.status==='Active').length;
   const review=pendingMonthlyPurchases.length;
   const tiles=[
-    [monthlyEntitlements.length,'Monthly clients',''],
+    [liveClients.length,'Monthly clients',''],
     [activeCount,'Active right now',''],
-    [credits,'Wash credits outstanding',''],
     [review,'Payments to review',review?' warn':'']
   ];
   monthlyStatsNode.innerHTML=tiles.map(tile=>'<div class="stat'+tile[2]+'"><strong>'+escapeHtml(tile[0])+'</strong><span>'+escapeHtml(tile[1])+'</span></div>').join('');
@@ -830,13 +829,13 @@ function renderEntitlementCard(record){
     ?'<div class="entitlement-code"><code>'+escapeHtml(record.code)+'</code><button type="button" data-action="copy" data-code="'+escapeHtml(record.code)+'">Copy</button></div>'
     :'<p class="hint" role="status">'+(record.active?'No active code. Generate a new code to restore customer access.':'Access code revoked. Reactivate, then generate a fresh code if needed.')+'</p>';
   return '<article class="entitlement-card" data-id="'+escapeHtml(record.id)+'">'+
-    '<div class="entitlement-top"><div><h3 class="entitlement-name">'+escapeHtml(record.customerName)+'</h3><p class="entitlement-meta">'+escapeHtml(record.email)+' · '+escapeHtml(record.customerPhone||'No phone')+'<br>'+escapeHtml(packageLabel(record))+' · '+escapeHtml(record.creditsAvailable)+' credits left</p></div><span class="status-pill '+slug+'">'+escapeHtml(record.status)+'</span></div>'+
+    '<div class="entitlement-top"><div><h3 class="entitlement-name">'+escapeHtml(record.customerName)+'</h3><p class="entitlement-meta">'+escapeHtml(record.email)+' · '+escapeHtml(record.customerPhone||'No phone')+'<br>'+escapeHtml(packageLabel(record))+'</p></div><span class="status-pill '+slug+'">'+escapeHtml(record.status)+'</span></div>'+
     (record.archived?'<span class="archive-label">Archived record</span>':'')+
     '<details class="account-collapse"><summary>Expand / collapse account</summary><div class="account-collapse-body">'+
     '<p class="entitlement-meta">'+escapeHtml(record.businessName||'')+(record.businessName?'<br>':'')+escapeHtml(dateRange)+(record.vehicleType?'<br>'+escapeHtml(record.vehicleType):'')+(record.contractOption?'<br>'+escapeHtml(record.contractOption)+' contract':'')+'</p>'+
     codeBlock+(additionalCodes?'<details class="entitlement-history"><summary>Other account codes ('+(record.codes.length-1)+')</summary><ul class="history-list">'+additionalCodes+'</ul></details>':'')+
-    '<div class="usage-grid"><div class="usage-cell"><strong>'+record.monthlyAllowance+'</strong><span>Booking cap · '+escapeHtml(formatMonth(record.period))+'</span></div><div class="usage-cell"><strong>'+record.used+'</strong><span>Used this period'+(record.reserved?' · '+record.reserved+' pending':'')+'</span></div><div class="usage-cell"><strong>'+record.periodRemaining+'</strong><span>Booking slots left</span></div><div class="usage-cell"><strong>'+record.creditsAvailable+'</strong><span>Wash credits available</span></div></div>'+
-    '<p class="hint" style="margin:8px 0 0">Reserved credits across bookings: '+escapeHtml(record.creditsReserved||0)+' · Billing period: '+escapeHtml(record.period)+' to '+escapeHtml(record.periodEnd||'')+'</p>'+
+    '<div class="usage-grid"><div class="usage-cell"><strong>'+record.monthlyAllowance+'</strong><span>Booking cap · '+escapeHtml(formatMonth(record.period))+'</span></div><div class="usage-cell"><strong>'+record.used+'</strong><span>Used this period'+(record.reserved?' · '+record.reserved+' pending':'')+'</span></div><div class="usage-cell"><strong>'+record.periodRemaining+'</strong>    <span>Booking slots left</span></div></div>'+
+    '<p class="hint" style="margin:8px 0 0">Billing period: '+escapeHtml(record.period)+' to '+escapeHtml(record.periodEnd||'')+'</p>'+
     '<div class="entitlement-actions">'+actions+'</div>'+
     '<details class="entitlement-history"><summary>Booking, payment, access and audit history ('+((record.history||[]).length+(record.paymentHistory||[]).length+(record.codeHistory||[]).length+(record.distributionHistory||[]).length+(record.auditHistory||[]).length)+')</summary><ul class="history-list">'+(usageHistory||'<li>No confirmed monthly wash bookings yet.</li>')+paymentHistory+codeHistory+emailHistory+auditHistory+(record.deactivationReason?'<li>Current status reason: '+escapeHtml(record.deactivationReason)+'</li>':'')+'</ul></details>'+
     '</div></details></article>';
@@ -1000,11 +999,8 @@ async function handleMonthlyCardAction(event){
       });
       setStatus(record.archived?'Client restored. Old codes remain invalid; generate a new code to issue access.':record.active?'Client deactivated and all issued codes were revoked.':'Client reactivated. Old codes remain invalid.','ok');
     }else if(button.dataset.action==='archive'){
-      const reason=window.prompt('Why are you archiving this monthly client? Their code will stop working, but booking history will remain.');
-      if(reason===null)return;
-      if(reason.trim().length<3){setStatus('Enter a reason of at least 3 characters.','error');return;}
-      await monthlyRequest('DELETE',{id:record.id,deactivationReason:reason});
-      setStatus('Entitlement archived; historical records were retained.','ok');
+      await monthlyRequest('DELETE',{id:record.id,deactivationReason:'Archived by administrator.'});
+      setStatus('Client archived and moved to the Archived tab; historical records were retained.','ok');
     }
     await loadMonthlyEntitlements();
   }catch(error){setStatus(error.message,'error');}
@@ -1046,7 +1042,7 @@ paymentForm.addEventListener('submit',async event=>{
       ?'Payment recorded and new code generated, but code email failed: '+result.entitlement.emailError
       :emailPending
         ?'Payment recorded and new code generated. The email was accepted by the provider; delivery confirmation is pending.'
-        :'Payment recorded, wash credits added, and a new access code emailed to the customer.',
+        :'Payment recorded and a new access code emailed to the customer.',
     emailFailed?'error':'ok');
   }catch(error){
     setStatus(error.message,'error');
@@ -1063,7 +1059,7 @@ pendingMonthlyPurchasesNode.addEventListener('click',async event=>{
   try{
     const result=await monthlyRequest('POST',{action:'record-payment',id:record.id,paymentReference:purchase.reference,amountCents:purchase.amountCents,paymentDate:localToday()});
     await loadMonthlyEntitlements();
-    setStatus(result.entitlement?.emailError?'Payment applied and a new code was generated, but email failed: '+result.entitlement.emailError:'Paid purchase applied; wash credits were added and a new code was emailed.',result.entitlement?.emailError?'error':'ok');
+    setStatus(result.entitlement?.emailError?'Payment applied and a new code was generated, but email failed: '+result.entitlement.emailError:'Paid purchase applied and a new code was emailed.',result.entitlement?.emailError?'error':'ok');
   }catch(error){setStatus(error.message,'error');}
   finally{button.disabled=false;}
 });

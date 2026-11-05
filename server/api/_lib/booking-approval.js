@@ -6,6 +6,8 @@ import {
     MONTHLY_PACKAGE_CENTS,
     SINGLE_WASH_CENTS,
     claimUniqueReferenceNumber,
+    getBookingSlotOwner,
+    markStoredBookingCancelled,
     looksLikeEmail,
     looksLikeVehicleRegistration,
     normaliseEmail,
@@ -148,9 +150,9 @@ function bookingKind(booking) {
 function publicStatus(status) {
     return ({
         pending_approval: 'Pending Approval',
-        approved: 'Approved Ã¢â‚¬â€œ Awaiting Completion',
-        processing: 'Approved Ã¢â‚¬â€œ Awaiting Completion',
-        awaiting_completion: 'Approved Ã¢â‚¬â€œ Awaiting Completion',
+        approved: 'Approved ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Awaiting Completion',
+        processing: 'Approved ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Awaiting Completion',
+        awaiting_completion: 'Approved ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Awaiting Completion',
         confirmed: 'Confirmed',
         declined: 'Declined',
         expired: 'Expired or Cancelled',
@@ -585,4 +587,56 @@ export function getBookingRequestError(status) {
 
 export function getPublicBookingRequest(request, includeBooking = true) {
     return publicRequest(request, includeBooking);
+}
+
+const CANCELLABLE_BOOKED_STATUSES = ['approved', 'processing', 'awaiting_completion', 'confirmed'];
+
+/** Finds the customer request that currently owns a booked date/time slot. */
+export async function findBookingRequestBySlot(bookingDate, bookingTime) {
+    const owner = await getBookingSlotOwner(bookingDate, bookingTime);
+    if (!owner) return { owner: null, request: null };
+    const ids = await redis.lrange(REQUEST_INDEX_KEY, 0, 999);
+    for (const id of ids) {
+        const request = await redis.get(requestKey(id));
+        if (request?.reference === owner
+            && request.booking?.bookingDate === bookingDate
+            && request.booking?.bookingTime === bookingTime) {
+            return { owner, request };
+        }
+    }
+    return { owner, request: null };
+}
+
+/** Cancels the booked slot's records and frees the slot. Call only after the customer was emailed. */
+export async function cancelBookedSlotRecords(request) {
+    const current = await redis.get(requestKey(request.id));
+    if (!current || !CANCELLABLE_BOOKED_STATUSES.includes(current.status)) {
+        throw new Error('This booking has already changed. Refresh the calendar and try again.');
+    }
+    const result = await redis.eval(UPDATE_REQUEST_STATUS_SCRIPT, [
+        requestKey(current.id),
+        continuationLockKey(current.id),
+        current.continuationTokenDigest
+            ? continuationTokenKey(current.continuationTokenDigest)
+            : 'booking:request-continuation:none',
+    ], [
+        current.status,
+        'cancelled',
+        new Date().toISOString(),
+        '',
+        '',
+        '',
+        String(REQUEST_TTL_SECONDS),
+        '0',
+    ]);
+    if (result?.[0] !== 'OK') {
+        throw new Error('This booking has already changed. Refresh the calendar and try again.');
+    }
+    const { bookingDate, bookingTime } = current.booking;
+    await releaseBookingSlotIfOwned(bookingDate, bookingTime, current.reference);
+    await Promise.all([
+        markStoredBookingCancelled(current.reference),
+        markStoredBookingCancelled(current.checkoutId),
+    ]);
+    return await loadSavedRecord(result[1], current.id);
 }

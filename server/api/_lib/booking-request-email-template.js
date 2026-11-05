@@ -177,3 +177,14 @@ export function buildBookingDeclinedEmail(request) {
         footerNote: 'If you would like to discuss another date or time, please reply to this email.',
     });
 }
+
+export function buildBookingCancelledEmail(request, reason) {
+    return renderEmail({
+        title: 'Your booking has been cancelled',
+        greeting: `Hi ${request.booking.customer.firstName || 'there'},`,
+        message: 'We are sorry, but we have had to cancel your booked appointment. The time slot below has been released.',
+        request,
+        declineReason: reason,
+        footerNote: 'If you paid online or would like to rebook for another date or time, please reply to this email and we will gladly help.',
+    });
+}

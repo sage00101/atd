@@ -381,6 +381,24 @@ export async function releaseBookingSlot(bookingDate, bookingTime) {
     await redis.srem(dateIndexKey(bookingDate), bookingTime);
 }
 
+export async function getBookingSlotOwner(bookingDate, bookingTime) {
+    if (!bookingDate || !bookingTime) return null;
+    return await redis.get(slotKey(bookingDate, bookingTime)) || null;
+}
+
+/** Marks a stored booking record (online checkout id or reference) as cancelled, if one exists. */
+export async function markStoredBookingCancelled(id) {
+    if (!id) return false;
+    const booking = await redis.get(bookingKey(id));
+    if (!booking || typeof booking !== 'object') return false;
+    await redis.set(
+        bookingKey(id),
+        { ...booking, status: 'cancelled', cancelledAt: new Date().toISOString() },
+        { ex: CONFIRMED_BOOKING_TTL_SECONDS },
+    );
+    return true;
+}
+
 export async function releaseBookingSlotIfOwned(bookingDate, bookingTime, token) {
     if (!bookingDate || !bookingTime || !token) return false;
     return Boolean(await redis.eval(RELEASE_BOOKING_SLOT_IF_OWNED_SCRIPT, [
