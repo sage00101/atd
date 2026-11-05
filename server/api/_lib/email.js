@@ -36,7 +36,7 @@ async function sendBusinessBookingSms(receipt) {
     const senderId = process.env.AFRICAS_TALKING_SENDER_ID || process.env.AFRICAS_TALKING_FROM;
 
     if (!username || !apiKey || !to) {
-        console.log('[sms skipped â€” AFRICAS_TALKING_USERNAME/API_KEY or BUSINESS_SMS not set]', { to, reference: receipt.reference });
+        console.log('[sms skipped — AFRICAS_TALKING_USERNAME/API_KEY or BUSINESS_SMS not set]', { to, reference: receipt.reference });
         return { skipped: true };
     }
 
@@ -44,10 +44,10 @@ async function sendBusinessBookingSms(receipt) {
         `A10tion booking: ${receipt.customerName || 'Customer'} ${receipt.packageName || 'wash'} booked.`,
         `Ref: ${receipt.reference}`,
         `Date: ${receipt.bookingDate} ${receipt.bookingTime}`,
-        `Vehicle: ${receipt.registration || 'â€”'}`,
-        `Address: ${receipt.address || 'â€”'}`,
-        `Amount: ${receipt.amountZar || 'â€”'}`,
-        `Contact: ${receipt.customerMobile || receipt.customerEmail || 'â€”'}`,
+        `Vehicle: ${receipt.registration || '—'}`,
+        `Address: ${receipt.address || '—'}`,
+        `Amount: ${receipt.amountZar || '—'}`,
+        `Contact: ${receipt.customerMobile || receipt.customerEmail || '—'}`,
     ].join(' | ');
 
     const payload = new URLSearchParams({ username, to, message: body });
@@ -76,7 +76,7 @@ async function sendViaResend({ to, bcc, subject, html, replyTo, attachments, saf
     const from = process.env.RESEND_FROM_EMAIL;
 
     if (!apiKey || !from) {
-        console.log('[email skipped â€” RESEND_API_KEY/RESEND_FROM_EMAIL not set]', { to, bcc, subject });
+        console.log('[email skipped — RESEND_API_KEY/RESEND_FROM_EMAIL not set]', { to, bcc, subject });
         return { skipped: true };
     }
 
@@ -131,7 +131,7 @@ export async function sendMonthlyAccessCodeEmail(client, idempotencyKey) {
 export async function sendMonthlyDistributionReport(run) {
     return sendViaResend({
         to: BOOKINGS_EMAIL,
-        subject: `Monthly code distribution report â€” ${run.id}`,
+        subject: `Monthly code distribution report — ${run.id}`,
         html: buildDistributionReportHtml(run),
         replyTo: BOOKINGS_EMAIL,
         idempotencyKey: `monthly-distribution-report-${run.id}`,
@@ -146,7 +146,7 @@ export function buildBookingSmsNotificationPayload(request) {
         to: process.env.BUSINESS_SMS || process.env.BUSINESS_SMS_NUMBER || '',
         reference: request.reference,
         message: [
-            'PENDING APPROVAL Â· New booking request',
+            'PENDING APPROVAL · New booking request',
             `Ref: ${request.reference}`,
             `Customer: ${customer.firstName || ''} ${customer.surname || ''}`.trim(),
             `Date: ${booking.bookingDate || ''} ${booking.bookingTime || ''}`.trim(),
@@ -201,9 +201,9 @@ async function sendBookingRequestEmailPair({ request, customerSubject, customerH
 export async function sendBookingRequestReceivedEmails(request, statusUrl) {
     return sendBookingRequestEmailPair({
         request,
-        customerSubject: `Booking request received â€” ${request.reference}`,
+        customerSubject: `Booking request received — ${request.reference}`,
         customerHtml: buildBookingRequestReceivedEmail(request, statusUrl),
-        businessSubject: `PENDING APPROVAL Â· New booking request â€” ${request.reference}`,
+        businessSubject: `PENDING APPROVAL · New booking request — ${request.reference}`,
         businessHtml: buildBookingRequestBusinessEmail(
             request,
             process.env.BUSINESS_MANAGER_URL || '',
@@ -215,7 +215,7 @@ export async function sendBookingRequestReceivedEmails(request, statusUrl) {
 export async function sendBookingRequestApprovedEmail(request, continuationUrl, retryId = '') {
     return sendViaResend({
         to: request.booking.customer.email,
-        subject: `Booking request approved â€” ${request.reference}`,
+        subject: `Booking request approved — ${request.reference}`,
         html: buildBookingApprovedEmail(request, continuationUrl),
         replyTo: BOOKINGS_EMAIL,
         idempotencyKey: `booking-request-approved-${request.id}${retryId ? `-${retryId}` : ''}`,
@@ -225,7 +225,7 @@ export async function sendBookingRequestApprovedEmail(request, continuationUrl, 
 export async function sendBookingRequestDeclinedEmail(request, retryId = '') {
     return sendViaResend({
         to: request.booking.customer.email,
-        subject: `Booking request update â€” ${request.reference}`,
+        subject: `Booking request update — ${request.reference}`,
         html: buildBookingDeclinedEmail(request),
         replyTo: BOOKINGS_EMAIL,
         idempotencyKey: `booking-request-declined-${request.id}${retryId ? `-${retryId}` : ''}`,
@@ -247,7 +247,7 @@ export async function sendReceiptEmail(receipt, contractAttachment = null) {
     const html = buildReceiptEmailHtml(receipt);
     const isMonthlyBooking = receipt.bookingType === 'monthly-entitlement'
         || receipt.paymentMethod === 'monthly-entitlement';
-    const subject = `${isMonthlyBooking ? 'Monthly booking confirmed' : 'Booking confirmed'} â€” ${receipt.reference}`;
+    const subject = `${isMonthlyBooking ? 'Monthly booking confirmed' : 'Booking confirmed'} — ${receipt.reference}`;
 
     // Separate direct send so the business copy never depends on bcc or on the customer send succeeding.
     const jobs = [sendViaResend({

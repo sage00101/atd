@@ -25,6 +25,13 @@ body{margin:0;padding:28px 18px 56px;min-height:100vh;background:radial-gradient
 .auth-card h2{margin:16px 0 6px;font-size:26px;letter-spacing:-.04em}
 .auth-card p{margin:0 0 20px;color:var(--muted);font-size:13px;line-height:1.55}
 .auth-card .field-label{text-align:left}
+.auth-gate{background:radial-gradient(700px 420px at 15% 10%,rgba(77,139,94,.22),transparent 60%),radial-gradient(600px 400px at 90% 90%,rgba(77,139,94,.16),transparent 60%),rgba(238,244,239,.82)}
+.auth-card{position:relative;overflow:hidden;padding:34px 30px 28px}
+.auth-card::before{content:"";position:absolute;left:0;right:0;top:0;height:5px;background:linear-gradient(90deg,var(--accent-2),#8cc79c)}
+.auth-card .auth-eyebrow{margin:14px 0 0;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-2)}
+.auth-card .auth-status{min-height:18px;margin:14px 0 0;font-size:13px;font-weight:600;color:var(--danger)}
+.auth-card .auth-status.ok{color:var(--accent-2)}
+.auth-card .manager-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px rgba(77,139,94,.15)}
 .auth-card #status{margin-top:12px;text-align:left}
 .manager-topbar{display:flex;align-items:center;justify-content:space-between;gap:14px}
 .manager-brand{display:flex;align-items:center;gap:14px;min-width:0}
@@ -367,10 +374,9 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
     <div id="pendingMonthlyPurchases" class="distribution-history" aria-live="polite"></div>
   </section>
   <section class="distribution-panel" aria-label="Monthly access code email distribution">
-    <div><h3>Email monthly access codes</h3><p>Preview active clients before sending. Delivery status updates when Resend confirms it.</p><label class="field-label" style="margin-top:8px">Administrator name<input id="distributionAdmin" class="manager-input" maxlength="100" autocomplete="name" placeholder="Business Manager admin"></label></div>
+    <div><h3>Email monthly access codes</h3><p>Preview active clients before sending. Delivery status updates when Resend confirms it.</p></div>
     <button id="bulkEmail" type="button">Preview bulk email</button>
   </section>
-  <div id="distributionHistory" class="distribution-history" aria-live="polite"></div>
   <div class="monthly-toolbar">
     <input id="monthlySearch" class="manager-search" type="search" placeholder="Search customer, email, package or code" aria-label="Search monthly entitlements">
     <span id="monthlyCount" class="hint" aria-live="polite"></span>
@@ -407,7 +413,6 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 <section id="bookingRequestsPanel" class="tab-panel" role="tabpanel" aria-labelledby="bookingRequestsTab">
   <p class="note">Review website booking requests before payment or final confirmation. Pending requests hold their selected time for 3 days; monthly wash credits are not reserved until the approved customer completes the booking.</p>
   <div class="booking-requests-toolbar">
-    <label class="field-label">Administrator name<input id="bookingRequestAdmin" class="manager-input" maxlength="100" autocomplete="name" placeholder="Business Manager admin"></label>
     <button id="bookingRequestsReload" class="secondary" type="button">Refresh requests</button>
     <span id="bookingRequestsCount" class="hint" aria-live="polite"></span>
   </div>
@@ -452,6 +457,11 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
   <h2 class="section-title" style="margin-top:0">Recent booking activity</h2>
   <p class="hint">Recently accepted and declined booking requests.</p>
   <div id="activityCards" class="booking-request-grid"></div>
+  <h2 class="section-title">Code email activity</h2>
+  <p class="hint">Recent monthly access-code email previews and sends.</p>
+  <div id="distributionHistory" class="distribution-history" aria-live="polite"></div>
+  <h2 class="section-title">Code email activity</h2>
+  <p class="hint">Recent monthly access-code email previews and sends.</p>
   <div id="activityEmpty" class="empty-state" hidden>No recent accepted or declined requests.</div>
 </section>
 <section id="calendarPanel" class="tab-panel" role="tabpanel" aria-labelledby="calendarTab" hidden>
@@ -462,12 +472,15 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 <div id="authGate" class="auth-gate">
   <form id="authForm" class="auth-card">
     <img class="auth-logo" src="${managerLogoUrl}" alt="A10tion To Detail logo">
+    <p class="auth-eyebrow">A10tion To Detail · Operations</p>
     <h2>Welcome A10tion</h2>
-    <p>Enter your Business Manager API key to securely open your operations dashboard.</p>
-    <label class="field-label" for="adminKey">Business Manager API key</label>
+    <p>Sign in with your administrator name and API key to open your operations dashboard.</p>
+    <label class="field-label" for="adminName">Administrator name</label>
+    <input id="adminName" class="manager-input" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="40" placeholder="Your name" required>
+    <label class="field-label" for="adminKey" style="margin-top:12px">API key (password)</label>
     <input id="adminKey" class="manager-input" type="password" autocomplete="current-password" placeholder="Enter API key" required>
-    <button id="connect" type="submit" style="width:100%;margin-top:14px">Open Business Manager</button>
-    <p id="authStatus" class="hint" role="status" aria-live="polite"></p>
+    <button id="connect" type="submit" style="width:100%;margin-top:18px">Sign in</button>
+    <p id="authStatus" class="auth-status" role="alert" aria-live="polite"></p>
   </form>
 </div>
 <aside id="notificationDrawer" class="notification-drawer" aria-label="Important notifications" aria-hidden="true">
@@ -477,6 +490,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 </aside>
 <script>
 const keyInput=document.getElementById('adminKey');
+const adminNameInput=document.getElementById('adminName');
 const rowsInput=document.getElementById('pairs');
 const statusNode=document.getElementById('status');
 const summaryNode=document.getElementById('summary');
@@ -524,7 +538,6 @@ const paymentSubmit=document.getElementById('paymentSubmit');
 const bookingRequestCards=document.getElementById('bookingRequestCards');
 const bookingRequestsEmpty=document.getElementById('bookingRequestsEmpty');
 const bookingRequestsCount=document.getElementById('bookingRequestsCount');
-const bookingRequestAdmin=document.getElementById('bookingRequestAdmin');
 const bookingRequestsReload=document.getElementById('bookingRequestsReload');
 const declineConfirmDialog=document.getElementById('declineConfirmDialog');
 const declineReasonDialog=document.getElementById('declineReasonDialog');
@@ -551,7 +564,6 @@ const bulkPreviewSummary=document.getElementById('bulkPreviewSummary');
 const bulkPreviewClients=document.getElementById('bulkPreviewClients');
 const bulkConfirmButton=document.getElementById('bulkConfirm');
 const bulkCancelButton=document.getElementById('bulkCancel');
-const distributionAdmin=document.getElementById('distributionAdmin');
 let monthlyEntitlements=[];
 let monthlyDistributionRuns=[];
 let pendingMonthlyPurchases=[];
@@ -738,8 +750,10 @@ async function processBookingRequest(action,id,reason=''){
     setStatus(error.message,'error');
   }
 }
+let loggedInAdmin='';
+function managerAdminName(){return loggedInAdmin||'Business Manager admin';}
 function bookingRequestAdminName(){
-  return bookingRequestAdmin.value.trim()||'Business Manager admin';
+  return managerAdminName();
 }
 async function finishDistributionRun(runId,action){
   let result=await monthlyRequest('POST',{action,runId});
@@ -822,8 +836,8 @@ function renderEntitlementCard(record){
     canIssueCode&&record.code?'<button type="button" data-action="email">Email latest code</button>':'',
     canIssueCode?'<button type="button" data-action="payment">Record payment</button>':'',
     '<button type="button" data-action="edit">Edit details</button>',
-    '<button type="button" data-action="toggle">'+(record.archived?'Restore & reactivate':record.active?'Deactivate account':'Reactivate account')+'</button>',
-    !record.archived?'<button class="danger" type="button" data-action="archive">Archive</button>':'',
+    '<button'+(record.archived?'':' class="danger"')+' type="button" data-action="toggle">'+(record.archived?'Restore & reactivate':'Deactivate account')+'</button>',
+
   ].filter(Boolean).join('');
   const codeBlock=record.code
     ?'<div class="entitlement-code"><code>'+escapeHtml(record.code)+'</code><button type="button" data-action="copy" data-code="'+escapeHtml(record.code)+'">Copy</button></div>'
@@ -969,7 +983,7 @@ async function handleMonthlyCardAction(event){
     if(button.dataset.action==='email'){
       if(!window.confirm('Send a new monthly access-code email to '+record.customerName+' at '+record.email+'?'))return;
       button.disabled=true;
-      const result=await monthlyRequest('POST',{action:'send-one',id:record.id,adminName:distributionAdmin.value.trim()});
+      const result=await monthlyRequest('POST',{action:'send-one',id:record.id,adminName:managerAdminName()});
       setStatus(result.run?.status==='completed'?'Email accepted by the provider; delivery confirmation is pending.':'Email status: '+(result.run?.status||'unknown'),'ok');
       await loadMonthlyEntitlements();
       return;
@@ -984,23 +998,15 @@ async function handleMonthlyCardAction(event){
     }
     if(button.dataset.action==='edit'){editMonthlyEntitlement(record);return;}
     if(button.dataset.action==='toggle'){
-      const message=record.archived
-        ?'Restore this archived account? Previously issued codes remain revoked; generate a new code after restoring if the customer needs access.'
-        :record.active
-          ?"Are you sure? This will deactivate this user's account and permanently revoke every code already issued to them. Reactivating later will not restore those codes."
-          :'Reactivate this monthly client? Previous codes remain permanently revoked.';
-      if(!window.confirm(message))return;
-      const restore=record.archived;
-      await monthlyRequest('PUT',{
-        id:record.id,
-        active:restore?true:!record.active,
-        ...(restore?{archived:false}:{}),
-        deactivationReason:restore?'Restored and reactivated by administrator.':record.active?'Deactivated by administrator.':'Reactivated by administrator.',
-      });
-      setStatus(record.archived?'Client restored. Old codes remain invalid; generate a new code to issue access.':record.active?'Client deactivated and all issued codes were revoked.':'Client reactivated. Old codes remain invalid.','ok');
-    }else if(button.dataset.action==='archive'){
-      await monthlyRequest('DELETE',{id:record.id,deactivationReason:'Archived by administrator.'});
-      setStatus('Client archived and moved to the Archived tab; historical records were retained.','ok');
+      if(record.archived){
+        if(!window.confirm('Restore this archived account? Previously issued codes remain revoked; generate a new code after restoring if the customer needs access.'))return;
+        await monthlyRequest('PUT',{id:record.id,active:true,archived:false,deactivationReason:'Restored and reactivated by '+managerAdminName()+'.'});
+        setStatus('Client restored to Monthly clients. Old codes remain invalid; generate a new code to issue access.','ok');
+      }else{
+        if(!window.confirm("Are you sure? This will deactivate this user's account, revoke every code already issued to them and move them to the Archived tab."))return;
+        await monthlyRequest('DELETE',{id:record.id,deactivationReason:'Deactivated by '+managerAdminName()+'.'});
+        setStatus('Client deactivated, all issued codes were revoked and the account moved to the Archived tab.','ok');
+      }
     }
     await loadMonthlyEntitlements();
   }catch(error){setStatus(error.message,'error');}
@@ -1080,7 +1086,7 @@ bulkEmailButton.addEventListener('click',async()=>{
   bulkEmailButton.disabled=true;
   setStatus('Preparing recipient preview…');
   try{
-    const preview=await monthlyRequest('POST',{action:'preview-bulk',adminName:distributionAdmin.value.trim()});
+    const preview=await monthlyRequest('POST',{action:'preview-bulk',adminName:managerAdminName()});
     pendingBulkRunId=preview.runId;
     bulkPreviewSummary.textContent=preview.counts.eligible+' active clients can receive a code email; '+preview.counts.excluded+' excluded (inactive, expired, missing contact, or invalid address).';
     bulkPreviewClients.innerHTML=preview.eligible.slice(0,20).map(client=>'<li>'+escapeHtml(client.customerName)+' · '+escapeHtml(client.email)+' · '+escapeHtml(packageLabel(client))+'</li>').join('');
@@ -1134,8 +1140,13 @@ function closeNotifications(){
   notificationButton.setAttribute('aria-expanded','false');
   managerDrawerBackdrop.classList.remove('open');
 }
+const allowedAdmins=['sage','chad','tamaron','jared'];
 async function authenticateManager(){
   const key=keyInput.value.trim();
+  const typedName=adminNameInput.value.trim();
+  if(!typedName){authStatus.textContent='Enter your administrator name.';adminNameInput.focus();return false;}
+  const matchedAdmin=allowedAdmins.find(name=>name===typedName.toLowerCase());
+  if(!matchedAdmin){authStatus.textContent='User "'+typedName+'" does not exist on the database.';adminNameInput.focus();return false;}
   if(!key){authStatus.textContent='Enter your Business Manager API key.';keyInput.focus();return false;}
   connectButton.disabled=true;
   authStatus.textContent='Securing your workspace…';
@@ -1155,6 +1166,7 @@ async function authenticateManager(){
       console.warn('Business Manager key could not be saved on this device.',error);
       authStatus.textContent='Connected for this session. This browser could not save the key on this device.';
     }
+    loggedInAdmin=matchedAdmin.charAt(0).toUpperCase()+matchedAdmin.slice(1);
     managerShell.classList.remove('auth-locked');
     authGate.hidden=true;
     setConn(true);
@@ -1279,16 +1291,10 @@ saveButton.addEventListener('click',async()=>{
   finally{saveButton.disabled=false;}
 });
 keyInput.addEventListener('keydown',event=>{if(event.key==='Enter')connectButton.click();});
-let savedKey='';
-try{savedKey=localStorage.getItem(managerStorageKey)||sessionStorage.getItem(managerStorageKey)||sessionStorage.getItem('a10tion-calendar-key')||'';}catch(error){console.warn('Could not read the saved Business Manager key.',error);}
-if(savedKey){
-  keyInput.value=savedKey;
-  authenticateManager();
-}else{
-  managerShell.classList.add('auth-locked');
-  authGate.hidden=false;
-  setTimeout(()=>keyInput.focus(),0);
-}
+try{localStorage.removeItem(managerStorageKey);sessionStorage.removeItem(managerStorageKey);sessionStorage.removeItem('a10tion-calendar-key');}catch(error){console.warn('Could not clear saved Business Manager keys.',error);}
+managerShell.classList.add('auth-locked');
+authGate.hidden=false;
+setTimeout(()=>adminNameInput.focus(),0);
 resetMonthlyForm();
 </script>
 </body>

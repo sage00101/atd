@@ -150,9 +150,9 @@ function bookingKind(booking) {
 function publicStatus(status) {
     return ({
         pending_approval: 'Pending Approval',
-        approved: 'Approved ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Awaiting Completion',
-        processing: 'Approved ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Awaiting Completion',
-        awaiting_completion: 'Approved ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“ Awaiting Completion',
+        approved: 'Approved – Awaiting Completion',
+        processing: 'Approved – Awaiting Completion',
+        awaiting_completion: 'Approved – Awaiting Completion',
         confirmed: 'Confirmed',
         declined: 'Declined',
         expired: 'Expired or Cancelled',

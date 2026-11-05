@@ -300,7 +300,7 @@ const adminPage = `<!doctype html>
 
     const rows = state.history.slice(0, 12).map((entry) => {
       const stamp = entry.timestamp ? new Date(entry.timestamp).toLocaleString('en-ZA', { dateStyle: 'short', timeStyle: 'short' }) : 'now';
-      return '<div style="padding:6px 0;border-bottom:1px solid var(--line)"><strong>' + entry.action + '</strong> Â· ' + entry.date + ' ' + (entry.time || 'all slots') + ' Â· ' + stamp + '</div>';
+      return '<div style="padding:6px 0;border-bottom:1px solid var(--line)"><strong>' + entry.action + '</strong> · ' + entry.date + ' ' + (entry.time || 'all slots') + ' · ' + stamp + '</div>';
     }).join('');
     historyNode.innerHTML = '<strong>Recent activity</strong>' + rows;
   }
@@ -359,7 +359,7 @@ const adminPage = `<!doctype html>
       const booked = new Set(state.bookedSlots[date] || []);
       const occupiedCount = new Set([...blocked, ...booked]).size;
       const percent = Math.min((occupiedCount / slots.length) * 100, 100);
-      const label = blocked.size + ' blocked Â· ' + booked.size + ' booked';
+      const label = blocked.size + ' blocked · ' + booked.size + ' booked';
       return '<button type="button" data-date="' + date + '" class="month-day" title="' + label + '"><span class="month-day-label">' + formatDate(dateFromIso(date)).replace(', ', ' ') + '</span><span class="month-bar"><span class="month-bar-fill" style="width:' + percent + '%"></span></span><span class="month-day-meta">' + label + '</span></button>';
     }).join('');
     return '<div class="month-grid">' + cells + '</div>';
@@ -495,7 +495,7 @@ const adminPage = `<!doctype html>
     const visibleCount = dates.length * slots.length;
     const occupiedCount = dates.reduce((sum, date) => sum + new Set([...(state.blockedSlots[date] || []), ...(state.bookedSlots[date] || [])]).size, 0);
     const availableCount = Math.max(visibleCount - occupiedCount, 0);
-    summaryNode.textContent = 'Visible schedule: ' + visibleCount + ' slots Â· ' + blockedCount + ' blocked Â· ' + bookedCount + ' booked Â· ' + availableCount + ' available';
+    summaryNode.textContent = 'Visible schedule: ' + visibleCount + ' slots · ' + blockedCount + ' blocked · ' + bookedCount + ' booked · ' + availableCount + ' available';
   }
 
   async function callApi(method, body) {
@@ -531,8 +531,8 @@ const adminPage = `<!doctype html>
     const button = document.getElementById('load');
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
-    button.textContent = 'Loadingâ€¦';
-    setStatus('Connecting to the live calendarâ€¦', 'loading');
+    button.textContent = 'Loading…';
+    setStatus('Connecting to the live calendar…', 'loading');
     try {
       const result = await callApi('GET');
       state.blockedSlots = result.blockedSlots || {};
@@ -556,8 +556,8 @@ const adminPage = `<!doctype html>
     const button = document.getElementById('save');
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
-    button.textContent = 'Savingâ€¦';
-    setStatus('Saving calendar changesâ€¦', 'loading');
+    button.textContent = 'Saving…';
+    setStatus('Saving calendar changes…', 'loading');
     try {
       const payload = { blocks: state.blockedSlots, history: state.history.slice(0, 25) };
       const result = await callApi('PUT', payload);
