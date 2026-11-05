@@ -17,7 +17,8 @@ function escapeHtml(value) {
 function codeBlock(label, value) {
     return `<div style="margin-bottom:12px;padding:16px;border:1px dashed #cbd9cf;border-radius:10px;background:${BRAND.light};text-align:center">
           <p style="margin:0;color:${BRAND.sage};font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase">${escapeHtml(label)}</p>
-          <p style="margin:7px 0 0;color:${BRAND.ink};font-size:22px;font-weight:800;letter-spacing:.06em;word-break:break-all">${escapeHtml(value)}</p>
+          <p style="margin:7px 0 0;color:${BRAND.ink};font-size:22px;font-weight:800;letter-spacing:.06em;word-break:break-all;-webkit-user-select:all;user-select:all">${escapeHtml(value)}</p>
+          <p style="margin:8px 0 0;color:${BRAND.sage};font-size:11px">Tap and hold, or double-click, the code above to copy it</p>
         </div>`;
 }
 
