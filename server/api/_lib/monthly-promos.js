@@ -1336,6 +1336,15 @@ export async function createMonthlyDistributionPreview(adminName = 'Business Man
     return { runId: run.id, eligible: clients, excluded: exclusions, counts: { eligible: clients.length, excluded: exclusions.length } };
 }
 
+/** Removes the recorded monthly code email runs shown in the Activity tab. */
+export async function clearMonthlyDistributionRuns() {
+    const ids = await redis.lrange(emailRunsIndexKey, 0, -1);
+    const keys = (ids || []).flatMap((id) => [emailRunKey(id), emailRunLockKey(id)]);
+    if (keys.length) await redis.del(...keys);
+    await redis.del(emailRunsIndexKey);
+    return { cleared: (ids || []).length };
+}
+
 export async function getMonthlyDistributionRuns() {
     const ids = await redis.lrange(emailRunsIndexKey, 0, 19);
     const runs = (await Promise.all(ids.map((id) => redis.get(emailRunKey(id))))).filter(Boolean);

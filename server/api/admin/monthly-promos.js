@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import '../_lib/load-env.js';
 import { applyCors } from '../_lib/cors.js';
 import {
+    clearMonthlyDistributionRuns,
     createMonthlyEntitlement,
     deleteMonthlyEntitlementPermanently,
     createMonthlyCodeDistributionForClient,
@@ -57,6 +58,11 @@ export default async function handler(req, res) {
                 paymentDate: String(req.body?.paymentDate || '').trim(),
             });
             res.status(200).json({ entitlement });
+            return;
+        }
+
+        if (req.method === 'POST' && req.body?.action === 'clear-email-activity') {
+            res.status(200).json(await clearMonthlyDistributionRuns());
             return;
         }
 

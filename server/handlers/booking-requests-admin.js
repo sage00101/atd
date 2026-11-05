@@ -3,6 +3,7 @@ import { applyCors } from '../api/_lib/cors.js';
 import {
     acceptBookingRequest,
     declineBookingRequest,
+    clearBookingActivityFromAdmin,
     deleteBookingRequestFromAdmin,
     getBookingRequestForAdmin,
     getPublicBookingRequest,
@@ -81,6 +82,10 @@ export default async function handler(req, res) {
                 emailSent: !email?.skipped,
                 emailProblem: email?.failed ? email.reason : (email?.skipped ? 'Email is not configured on the server (RESEND_API_KEY / RESEND_FROM_EMAIL missing).' : ''),
             });
+            return;
+        }
+        if (action === 'clear-activity') {
+            res.status(200).json(await clearBookingActivityFromAdmin());
             return;
         }
         if (action === 'delete') {

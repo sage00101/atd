@@ -505,14 +505,13 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
   <div id="expiredRequestsEmpty" class="empty-state" hidden>No expired or cancelled requests.</div>
 </section>
 <section id="activityPanel" class="tab-panel" hidden>
+  <div class="buttons" style="justify-content:flex-end"><button id="activityClearAll" class="secondary" type="button">Clear all activity</button></div>
   <h2 class="section-title" style="margin-top:0">Recent booking activity</h2>
   <p class="hint">Recently accepted and declined booking requests.</p>
   <div id="activityCards" class="booking-request-grid"></div>
   <h2 class="section-title">Code email activity</h2>
   <p class="hint">Recent monthly access-code email previews and sends.</p>
   <div id="distributionHistory" class="distribution-history" aria-live="polite"></div>
-  <h2 class="section-title">Code email activity</h2>
-  <p class="hint">Recent monthly access-code email previews and sends.</p>
   <div id="activityEmpty" class="empty-state" hidden>No recent accepted or declined requests.</div>
 </section>
 <section id="calendarPanel" class="tab-panel" role="tabpanel" aria-labelledby="calendarTab" hidden>
@@ -1388,6 +1387,18 @@ async function handleRequestDelete(event){
 }
 expiredRequestCards.addEventListener('click',handleRequestDelete);
 activityCards.addEventListener('click',handleRequestDelete);
+document.getElementById('activityClearAll').addEventListener('click',async()=>{
+  if(!await askYesNo('Clear ALL activity, including booking activity and code email activity? This permanently removes it and cannot be undone.'))return;
+  const button=document.getElementById('activityClearAll');
+  button.disabled=true;
+  try{
+    await bookingRequestsApi({action:'clear-activity'});
+    await monthlyRequest('POST',{action:'clear-email-activity'});
+    await Promise.all([loadBookingRequests(),loadMonthlyEntitlements()]);
+    setStatus('All activity cleared.','ok');
+  }catch(error){setStatus(error.message,'error');}
+  finally{button.disabled=false;}
+});
 notificationClearAll.addEventListener('click',async()=>{
   if(!await askYesNo('Clear all notifications?'))return;
   try{localStorage.setItem(dismissedStorageKey,JSON.stringify([...new Set([...readDismissedNotifications(),...currentNotificationKeys])].slice(-500)));}catch{}
