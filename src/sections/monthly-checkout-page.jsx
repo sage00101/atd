@@ -384,9 +384,9 @@ export default function MonthlyCheckoutPage() {
     const washPrice = WASH_PRICES[selectedWash] || WASH_PRICES['Sedan / Hatchback'];
 
     return (
-        <main className='min-h-screen bg-[#f5f7f3] px-3 py-5 text-[#17241c] sm:px-6 sm:py-9'>
+        <main className='min-h-screen overflow-x-hidden bg-[#f5f7f3] px-2.5 py-3 text-[#17241c] sm:px-6 sm:py-9'>
             <div className='mx-auto max-w-6xl'>
-                <header className='mb-5 flex items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-[#14251c] to-[#294c37] px-4 py-4 text-white shadow-lg sm:px-7'>
+                <header className='mb-3 flex items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-[#14251c] to-[#294c37] px-3.5 py-3 sm:mb-5 sm:px-7 sm:py-4 text-white shadow-lg sm:px-7'>
                     <div>
                         <p className='text-[9px] font-bold uppercase tracking-[.18em] text-[#c5d9c9]'>A10tion To Detail · Monthly Clients</p>
                         <h1 className='mt-1 font-display text-xl font-semibold sm:text-2xl'>Book a monthly wash</h1>
@@ -396,8 +396,8 @@ export default function MonthlyCheckoutPage() {
                     </button>
                 </header>
 
-                <div className='grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]'>
-                    <form onSubmit={submitBooking} className='min-w-0 space-y-5 rounded-2xl border border-[#dce6de] bg-white p-4 shadow-sm sm:p-6'>
+                <div className='grid items-start gap-3 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_320px]'>
+                    <form onSubmit={submitBooking} className='min-w-0 space-y-4 rounded-2xl border border-[#dce6de] bg-white p-3 shadow-sm sm:space-y-5 sm:p-6'>
                         <section className='rounded-xl border border-[#d8e5da] bg-[#f4f8f4] p-4'>
                             <div className='flex items-start gap-3'>
                                 <span className='grid size-10 shrink-0 place-items-center rounded-xl bg-[#e1eee3] text-[#31553c]'><PackageCheck className='size-5' /></span>
@@ -414,24 +414,24 @@ export default function MonthlyCheckoutPage() {
 
                         <section>
                             <h2 className='flex items-center gap-2 text-sm font-bold text-[#1e3128]'><CalendarDays className='size-4' /> Choose a date and time</h2>
-                            <div className='mt-3 rounded-xl border border-[#e1e9e2] p-3 sm:p-4'>
+                            <div className='mx-auto mt-3 w-full max-w-[340px] rounded-xl border border-[#e1e9e2] p-2.5 sm:p-3'>
                                 <div className='flex items-center justify-between gap-3'>
-                                    <button type='button' aria-label='Previous month' disabled={previousMonthDisabled} onClick={() => { setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1)); setSelectedDate(null); setSelectedTime(''); }} className='grid size-9 place-items-center rounded-lg border border-[#dce6de] disabled:opacity-35'><ChevronLeft className='size-4' /></button>
+                                    <button type='button' aria-label='Previous month' disabled={previousMonthDisabled} onClick={() => { setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1)); setSelectedDate(null); setSelectedTime(''); }} className='grid size-8 place-items-center rounded-lg border border-[#dce6de] disabled:opacity-35'><ChevronLeft className='size-4' /></button>
                                     <h3 className='text-sm font-bold text-[#1e3128]'>{formatMonth(month)}</h3>
-                                    <button type='button' aria-label='Next month' disabled={nextMonthDisabled} onClick={() => { setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1)); setSelectedDate(null); setSelectedTime(''); }} className='grid size-9 place-items-center rounded-lg border border-[#dce6de] disabled:opacity-35'><ChevronRight className='size-4' /></button>
+                                    <button type='button' aria-label='Next month' disabled={nextMonthDisabled} onClick={() => { setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1)); setSelectedDate(null); setSelectedTime(''); }} className='grid size-8 place-items-center rounded-lg border border-[#dce6de] disabled:opacity-35'><ChevronRight className='size-4' /></button>
                                 </div>
-                                <div className='mt-3 grid grid-cols-7 gap-1 text-center'>
+                                <div className='mt-2 grid grid-cols-7 gap-0.5 text-center'>
                                     {WEEKDAYS.map((day) => <span key={day} className='py-1 text-[9px] font-bold text-[#68776e]'>{day}</span>)}
                                     {days.map((date, index) => {
                                         if (!date) return <span key={`empty-${index}`} />;
                                         const key = dateKey(date);
                                         const disabled = date < today || date.getDay() === 0 || date.getDay() === 6;
                                         const active = selectedDateKey === key;
-                                        return <button key={key} type='button' disabled={disabled} onClick={() => { setSelectedDate(date); setSelectedTime(''); }} className={`aspect-square rounded-lg text-xs font-semibold transition ${active ? 'bg-[#1e4931] text-white' : disabled ? 'cursor-not-allowed text-[#b3bbb5]' : 'text-[#35483b] hover:bg-[#edf4ee]'}`}>{date.getDate()}</button>;
+                                        return <button key={key} type='button' disabled={disabled} onClick={() => { setSelectedDate(date); setSelectedTime(''); }} className={`h-8 rounded-md text-xs font-semibold transition ${active ? 'bg-[#1e4931] text-white' : disabled ? 'cursor-not-allowed text-[#b3bbb5]' : 'text-[#35483b] hover:bg-[#edf4ee]'}`}>{date.getDate()}</button>;
                                     })}
                                 </div>
                                 <p className='mt-2 text-[10px] text-[#68776e]' role='status'>{availabilityError || 'Weekday appointments require at least 3 hours notice.'}</p>
-                                <div className='mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5'>
+                                <div className='mx-auto mt-3 grid max-w-md grid-cols-3 gap-1.5 sm:grid-cols-5'>
                                     {BOOKING_SLOTS.map((time) => {
                                         const slotDateTime = selectedDate ? new Date(`${selectedDateKey}T${time}:00+02:00`) : null;
                                         const unavailable = !selectedDate || (bookedSlots[selectedDateKey] || []).includes(time)
@@ -446,14 +446,14 @@ export default function MonthlyCheckoutPage() {
                         <section>
                             <h2 className='text-sm font-bold text-[#1e3128]'>Your details and wash</h2>
                             <div className='mt-3 grid gap-3 sm:grid-cols-2'>
-                                <label className='text-[11px] font-semibold text-[#35483b]'>First name<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-sm font-normal outline-none focus:border-[#31553c]' name='firstName' value={customer.firstName} onChange={updateCustomer} autoComplete='given-name' required /></label>
-                                <label className='text-[11px] font-semibold text-[#35483b]'>Surname<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-sm font-normal outline-none focus:border-[#31553c]' name='surname' value={customer.surname} onChange={updateCustomer} autoComplete='family-name' required /></label>
-                                <label className='text-[11px] font-semibold text-[#35483b]'>Mobile number<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-sm font-normal outline-none focus:border-[#31553c]' name='mobile' type='tel' value={customer.mobile} onChange={updateCustomer} autoComplete='tel' required /></label>
-                                <label className='text-[11px] font-semibold text-[#35483b]'>Vehicle registration<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-sm font-normal uppercase outline-none focus:border-[#31553c]' name='registration' value={customer.registration} onChange={updateCustomer} required /></label>
-                                <label className='text-[11px] font-semibold text-[#35483b]'>Email address<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-sm font-normal outline-none focus:border-[#31553c]' name='email' type='email' value={customer.email} onChange={updateCustomer} autoComplete='email' required /></label>
-                                <label className='text-[11px] font-semibold text-[#35483b]'>Confirm email<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-sm font-normal outline-none focus:border-[#31553c]' name='confirmEmail' type='email' value={customer.confirmEmail} onChange={updateCustomer} autoComplete='email' required /></label>
-                                <label className='text-[11px] font-semibold text-[#35483b] sm:col-span-2'>Vehicle category<select className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] bg-white px-3 text-sm font-normal outline-none focus:border-[#31553c]' name='vehicleType' value={customer.vehicleType || 'Sedan / Hatchback'} onChange={updateCustomer}><option>Sedan / Hatchback</option><option>SUV / Bakkie</option><option>Minibus / Van</option></select></label>
-                                <label className='text-[11px] font-semibold text-[#35483b] sm:col-span-2'>Booking message <span className='font-normal text-[#68776e]'>(optional)</span><textarea className='mt-1.5 min-h-20 w-full resize-y rounded-lg border border-[#cbd9cf] px-3 py-2 text-sm font-normal outline-none focus:border-[#31553c]' name='notes' value={customer.notes} onChange={updateCustomer} maxLength={300} /></label>
+                                <label className='text-[11px] font-semibold text-[#35483b]'>First name<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-base font-normal sm:text-sm outline-none focus:border-[#31553c]' name='firstName' value={customer.firstName} onChange={updateCustomer} autoComplete='given-name' required /></label>
+                                <label className='text-[11px] font-semibold text-[#35483b]'>Surname<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-base font-normal sm:text-sm outline-none focus:border-[#31553c]' name='surname' value={customer.surname} onChange={updateCustomer} autoComplete='family-name' required /></label>
+                                <label className='text-[11px] font-semibold text-[#35483b]'>Mobile number<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-base font-normal sm:text-sm outline-none focus:border-[#31553c]' name='mobile' type='tel' value={customer.mobile} onChange={updateCustomer} autoComplete='tel' required /></label>
+                                <label className='text-[11px] font-semibold text-[#35483b]'>Vehicle registration<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-base font-normal sm:text-sm uppercase outline-none focus:border-[#31553c]' name='registration' value={customer.registration} onChange={updateCustomer} required /></label>
+                                <label className='text-[11px] font-semibold text-[#35483b]'>Email address<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-base font-normal sm:text-sm outline-none focus:border-[#31553c]' name='email' type='email' value={customer.email} onChange={updateCustomer} autoComplete='email' required /></label>
+                                <label className='text-[11px] font-semibold text-[#35483b]'>Confirm email<input className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] px-3 text-base font-normal sm:text-sm outline-none focus:border-[#31553c]' name='confirmEmail' type='email' value={customer.confirmEmail} onChange={updateCustomer} autoComplete='email' required /></label>
+                                <label className='text-[11px] font-semibold text-[#35483b] sm:col-span-2'>Vehicle category<select className='mt-1.5 min-h-11 w-full rounded-lg border border-[#cbd9cf] bg-white px-3 text-base font-normal sm:text-sm outline-none focus:border-[#31553c]' name='vehicleType' value={customer.vehicleType || 'Sedan / Hatchback'} onChange={updateCustomer}><option>Sedan / Hatchback</option><option>SUV / Bakkie</option><option>Minibus / Van</option></select></label>
+                                <label className='text-[11px] font-semibold text-[#35483b] sm:col-span-2'>Booking message <span className='font-normal text-[#68776e]'>(optional)</span><textarea className='mt-1.5 min-h-20 w-full resize-y rounded-lg border border-[#cbd9cf] px-3 py-2 text-base font-normal outline-none sm:text-sm focus:border-[#31553c]' name='notes' value={customer.notes} onChange={updateCustomer} maxLength={300} /></label>
                             </div>
                         </section>
 
@@ -478,7 +478,7 @@ export default function MonthlyCheckoutPage() {
 
                         <section className='rounded-xl border border-[#dce6de] bg-[#f8faf8] p-4'>
                             <label className='block text-[11px] font-bold text-[#35483b]'>Monthly promo code
-                                <input className='mt-1.5 min-h-12 w-full rounded-lg border border-[#cbd9cf] bg-white px-3 text-base font-bold uppercase tracking-wider outline-none focus:border-[#31553c]' value={promoCode} onChange={(event) => { setPromoCode(event.target.value.toUpperCase()); setError(''); }} autoCapitalize='characters' autoComplete='off' placeholder='Enter your assigned code' required />
+                                <input className='mt-1.5 min-h-12 w-full rounded-lg border border-[#cbd9cf] bg-white px-3 text-base font-bold uppercase tracking-normal sm:tracking-wider outline-none focus:border-[#31553c]' value={promoCode} onChange={(event) => { setPromoCode(event.target.value.toUpperCase()); setError(''); }} autoCapitalize='characters' autoComplete='off' placeholder='Enter your assigned code' required />
                             </label>
                             <p className={`mt-2 text-xs leading-5 ${codeCheck.status === 'available' ? 'text-emerald-800' : codeCheck.status === 'blocked' || codeCheck.status === 'error' ? 'text-red-700' : 'text-[#52635a]'}`} role='status' aria-live='polite'>{codeCheck.message}</p>
                         </section>
