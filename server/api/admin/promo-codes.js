@@ -369,7 +369,6 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
     <label class="field-label">Surname<input class="manager-input" name="surname" maxlength="60" autocomplete="family-name" required></label>
     <label class="field-label">Customer email<input class="manager-input" name="email" type="email" autocomplete="email" required></label>
     <label class="field-label">Cell number<input class="manager-input" name="customerPhone" type="tel" autocomplete="tel" required></label>
-    <label class="field-label">Business / family name <span class="optional">(optional)</span><input class="manager-input" name="businessName" maxlength="120" autocomplete="organization"></label>
     <label class="field-label">Package type<select class="manager-select" name="clientType" required><option value="private">Private Client</option><option value="business">Business / Fleet / Family</option></select></label>
     <label class="field-label">Package level<select class="manager-select" name="packageTier" required><option value="standard">Standard · 2 washes per billing period</option><option value="premium">Premium · 4 washes per billing period</option></select></label>
     <label class="field-label">Active from<input class="manager-input" name="validFrom" type="date" required></label>
@@ -945,7 +944,6 @@ function editMonthlyEntitlement(record){
   monthlyForm.elements.surname.value=record.surname||surnameParts.join(' ');
   monthlyForm.elements.email.value=record.email;
   monthlyForm.elements.customerPhone.value=record.customerPhone||'';
-  monthlyForm.elements.businessName.value=record.businessName||'';
   monthlyForm.elements.clientType.value=record.clientType;
   monthlyForm.elements.packageTier.value=record.packageTier;
   monthlyForm.elements.validFrom.value=record.validFrom;
