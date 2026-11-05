@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { applyCors } from '../_lib/cors.js';
 import { getSharedPromoBatchForAdmin, saveSharedPromoBatch, looksLikeEmail } from '../_lib/store.js';
 import { sendPassphraseEmail } from '../_lib/email.js';
-import { getBusinessSmsNumber, isSmsConfigured, sendSms } from '../_lib/sms.js';
+import { buildBookingRequestSmsText, getBusinessSmsNumber, isSmsConfigured, sendSms } from '../_lib/sms.js';
 
 const managerLogoUrl = new URL(
     'assets/android-chrome-192x192.png',
@@ -380,7 +380,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 <p class="hint">Passwords are exact and case-sensitive. Duplicate promo codes are allowed, but that promo code can only be redeemed once across the batch.</p>
 <div class="buttons"><button id="save" type="button">Save active batch</button></div>
 <section class="distribution-panel" style="display:block" aria-label="Booking request SMS alerts">
-  <div><h3>Booking request SMS alerts</h3><p>New booking requests are texted to the company cell number through SMSMessenger. Send a test message to confirm it is connected.</p></div>
+  <div><h3>Booking request SMS alerts</h3><p>New booking requests are texted to the company cell number through SMSMessenger. The test sends a sample booking request, including address and map link, to confirm it is connected.</p></div>
   <div class="buttons"><button id="smsTest" class="secondary" type="button">Send test SMS</button></div>
   <p id="smsTestNotice" class="inline-notice" role="status" aria-live="polite" hidden></p>
 </section>
@@ -1523,7 +1523,15 @@ export default async function handler(req, res) {
                 }
                 const sent = await sendSms({
                     to: getBusinessSmsNumber(),
-                    message: 'A10tion Business Manager: test SMS. Booking request alerts are working.',
+                    message: buildBookingRequestSmsText({
+                        reference: 'TEST',
+                        booking: {
+                            bookingType: 'single',
+                            bookingDate: '2026-12-01',
+                            bookingTime: '09:00',
+                            customer: { firstName: 'Test', surname: 'Customer', mobile: '0821234567', address: '1 Nelson Mandela Square, Sandton, Johannesburg' },
+                        },
+                    }).replace('NEW booking request awaiting approval', 'TEST booking request (sample only)'),
                     campaign: 'Test',
                 });
                 res.status(200).json({ sent: Boolean(sent?.sent), to: getBusinessSmsNumber() });
