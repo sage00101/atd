@@ -22,7 +22,8 @@ const HERO_IMAGE_MOBILE = heroImage;
 
 /* Nudge the photo inside its frame without touching markup.
    Format: 'x% y%'. 0% = left/top edge, 100% = right/bottom edge. */
-const DESKTOP_IMAGE_POSITION = '50% 80%';
+// The photo is portrait, so it is sized by width: zoomed 1.15x and pinned so its bottom edge sits just above the white road line.
+const DESKTOP_IMAGE_STYLE = { width: '115%', left: '-7.5%', bottom: '-32.7cqw' };
 const MOBILE_IMAGE_POSITION = '50% 85%';
 
 /* ============================================================
@@ -99,6 +100,40 @@ function SecondaryButton({ href, onClick, icon: Icon, children, compact = false 
 }
 
 /* ============================================================
+   SEAM — the diagonal "wipe" line shared by the mobile and
+   desktop clip-path shapes below. Drawn with an SVG so it lines
+   up exactly with the clip-path, whatever the panel's aspect
+   ratio ends up being.
+============================================================ */
+function Seam({ x1, y1, x2, y2 }) {
+    return (
+        <svg
+            className="hero-seam pointer-events-none absolute inset-0 h-full w-full"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+        >
+            <defs>
+                <linearGradient id={`seam-${x1}-${y1}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#5FE07A" stopOpacity="0" />
+                    <stop offset="50%" stopColor="#5FE07A" stopOpacity="0.9" />
+                    <stop offset="100%" stopColor="#5FE07A" stopOpacity="0" />
+                </linearGradient>
+            </defs>
+            <line
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke={`url(#seam-${x1}-${y1})`}
+                strokeWidth="2.5"
+                vectorEffect="non-scaling-stroke"
+            />
+        </svg>
+    );
+}
+
+/* ============================================================
    HERO
 ============================================================ */
 export default function HeroSection() {
@@ -151,6 +186,7 @@ export default function HeroSection() {
 
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#05100a]/70 via-transparent to-transparent" />
                     <div className="pointer-events-none absolute inset-0 [clip-path:polygon(0_0,100%_0,100%_94%,0_100%)] bg-gradient-to-t from-[#05100a]/55 via-transparent to-transparent" />
+                    <Seam x1="100" y1="94" x2="0" y2="100" />
 
                     <div className="absolute left-4 top-4 z-10 inline-flex items-center gap-2 rounded-full border border-white/20 bg-black/25 px-3 py-1.5 text-[12px] font-medium text-white/85 backdrop-blur-md">
                         <span className="h-1.5 w-1.5 rounded-full bg-[#5FE07A] shadow-[0_0_9px_rgba(95,224,122,.8)]" />
@@ -236,12 +272,12 @@ export default function HeroSection() {
                     </div>
                 </div>
 
-                <div className="relative w-[58%] overflow-hidden xl:w-[60%]">
+                <div className="relative w-[58%] overflow-hidden [container-type:inline-size] xl:w-[60%]">
                     <img
                         src={HERO_IMAGE_DESKTOP}
                         alt="A10tion To Detail — professional mobile car care in Cape Town"
-                        className="hero-wipe absolute inset-0 h-full w-full object-cover [clip-path:polygon(9%_0,100%_0,100%_100%,0_100%)]"
-                        style={{ objectPosition: DESKTOP_IMAGE_POSITION }}
+                        className="hero-wipe absolute h-auto max-w-none [clip-path:polygon(9%_0,100%_0,100%_100%,0_100%)]"
+                        style={DESKTOP_IMAGE_STYLE}
                         draggable={false}
                         loading="lazy"
                         decoding="async"
@@ -249,6 +285,7 @@ export default function HeroSection() {
 
                     <div className="pointer-events-none absolute inset-0 [clip-path:polygon(9%_0,100%_0,100%_100%,0_100%)] bg-gradient-to-t from-black/30 via-transparent to-black/10" />
                     <div className="pointer-events-none absolute inset-y-0 left-0 w-[22%] bg-gradient-to-r from-[#05100a]/50 to-transparent" />
+                    <Seam x1="9" y1="0" x2="0" y2="100" />
 
                     <div className="absolute right-6 top-6 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/25 px-3 py-1.5 text-[12px] font-medium text-white/75 backdrop-blur-md">
                         <MapPin className="h-3.5 w-3.5 text-[#b1c9b7]" strokeWidth={1.7} />
@@ -277,6 +314,11 @@ export default function HeroSection() {
                     to   { opacity: 1; transform: translateY(0); }
                 }
 
+                @keyframes heroSeamDraw {
+                    from { stroke-dasharray: 0 140; }
+                    to   { stroke-dasharray: 140 140; }
+                }
+
                 .hero-wipe {
                     animation: heroWipeReveal 1.1s cubic-bezier(.22,1,.36,1) both;
                 }
@@ -285,9 +327,14 @@ export default function HeroSection() {
                     animation: heroPanelEnter .8s .35s cubic-bezier(.22,1,.36,1) both;
                 }
 
+                .hero-seam line {
+                    animation: heroSeamDraw 1.1s cubic-bezier(.22,1,.36,1) both;
+                }
+
                 @media (prefers-reduced-motion: reduce) {
                     .hero-wipe,
-                    .hero-panel-enter {
+                    .hero-panel-enter,
+                    .hero-seam line {
                         animation: none;
                     }
                 }
