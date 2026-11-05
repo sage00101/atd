@@ -148,9 +148,9 @@ function bookingKind(booking) {
 function publicStatus(status) {
     return ({
         pending_approval: 'Pending Approval',
-        approved: 'Approved â€“ Awaiting Completion',
-        processing: 'Approved â€“ Awaiting Completion',
-        awaiting_completion: 'Approved â€“ Awaiting Completion',
+        approved: 'Approved Ã¢â‚¬â€œ Awaiting Completion',
+        processing: 'Approved Ã¢â‚¬â€œ Awaiting Completion',
+        awaiting_completion: 'Approved Ã¢â‚¬â€œ Awaiting Completion',
         confirmed: 'Confirmed',
         declined: 'Declined',
         expired: 'Expired or Cancelled',
@@ -420,11 +420,22 @@ export async function acceptBookingRequest(id, adminName) {
         }
         throw new Error(getRequestError(result?.[0] || 'ERROR'));
     }
-    return { request: parseScriptRecord(result[1]), continuationToken };
+    return { request: await loadSavedRecord(result[1], requestId), continuationToken };
 }
 
 function parseScriptRecord(value) {
     return typeof value === 'string' ? JSON.parse(value) : value;
+}
+
+async function loadSavedRecord(value, id) {
+    if (value && typeof value === 'object') return value;
+    try {
+        const parsed = typeof value === 'string' ? JSON.parse(value) : null;
+        if (parsed && typeof parsed === 'object') return parsed;
+    } catch {
+        // fall back to the stored record below
+    }
+    return await redis.get(requestKey(id));
 }
 
 export async function declineBookingRequest(id, adminName, reason) {

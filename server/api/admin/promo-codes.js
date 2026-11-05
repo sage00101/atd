@@ -730,7 +730,7 @@ async function processBookingRequest(action,id,reason=''){
     const result=await bookingRequestsApi({action,id,reason,adminName:bookingRequestAdminName()});
     await loadBookingRequests();
     if(!result.emailSent){
-      setStatus('Request updated, but email delivery was not confirmed. Check the email configuration before assuming the customer was notified.','error');
+      setStatus('Request updated, but the customer email was NOT sent: '+(result.emailProblem||'delivery was not confirmed')+' Use the resend option once this is fixed.','error');
     }else{
       setStatus(action==='accept'?'Booking approved and approval email sent.':action==='decline'?'Booking declined and customer email sent.':'Customer email sent.','ok');
     }

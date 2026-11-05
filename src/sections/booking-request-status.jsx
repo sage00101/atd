@@ -69,6 +69,10 @@ export default function BookingRequestStatusPage() {
             const body = new FormData();
             body.append('booking', JSON.stringify({ approvalToken: continuationToken }));
             const endpoint = request.continuationMethod === 'onsite' ? ONSITE_ENDPOINT : YOCO_ENDPOINT;
+            if (request.continuationMethod === 'monthly') {
+                window.location.assign(`${window.location.pathname}?monthly-checkout=1&approved=${encodeURIComponent(continuationToken)}`);
+                return;
+            }
             const response = await fetch(endpoint, { method: 'POST', body });
             const result = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(result.message || 'Could not continue this booking.');

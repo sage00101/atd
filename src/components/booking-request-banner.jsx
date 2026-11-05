@@ -9,12 +9,11 @@ import {
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const STATUS_ENDPOINT = `${API_BASE_URL}/api/bookings/request-status`;
 const POLL_MS = 20_000;
-const FINAL_STATUSES = ['Confirmed', 'Declined', 'Expired or Cancelled'];
 
 const STATUS_COPY = {
     'Pending Approval': {
         title: 'Request pending review',
-        text: 'Our team is reviewing your booking request. This updates automatically.',
+        text: 'Our team is reviewing your booking request. This stays here and updates automatically until we respond. You will also be emailed the outcome.',
         Icon: Clock3,
         tone: 'text-amber-700 bg-amber-50',
     },
@@ -71,6 +70,7 @@ export default function BookingRequestBanner() {
             setState({
                 request: result.request,
                 continuationToken: result.continuationToken || '',
+                continuationMethod: result.continuationMethod || '',
             });
             setError('');
         } catch (loadError) {
@@ -108,21 +108,19 @@ export default function BookingRequestBanner() {
 
     const status = state?.request?.publicStatus;
     const copy = STATUS_COPY[status];
-    if (!tracked || !state || !copy || tracked.dismissedStatus === status) return null;
+    if (!tracked || !state || !copy) return null;
 
+    const isPending = status === 'Pending Approval';
     const close = () => {
-        if (FINAL_STATUSES.includes(status)) {
-            writeTrackedRequest(null);
-            setTracked(null);
-            return;
-        }
-        const next = { ...tracked, dismissedStatus: status };
-        writeTrackedRequest(next);
-        setTracked(next);
+        if (isPending) return;
+        writeTrackedRequest(null);
+        setTracked(null);
     };
 
     const continueUrl = state.continuationToken
-        ? `${window.location.pathname}?booking-continuation=${encodeURIComponent(state.continuationToken)}`
+        ? state.continuationMethod === 'monthly'
+            ? `${window.location.pathname}?monthly-checkout=1&approved=${encodeURIComponent(state.continuationToken)}`
+            : `${window.location.pathname}?booking-continuation=${encodeURIComponent(state.continuationToken)}`
         : '';
     const { Icon } = copy;
 
@@ -169,7 +167,7 @@ export default function BookingRequestBanner() {
                     )}
                 </div>
                 <div className='flex shrink-0 flex-col gap-1'>
-                    <button type='button' onClick={close} aria-label='Close status banner' className='grid size-6 place-items-center rounded text-[#68776e] hover:bg-[#f0f3f0]'>
+                    <button type='button' onClick={close} disabled={isPending} title={isPending ? 'Available once your request has an outcome' : 'Close'} aria-label='Close status banner' className='grid size-6 place-items-center rounded text-[#68776e] hover:bg-[#f0f3f0] disabled:cursor-not-allowed disabled:opacity-30'>
                         <X className='size-3.5' />
                     </button>
                     <button

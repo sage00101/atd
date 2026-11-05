@@ -15,6 +15,7 @@ import ContactSection from './sections/contact-section';
 import PromoSection from './sections/promo-section';
 import FaqSection from './sections/faq-section';
 import MonthlyCheckoutPage from './sections/monthly-checkout-page';
+import MonthlyApprovedCheckout from './sections/monthly-approved-checkout';
 import BookingRequestStatusPage from './sections/booking-request-status';
 import BookingRequestBanner from './components/booking-request-banner';
 
@@ -32,6 +33,10 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     if (params.has('booking-request') || params.has('booking-continuation')) {
         return <BookingRequestStatusPage />;
+    }
+
+    if (params.get('monthly-checkout') === '1' && params.get('approved')) {
+        return <MonthlyApprovedCheckout approvalToken={params.get('approved')} />;
     }
 
     if (params.get('monthly-checkout') === '1') {

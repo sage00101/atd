@@ -94,7 +94,15 @@ export default async function handler(req, res) {
                 continuationToken: ['approved', 'processing', 'awaiting_completion'].includes(request.status)
                     ? request.continuationToken || continuationToken || null
                     : null,
-                continuationMethod: request.booking?.requestedPaymentMethod || null,
+                continuationMethod: request.booking?.bookingType === 'monthly-entitlement'
+                    ? 'monthly'
+                    : request.booking?.requestedPaymentMethod || null,
+                summary: {
+                    bookingDate: request.booking?.bookingDate || '',
+                    bookingTime: request.booking?.bookingTime || '',
+                    address: request.booking?.address || request.booking?.customer?.address || '',
+                    firstName: request.booking?.customer?.firstName || '',
+                },
             });
         } catch (error) {
             console.error('[booking request status lookup failed]', error);

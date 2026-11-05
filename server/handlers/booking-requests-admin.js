@@ -58,19 +58,27 @@ export default async function handler(req, res) {
             const email = await sendBookingRequestApprovedEmail(
                 request,
                 getContinuationUrl(continuationToken),
-            );
+            ).catch((error) => {
+                console.error('[approval email failed]', error);
+                return { skipped: true, failed: true, reason: error instanceof Error ? error.message : String(error) };
+            });
             res.status(200).json({
                 request: getPublicBookingRequest(request),
                 emailSent: !email?.skipped,
+                emailProblem: email?.failed ? email.reason : (email?.skipped ? 'Email is not configured on the server (RESEND_API_KEY / RESEND_FROM_EMAIL missing).' : ''),
             });
             return;
         }
         if (action === 'decline') {
             const request = await declineBookingRequest(id, adminName, req.body?.reason);
-            const email = await sendBookingRequestDeclinedEmail(request);
+            const email = await sendBookingRequestDeclinedEmail(request).catch((error) => {
+                console.error('[decline email failed]', error);
+                return { skipped: true, failed: true, reason: error instanceof Error ? error.message : String(error) };
+            });
             res.status(200).json({
                 request: getPublicBookingRequest(request),
                 emailSent: !email?.skipped,
+                emailProblem: email?.failed ? email.reason : (email?.skipped ? 'Email is not configured on the server (RESEND_API_KEY / RESEND_FROM_EMAIL missing).' : ''),
             });
             return;
         }
