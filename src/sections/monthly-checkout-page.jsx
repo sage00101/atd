@@ -15,8 +15,9 @@ import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/servic
 
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-const YOCO_CHECKOUT_ENDPOINT = `${API_BASE_URL}/api/payments/yoco/checkout`;
+const BOOKING_REQUEST_ENDPOINT = `${API_BASE_URL}/api/bookings/request`;
 const AVAILABILITY_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
+const MONTHLY_VALIDATION_ENDPOINT = `${API_BASE_URL}/api/monthly/validate`;
 const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000;
 const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 7);
 const MONTHLY_SELECTION_KEY = 'a10tion-monthly-checkout-selection';
@@ -99,6 +100,10 @@ export default function MonthlyCheckoutPage() {
     const [bookedSlots, setBookedSlots] = useState({});
     const [availabilityError, setAvailabilityError] = useState('');
     const [promoCode, setPromoCode] = useState('');
+    const [codeCheck, setCodeCheck] = useState({
+        status: 'idle',
+        message: 'Enter your assigned code and email, then choose a booking date to check available washes.',
+    });
     const [customer, setCustomer] = useState({
         firstName: '',
         surname: '',
@@ -121,6 +126,10 @@ export default function MonthlyCheckoutPage() {
     const packageLabel = selection ? `${selection.packageTier[0].toUpperCase()}${selection.packageTier.slice(1)}` : '';
     const days = useMemo(() => makeCalendarDays(month), [month]);
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const firstOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const firstOfNextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const previousMonthDisabled = month <= firstOfCurrentMonth;
+    const nextMonthDisabled = month >= firstOfNextMonth;
     const selectedDateKey = selectedDate ? dateKey(selectedDate) : '';
     const distanceKm = getDistanceFromServiceCenter(serviceLocation);
     const serviceAreaAllowed = distanceKm !== null && distanceKm <= SERVICE_RADIUS_KM;
@@ -131,7 +140,16 @@ export default function MonthlyCheckoutPage() {
     }, []);
 
     useEffect(() => {
-        const first = new Date(month.getFullYear(), month.getMonth(), 1);
+        setMonth((current) => current < firstOfCurrentMonth
+            ? firstOfCurrentMonth
+            : current > firstOfNextMonth
+                ? firstOfNextMonth
+                : current);
+    }, [firstOfCurrentMonth.getFullYear(), firstOfCurrentMonth.getMonth(), firstOfNextMonth.getFullYear(), firstOfNextMonth.getMonth()]);
+
+    useEffect(() => {
+        const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
+        const first = monthStart < firstOfCurrentMonth ? firstOfCurrentMonth : monthStart;
         const last = new Date(month.getFullYear(), month.getMonth() + 1, 0);
         const controller = new AbortController();
         const loadAvailability = async () => {
@@ -156,7 +174,56 @@ export default function MonthlyCheckoutPage() {
             controller.abort();
             window.clearInterval(timer);
         };
-    }, [month]);
+    }, [month, firstOfCurrentMonth.getTime()]);
+
+    useEffect(() => {
+        const code = promoCode.trim().toUpperCase();
+        const email = customer.email.trim().toLowerCase();
+        if (!selection || !code || !email || !selectedDateKey) {
+            setCodeCheck({
+                status: 'idle',
+                message: 'Enter your assigned code and email, then choose a booking date to check available washes.',
+            });
+            return undefined;
+        }
+
+        const controller = new AbortController();
+        setCodeCheck({ status: 'checking', message: 'Checking your account and remaining monthly washes…' });
+        const timer = window.setTimeout(async () => {
+            try {
+                const response = await fetch(MONTHLY_VALIDATION_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                    body: JSON.stringify({
+                        promoCode: code,
+                        email,
+                        bookingDate: selectedDateKey,
+                        clientType: selection.customerType,
+                        packageTier: selection.packageTier,
+                    }),
+                    signal: controller.signal,
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(result.message || 'Could not check your monthly account.');
+                setCodeCheck({
+                    status: result.status === 'OK' ? 'available' : 'blocked',
+                    message: result.message || 'Could not verify this monthly code.',
+                });
+            } catch (checkError) {
+                if (checkError.name !== 'AbortError') {
+                    setCodeCheck({
+                        status: 'error',
+                        message: checkError instanceof Error ? checkError.message : 'Could not check your monthly account. Please try again.',
+                    });
+                }
+            }
+        }, 350);
+
+        return () => {
+            window.clearTimeout(timer);
+            controller.abort();
+        };
+    }, [customer.email, promoCode, selectedDateKey, selection]);
 
     useEffect(() => {
         if (!selectedDate || !selectedTime) return;
@@ -243,6 +310,7 @@ export default function MonthlyCheckoutPage() {
                 promoCode: promoCode.trim().toUpperCase(),
                 serviceAreaAccepted: true,
                 termsAccepted: true,
+                requestedPaymentMethod: 'monthly',
                 contractAccepted: false,
                 customer: {
                     firstName: customer.firstName.trim(),
@@ -256,12 +324,17 @@ export default function MonthlyCheckoutPage() {
             };
             const body = new FormData();
             body.append('booking', JSON.stringify(booking));
-            const response = await fetch(YOCO_CHECKOUT_ENDPOINT, { method: 'POST', body });
+            const response = await fetch(BOOKING_REQUEST_ENDPOINT, { method: 'POST', body });
             const result = await response.json().catch(() => ({}));
-            if (!response.ok || !result.reference || !result.monthlyCovered) {
-                throw new Error(result.message || 'The monthly booking could not be confirmed.');
+            if (!response.ok || !result.reference || !result.statusUrl) {
+                throw new Error(result.message || 'The monthly booking request could not be submitted.');
             }
-            setConfirmation({ reference: result.reference, receiptSent: result.receiptSent });
+            setConfirmation({
+                reference: result.reference,
+                statusUrl: result.statusUrl,
+                emailSent: result.emailStatus?.customerSent,
+                businessEmailSent: result.emailStatus?.businessSent,
+            });
         } catch (submitError) {
             setError(submitError.message || 'The monthly booking could not be confirmed.');
         } finally {
@@ -289,12 +362,17 @@ export default function MonthlyCheckoutPage() {
             <main className='min-h-screen bg-[#f5f7f3] px-4 py-10 sm:px-6'>
                 <section className='mx-auto max-w-xl rounded-3xl border border-[#dce6de] bg-white p-6 text-center shadow-xl sm:p-10'>
                     <PackageCheck className='mx-auto size-10 text-[#31553c]' />
-                    <h1 className='mt-4 font-display text-2xl font-semibold text-[#1e3128]'>Monthly booking confirmed</h1>
-                    <p className='mt-2 text-sm leading-6 text-[#5b6560]'>Your wash is covered by your monthly entitlement. Your booking reference is <strong>{confirmation.reference}</strong>.</p>
-                    <p className='mt-2 text-xs text-[#68776e]'>{confirmation.receiptSent ? 'A receipt has been emailed to you.' : 'Your booking is confirmed. Please contact us if you need a receipt.'}</p>
-                    <button type='button' onClick={() => clearMonthlyRoute(true)} className='mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1e3128] px-5 text-sm font-semibold text-white'>
-                        <ArrowLeft className='size-4' /> Back to booking
-                    </button>
+                    <h1 className='mt-4 font-display text-2xl font-semibold text-[#1e3128]'>Booking Request Received!</h1>
+                    <p className='mt-2 text-sm leading-6 text-[#5b6560]'>Your request has been sent to our team for review. It is not confirmed yet, and no monthly wash credit has been used.</p>
+                    <p className='mt-3 text-sm text-[#35483b]'>Reference: <strong>{confirmation.reference}</strong></p>
+                    {!confirmation.emailSent && <p className='mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900'>We could not confirm email delivery. Save your private status link below.</p>}
+                    {!confirmation.businessEmailSent && <p className='mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900'>Our team notification email could not be confirmed. Please contact us if you do not hear back.</p>}
+                    <div className='mt-6 flex flex-col justify-center gap-2 sm:flex-row'>
+                        <a href={confirmation.statusUrl} className='inline-flex min-h-11 items-center justify-center rounded-xl border border-[#dce6de] px-4 text-sm font-semibold text-[#31553c]'>Check request status</a>
+                        <button type='button' onClick={() => clearMonthlyRoute(true)} className='inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#1e3128] px-5 text-sm font-semibold text-white'>
+                            <ArrowLeft className='size-4' /> Back to website
+                        </button>
+                    </div>
                 </section>
             </main>
         );
@@ -336,9 +414,9 @@ export default function MonthlyCheckoutPage() {
                             <h2 className='flex items-center gap-2 text-sm font-bold text-[#1e3128]'><CalendarDays className='size-4' /> Choose a date and time</h2>
                             <div className='mt-3 rounded-xl border border-[#e1e9e2] p-3 sm:p-4'>
                                 <div className='flex items-center justify-between gap-3'>
-                                    <button type='button' aria-label='Previous month' disabled={month.getFullYear() === today.getFullYear() && month.getMonth() <= today.getMonth()} onClick={() => { setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1)); setSelectedDate(null); setSelectedTime(''); }} className='grid size-9 place-items-center rounded-lg border border-[#dce6de] disabled:opacity-35'><ChevronLeft className='size-4' /></button>
+                                    <button type='button' aria-label='Previous month' disabled={previousMonthDisabled} onClick={() => { setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1)); setSelectedDate(null); setSelectedTime(''); }} className='grid size-9 place-items-center rounded-lg border border-[#dce6de] disabled:opacity-35'><ChevronLeft className='size-4' /></button>
                                     <h3 className='text-sm font-bold text-[#1e3128]'>{formatMonth(month)}</h3>
-                                    <button type='button' aria-label='Next month' onClick={() => { setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1)); setSelectedDate(null); setSelectedTime(''); }} className='grid size-9 place-items-center rounded-lg border border-[#dce6de]'><ChevronRight className='size-4' /></button>
+                                    <button type='button' aria-label='Next month' disabled={nextMonthDisabled} onClick={() => { setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1)); setSelectedDate(null); setSelectedTime(''); }} className='grid size-9 place-items-center rounded-lg border border-[#dce6de] disabled:opacity-35'><ChevronRight className='size-4' /></button>
                                 </div>
                                 <div className='mt-3 grid grid-cols-7 gap-1 text-center'>
                                     {WEEKDAYS.map((day) => <span key={day} className='py-1 text-[9px] font-bold text-[#68776e]'>{day}</span>)}
@@ -400,7 +478,7 @@ export default function MonthlyCheckoutPage() {
                             <label className='block text-[11px] font-bold text-[#35483b]'>Monthly promo code
                                 <input className='mt-1.5 min-h-12 w-full rounded-lg border border-[#cbd9cf] bg-white px-3 text-base font-bold uppercase tracking-wider outline-none focus:border-[#31553c]' value={promoCode} onChange={(event) => { setPromoCode(event.target.value.toUpperCase()); setError(''); }} autoCapitalize='characters' autoComplete='off' placeholder='Enter your assigned code' required />
                             </label>
-                            <p className='mt-2 text-xs leading-5 text-[#52635a]'>Your code is checked securely against the email and monthly package assigned to you. A valid entitlement covers this eligible wash at 100%, subject to available monthly washes.</p>
+                            <p className={`mt-2 text-xs leading-5 ${codeCheck.status === 'available' ? 'text-emerald-800' : codeCheck.status === 'blocked' || codeCheck.status === 'error' ? 'text-red-700' : 'text-[#52635a]'}`} role='status' aria-live='polite'>{codeCheck.message}</p>
                         </section>
 
                         <label className='flex items-start gap-2.5 text-xs leading-5 text-[#52635a]'>
@@ -409,9 +487,9 @@ export default function MonthlyCheckoutPage() {
                         </label>
                         {error && <p className='rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800' role='alert'>{error}</p>}
                         <button type='submit' disabled={isSubmitting} className='flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#1e3128] px-4 text-sm font-bold text-white transition hover:bg-[#294c37] disabled:cursor-wait disabled:opacity-60'>
-                            {isSubmitting ? <><LoaderCircle className='size-4 animate-spin' /> Validating entitlement and confirming…</> : <>Confirm monthly booking · R0.00 <ArrowRight className='size-4' /></>}
+                            {isSubmitting ? <><LoaderCircle className='size-4 animate-spin' /> Sending request for review…</> : <>Submit booking request <ArrowRight className='size-4' /></>}
                         </button>
-                        <p className='flex items-center justify-center gap-1.5 text-[10px] text-[#68776e]'><ShieldCheck className='size-3.5' /> No Yoco payment required for a valid monthly wash.</p>
+                        <p className='flex items-center justify-center gap-1.5 text-[10px] text-[#68776e]'><ShieldCheck className='size-3.5' /> Your monthly entitlement is checked again after approval; no credit is used while pending.</p>
                     </form>
 
                     <aside className='space-y-4 lg:sticky lg:top-5'>

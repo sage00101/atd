@@ -6,6 +6,11 @@ import { applyCors } from '../api/_lib/cors.js';
 import { sendReceiptEmail } from '../api/_lib/email.js';
 import { getServiceAreaError } from '../api/_lib/service-area.js';
 import {
+    beginBookingContinuation,
+    completeBookingContinuation,
+    resetBookingContinuation,
+} from '../api/_lib/booking-approval.js';
+import {
     confirmMonthlyWashReservation,
     getMonthlyReservationError,
     releaseMonthlyWashReservation,
@@ -18,7 +23,8 @@ import {
     looksLikeVehicleRegistration,
     normaliseEmail,
     normaliseReg,
-    releaseBookingSlot,
+    releaseBookingSlot as releaseUnapprovedBookingSlot,
+    releaseBookingSlotIfOwned,
     releaseSharedPromoCode,
     reserveBookingSlot,
     reserveSharedPromoCode,
@@ -61,6 +67,20 @@ export default async function handler(req, res) {
     let monthlyEntitlementDetails = null;
     let reservedSlotDate = null;
     let reservedSlotTime = null;
+    let approvalRequest = null;
+    let approvalToken = '';
+    const releaseBookingSlot = async (date, time) => {
+        if (!approvalRequest) {
+            await releaseUnapprovedBookingSlot(date, time);
+            return;
+        }
+        const remainingTtl = Math.ceil((Number(approvalRequest.approvalExpiresAt) - Date.now()) / 1000);
+        if (remainingTtl > 0) {
+            await reserveBookingSlot(date, time, approvalRequest.reference, remainingTtl);
+        } else {
+            await releaseBookingSlotIfOwned(date, time, approvalRequest.reference);
+        }
+    };
     try {
         const { fields, files } = await parseMultipart(req);
         const bookingRaw = Array.isArray(fields.booking) ? fields.booking[0] : fields.booking;
@@ -72,6 +92,37 @@ export default async function handler(req, res) {
             res.status(400).json({ message: 'Invalid booking payload.' });
             return;
         }
+
+        approvalToken = String(booking.approvalToken || '').trim();
+        if (!approvalToken) {
+            res.status(403).json({ message: 'A valid approved booking request is required before checkout.' });
+            return;
+        }
+        let continuation;
+        try {
+            continuation = await beginBookingContinuation(approvalToken);
+        } catch (error) {
+            res.status(403).json({ message: error instanceof Error ? error.message : 'This booking approval link is invalid or expired.' });
+            return;
+        }
+        if (continuation.status === 'EXISTING_CHECKOUT') {
+            res.status(200).json({
+                success: true,
+                redirectUrl: continuation.request.checkoutUrl,
+                checkoutId: continuation.request.checkoutId,
+                reference: continuation.request.reference,
+            });
+            return;
+        }
+        approvalRequest = continuation.request;
+        if (approvalRequest.booking.bookingType !== 'monthly-entitlement'
+            && approvalRequest.booking.requestedPaymentMethod !== 'online') {
+            await resetBookingContinuation(approvalRequest.id);
+            approvalRequest = null;
+            res.status(400).json({ message: 'Continue this booking using the payment method selected in your request.' });
+            return;
+        }
+        booking = { ...approvalRequest.booking, paymentMethod: 'online' };
 
         booking = {
             ...booking,
@@ -152,7 +203,7 @@ export default async function handler(req, res) {
             res.status(400).json({ message: 'Promo codes apply to single washes only. Monthly package purchases are charged at the package rate.' });
             return;
         }
-        const reference = await claimUniqueReferenceNumber();
+        const reference = approvalRequest.reference || await claimUniqueReferenceNumber();
         if (!await reserveBookingSlot(bookingDate, bookingTime, reference)) {
             res.status(409).json({ message: 'That time slot was just booked by someone else. Please choose another.' });
             return;
@@ -440,6 +491,7 @@ export default async function handler(req, res) {
             } catch (error) {
                 console.error('[monthly entitlement receipt email failed]', reference, error);
             }
+            await completeBookingContinuation(approvalRequest.id, { status: 'confirmed' });
             res.status(200).json({ success: true, monthlyCovered: true, receiptSent, reference });
             return;
         }
@@ -455,8 +507,10 @@ export default async function handler(req, res) {
         }
 
         const siteUrl = process.env.SITE_URL || 'https://sage00101.github.io/atd/';
-        const idempotencyKey = crypto.randomUUID();
-        const cancellationToken = crypto.randomUUID();
+        const idempotencyKey = crypto.createHash('sha256').update(approvalRequest.id).digest('hex');
+        const cancellationToken = crypto.createHmac('sha256', approvalRequest.continuationToken)
+            .update('booking-cancellation')
+            .digest('base64url');
 
         const yocoRes = await fetch('https://payments.yoco.com/api/checkouts', {
             method: 'POST',
@@ -530,6 +584,11 @@ export default async function handler(req, res) {
             createdAt: new Date().toISOString(),
         });
 
+        await completeBookingContinuation(approvalRequest.id, {
+            status: 'awaiting_completion',
+            checkoutId: yocoBody.id,
+            checkoutUrl: yocoBody.redirectUrl,
+        });
         res.status(200).json({ redirectUrl: yocoBody.redirectUrl, checkoutId: yocoBody.id, reference });
     } catch (err) {
         if (reservedMonthlyWash) {
@@ -543,5 +602,11 @@ export default async function handler(req, res) {
         }
         console.error(err);
         res.status(500).json({ message: 'Secure payment could not be started.' });
+    } finally {
+        if (approvalRequest) {
+            await resetBookingContinuation(approvalRequest.id).catch((error) => {
+                console.error('[booking approval continuation lock release failed]', approvalRequest.reference, error);
+            });
+        }
     }
 }

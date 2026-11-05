@@ -4,6 +4,9 @@ import cancelBooking from '../handlers/bookings-cancel.js';
 import onsite from '../handlers/bookings-onsite.js';
 import confirmOnsitePayment from '../handlers/onsite-confirm-payment.js';
 import yocoCheckout from '../handlers/yoco-checkout.js';
+import monthlyValidation from '../handlers/monthly-validation.js';
+import bookingRequests from '../handlers/booking-requests.js';
+import bookingRequestsAdmin from '../handlers/booking-requests-admin.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -13,6 +16,9 @@ const handlers = {
     onsite,
     'confirm-onsite-payment': confirmOnsitePayment,
     'yoco-checkout': yocoCheckout,
+    'monthly-validate': monthlyValidation,
+    'booking-request': bookingRequests,
+    'booking-request-admin': bookingRequestsAdmin,
 };
 
 function getRoute(req) {

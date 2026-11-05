@@ -19,6 +19,22 @@
     {
       "source": "/api/payments/yoco/checkout",
       "destination": "/api/booking-router?__route=yoco-checkout"
+    },
+    {
+      "source": "/api/monthly/validate",
+      "destination": "/api/booking-router?__route=monthly-validate"
+    },
+    {
+      "source": "/api/bookings/request",
+      "destination": "/api/booking-router?__route=booking-request"
+    },
+    {
+      "source": "/api/bookings/request-status",
+      "destination": "/api/booking-router?__route=booking-request"
+    },
+    {
+      "source": "/api/admin/booking-requests",
+      "destination": "/api/booking-router?__route=booking-request-admin"
     }
   ]
 }

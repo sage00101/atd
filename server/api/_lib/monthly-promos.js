@@ -68,6 +68,32 @@ redis.call('SET', KEYS[5], ARGV[2])
 return {'OK'}
 `;
 
+const GENERATE_ENTITLEMENT_CODE_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return {'NOT_FOUND'} end
+if redis.call('EXISTS', KEYS[2]) == 1 then return {'CODE_EXISTS'} end
+local entitlement = cjson.decode(raw)
+local code = cjson.decode(ARGV[1])
+entitlement.codes = entitlement.codes or {}
+entitlement.codeDigests = entitlement.codeDigests or {}
+if #entitlement.codeDigests == 0 and entitlement.currentCodeDigest then
+  table.insert(entitlement.codeDigests, entitlement.currentCodeDigest)
+  if entitlement.code then
+    table.insert(entitlement.codes, {code = entitlement.code, digest = entitlement.currentCodeDigest, createdAt = entitlement.createdAt})
+  end
+end
+table.insert(entitlement.codes, code)
+table.insert(entitlement.codeDigests, code.digest)
+entitlement.code = code.code
+entitlement.currentCodeDigest = code.digest
+entitlement.updatedAt = code.createdAt
+entitlement.auditHistory = entitlement.auditHistory or {}
+table.insert(entitlement.auditHistory, 1, {action = 'code_generated', createdAt = code.createdAt})
+redis.call('SET', KEYS[1], cjson.encode(entitlement))
+redis.call('SET', KEYS[2], ARGV[2])
+return {'OK', cjson.encode(entitlement)}
+`;
+
 const UPDATE_ENTITLEMENT_SCRIPT = `
 if redis.call('EXISTS', KEYS[1]) == 0 then return 'NOT_FOUND' end
 local existing = cjson.decode(redis.call('GET', KEYS[1]))
@@ -244,7 +270,14 @@ const RESERVE_WASH_SCRIPT = `
 local raw = redis.call('GET', KEYS[1])
 if not raw then return {'NOT_FOUND'} end
 local entitlement = cjson.decode(raw)
-if entitlement.currentCodeDigest ~= ARGV[1] then return {'REPLACED'} end
+local codeValid = entitlement.currentCodeDigest == ARGV[1]
+if entitlement.codeDigests then
+  codeValid = false
+  for _, codeDigest in ipairs(entitlement.codeDigests) do
+    if codeDigest == ARGV[1] then codeValid = true; break end
+  end
+end
+if not codeValid then return {'REPLACED'} end
 if entitlement.archived then return {'ARCHIVED'} end
 if not entitlement.active then return {'INACTIVE'} end
 if entitlement.email ~= ARGV[2] then return {'EMAIL_MISMATCH'} end
@@ -330,6 +363,14 @@ local raw = redis.call('GET', KEYS[4])
 if not raw then return 'RESERVATION_LOST' end
 local reservation = cjson.decode(raw)
 if reservation.reservationId ~= ARGV[1] then return 'RESERVATION_LOST' end
+local codeValid = entitlement.currentCodeDigest == reservation.codeDigest
+if entitlement.codeDigests then
+  codeValid = false
+  for _, codeDigest in ipairs(entitlement.codeDigests) do
+    if codeDigest == reservation.codeDigest then codeValid = true; break end
+  end
+end
+if not codeValid then return 'REPLACED' end
 if entitlement.email ~= reservation.email then return 'EMAIL_MISMATCH' end
 if entitlement.clientType ~= reservation.clientType then return 'CLIENT_TYPE_MISMATCH' end
 if entitlement.packageTier ~= reservation.packageTier then return 'PACKAGE_MISMATCH' end
@@ -480,7 +521,23 @@ async function createUniqueCode() {
 }
 
 function validateEntitlementInput(input) {
-    const customerName = String(input?.customerName || '').trim();
+    const firstNameInput = String(input?.firstName || '').trim();
+    const surnameInput = String(input?.surname || '').trim();
+    const suppliedName = String(input?.customerName || '').trim();
+    let firstName = firstNameInput;
+    let surname = surnameInput;
+    let customerName = suppliedName;
+    const hasSeparateName = Boolean(firstNameInput || surnameInput);
+    if (hasSeparateName) {
+        if (!firstNameInput || !surnameInput) {
+            throw new Error('Enter both the customer first name and surname.');
+        }
+        customerName = `${firstNameInput} ${surnameInput}`;
+    } else if (suppliedName) {
+        const [derivedFirstName, ...surnameParts] = suppliedName.split(/\s+/);
+        firstName = derivedFirstName;
+        surname = surnameParts.join(' ');
+    }
     const email = normaliseEmail(input?.email);
     const customerPhone = String(input?.customerPhone || '').trim();
     const businessName = String(input?.businessName || '').trim();
@@ -489,10 +546,14 @@ function validateEntitlementInput(input) {
     const validFrom = String(input?.validFrom || getSouthAfricanDate());
     const validUntil = String(input?.validUntil || '');
 
-    if (!customerName || customerName.length > 120) {
+    if (!customerName || customerName.length > 120
+        || (hasSeparateName && (!firstName || firstName.length > 60 || !surname || surname.length > 60))) {
         throw new Error('Enter a customer name no longer than 120 characters.');
     }
     if (!looksLikeEmail(email)) throw new Error('Enter a valid customer email address.');
+    if (input?.requireSeparateName && (!firstNameInput || !surnameInput)) {
+        throw new Error('Enter both the customer first name and surname.');
+    }
     if (customerPhone.length > 40 || (input?.requireCustomerPhone !== false
         && customerPhone.replace(/\D/g, '').length < 7)
         || (customerPhone && customerPhone.replace(/\D/g, '').length < 7)) {
@@ -514,6 +575,8 @@ function validateEntitlementInput(input) {
 
     return {
         customerName,
+        firstName,
+        surname,
         email,
         customerPhone,
         businessName,
@@ -623,7 +686,7 @@ export async function getMonthlyPromoForCode(code) {
 }
 
 export async function createMonthlyEntitlement(input) {
-    const details = validateEntitlementInput(input);
+    const details = validateEntitlementInput({ ...input, requireSeparateName: true });
     const id = crypto.randomUUID();
     const code = await createUniqueCode();
     const now = new Date().toISOString();
@@ -632,6 +695,8 @@ export async function createMonthlyEntitlement(input) {
         ...details,
         code,
         currentCodeDigest: digest(code),
+        codeDigests: [digest(code)],
+        codes: [{ code, digest: digest(code), createdAt: now }],
         billingAnchor: details.validFrom,
         billingCyclesPaid: getBillingCycleCount(details.validFrom, details.validUntil) || 1,
         creditsAvailable: details.monthlyAllowance,
@@ -657,6 +722,26 @@ export async function createMonthlyEntitlement(input) {
     }
     if (result !== 'OK') throw new Error('Could not create the monthly entitlement.');
     return entitlement;
+}
+
+export async function generateMonthlyEntitlementCode(id) {
+    const entitlementId = String(id || '').trim();
+    if (!entitlementId) throw new Error('Monthly entitlement id is required.');
+    const code = await createUniqueCode();
+    const now = new Date().toISOString();
+    const codeRecord = { code, digest: digest(code), createdAt: now };
+    const result = await redis.eval(GENERATE_ENTITLEMENT_CODE_SCRIPT, [
+        entitlementKey(entitlementId),
+        codeKey(code),
+    ], [JSON.stringify(codeRecord), entitlementId]);
+    if (!Array.isArray(result) || result[0] === 'NOT_FOUND') {
+        throw new Error('Monthly entitlement not found.');
+    }
+    if (result[0] === 'CODE_EXISTS') {
+        throw new Error('Could not generate a unique monthly promo code. Please try again.');
+    }
+    if (result[0] !== 'OK') throw new Error('Could not generate a monthly promo code.');
+    return typeof result[1] === 'string' ? JSON.parse(result[1]) : result[1];
 }
 
 export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
@@ -737,6 +822,8 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
             creditsGrantedTotal: monthlyAllowance,
             code,
             currentCodeDigest: digest(code),
+            codeDigests: [digest(code)],
+            codes: [{ code, digest: digest(code), createdAt: now }],
             active: true,
             archived: false,
             createdAt: now,
@@ -951,7 +1038,7 @@ export async function updateMonthlyEntitlement(id, input) {
     const replaceCode = input?.replaceCode === true;
     const code = replaceCode ? await createUniqueCode() : existing.code;
     const now = new Date().toISOString();
-    const changedFields = ['customerName', 'email', 'customerPhone', 'businessName', 'clientType', 'packageTier', 'validFrom', 'validUntil']
+    const changedFields = ['customerName', 'firstName', 'surname', 'email', 'customerPhone', 'businessName', 'clientType', 'packageTier', 'validFrom', 'validUntil']
         .filter((field) => details[field] !== existing[field]);
     if (active !== existing.active) changedFields.push('active');
     if (archived !== existing.archived) changedFields.push('archived');
@@ -990,6 +1077,12 @@ export async function updateMonthlyEntitlement(id, input) {
         creditsGrantedTotal: Math.max(Number(existing.creditsGrantedTotal ?? existing.monthlyAllowance) + details.monthlyAllowance - existing.monthlyAllowance, 0),
         code,
         currentCodeDigest: replaceCode ? digest(code) : existing.currentCodeDigest,
+        codeDigests: replaceCode
+            ? [digest(code)]
+            : existing.codeDigests || (existing.currentCodeDigest ? [existing.currentCodeDigest] : []),
+        codes: replaceCode
+            ? [{ code, digest: digest(code), createdAt: now }]
+            : existing.codes || (existing.code ? [{ code: existing.code, digest: existing.currentCodeDigest, createdAt: existing.createdAt }] : []),
         active,
         archived,
         deactivationReason: !active || archived ? savedStatusReason : null,
@@ -1489,6 +1582,72 @@ export function getMonthlyReservationError(status) {
         NOT_FOUND: { statusCode: 404, message: 'Monthly promo code not found.' },
     };
     return errors[status] || { statusCode: 409, message: 'Could not reserve a monthly wash. Please try again.' };
+}
+
+export async function checkMonthlyWashAvailability({
+    promoCode,
+    email,
+    bookingDate,
+    expectedClientType,
+    expectedPackageTier,
+}) {
+    const normalisedCode = String(promoCode || '').trim().toUpperCase();
+    const normalisedEmail = normaliseEmail(email);
+    if (!normalisedCode) throw new Error('Enter your monthly access code.');
+    if (!looksLikeEmail(normalisedEmail)) throw new Error('Enter the email address assigned to your monthly package.');
+    if (!isValidDate(bookingDate)) throw new Error('Choose a valid booking date to check your monthly washes.');
+
+    let entitlement = await getMonthlyPromoForCode(normalisedCode);
+    if (!entitlement) return { status: 'NOT_FOUND' };
+    const codeDigest = digest(normalisedCode);
+    const validCode = entitlement.codeDigests
+        ? entitlement.codeDigests.includes(codeDigest)
+        : entitlement.currentCodeDigest === codeDigest;
+    if (!validCode) return { status: 'REPLACED' };
+    if (entitlement.archived) return { status: 'ARCHIVED' };
+    if (!entitlement.active) return { status: 'INACTIVE' };
+    if (normaliseEmail(entitlement.email) !== normalisedEmail) return { status: 'EMAIL_MISMATCH' };
+    if (expectedClientType && entitlement.clientType !== expectedClientType) return { status: 'CLIENT_TYPE_MISMATCH' };
+    if (expectedPackageTier && entitlement.packageTier !== expectedPackageTier) return { status: 'PACKAGE_MISMATCH' };
+    if (entitlement.validFrom && bookingDate < entitlement.validFrom) return { status: 'NOT_YET_VALID' };
+    if (entitlement.validUntil && bookingDate > entitlement.validUntil) return { status: 'EXPIRED' };
+
+    const billingAnchor = entitlement.billingAnchor || entitlement.validFrom;
+    const period = getBillingPeriod(bookingDate, billingAnchor);
+    await migratePeriodHistory(entitlement.id, period, billingAnchor);
+    entitlement = await ensureCreditLedger(entitlement, period);
+    await redis.eval(CLEAN_EXPIRED_RESERVATIONS_SCRIPT, [
+        entitlementKey(entitlement.id),
+        allReservationsKey(entitlement.id),
+    ], [String(Date.now()), new Date().toISOString()]);
+    entitlement = await redis.get(entitlementKey(entitlement.id));
+    entitlement = await ensureCreditLedger(entitlement, period);
+
+    const [used, reserved] = await Promise.all([
+        redis.scard(periodUsageKey(entitlement.id, period.start)),
+        redis.zcard(periodReservationsKey(entitlement.id, period.start)),
+    ]);
+    const usedCount = Number(used);
+    const reservedCount = Number(reserved);
+    const creditsAvailable = Number(entitlement.creditsAvailable || 0);
+    const periodRemaining = Math.max(Number(entitlement.monthlyAllowance) - usedCount - reservedCount, 0);
+    const availableWashes = Math.min(creditsAvailable, periodRemaining);
+    const status = usedCount + reservedCount >= Number(entitlement.monthlyAllowance)
+        ? 'LIMIT_REACHED'
+        : creditsAvailable < 1
+            ? 'CREDITS_EXHAUSTED'
+            : 'OK';
+
+    return {
+        status,
+        allowance: Number(entitlement.monthlyAllowance),
+        used: usedCount,
+        reserved: reservedCount,
+        creditsAvailable,
+        periodRemaining,
+        availableWashes,
+        period: period.start,
+    };
 }
 
 export async function releaseMonthlyWashReservation({ entitlementId, period, reservationId }) {

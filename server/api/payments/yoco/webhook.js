@@ -14,6 +14,10 @@ import {
     releaseSharedPromoCode,
 } from '../../_lib/store.js';
 import { provisionMonthlyEntitlementFromPaidPurchase } from '../../_lib/monthly-promos.js';
+import {
+    markBookingRequestCancelled,
+    markBookingRequestConfirmed,
+} from '../../_lib/booking-approval.js';
 
 // Do not pre-parse the body — signature verification requires the
 // exact raw bytes that Yoco signed.
@@ -98,6 +102,7 @@ export default async function handler(req, res) {
             await releaseSharedPromoCode(promo, reservationId);
         }
         await releaseBookingSlot(meta.bookingDate || pending?.bookingDate, meta.bookingTime || pending?.bookingTime);
+        await markBookingRequestCancelled(meta.reference || pending?.reference || '');
         await markWebhookProcessed(webhookId);
         res.status(200).send('ignored');
         return;
@@ -147,6 +152,7 @@ export default async function handler(req, res) {
         return;
     }
     const paidBooking = confirmedBooking || pending;
+    await markBookingRequestConfirmed(meta.reference || paidBooking?.reference || '');
     if (pending?.purchaseType === 'monthly') {
         const provisioning = await provisionMonthlyEntitlementFromPaidPurchase(paidBooking);
         if (provisioning.status === 'needs_manager') {

@@ -3,6 +3,12 @@ import { buildVehiclePromoApprovedEmailHtml } from './promo-email-template.js';
 import { buildSupportEmailHtml } from './support-email-template.js';
 import { buildMonthlyCodeEmailHtml } from './monthly-code-email-template.js';
 import { buildDistributionReportHtml } from './distribution-report-template.js';
+import {
+    buildBookingApprovedEmail,
+    buildBookingDeclinedEmail,
+    buildBookingRequestBusinessEmail,
+    buildBookingRequestReceivedEmail,
+} from './booking-request-email-template.js';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const BOOKINGS_EMAIL = process.env.BUSINESS_EMAIL || 'bookings@a10tion.co.za';
@@ -129,6 +135,99 @@ export async function sendMonthlyDistributionReport(run) {
         replyTo: BOOKINGS_EMAIL,
         idempotencyKey: `monthly-distribution-report-${run.id}`,
         safeFailure: true,
+    });
+}
+
+export function buildBookingSmsNotificationPayload(request) {
+    const booking = request.booking || {};
+    const customer = booking.customer || {};
+    return {
+        to: process.env.BUSINESS_SMS || process.env.BUSINESS_SMS_NUMBER || '',
+        reference: request.reference,
+        message: [
+            'PENDING APPROVAL · New booking request',
+            `Ref: ${request.reference}`,
+            `Customer: ${customer.firstName || ''} ${customer.surname || ''}`.trim(),
+            `Date: ${booking.bookingDate || ''} ${booking.bookingTime || ''}`.trim(),
+            `Contact: ${customer.mobile || customer.email || ''}`,
+        ].join(' | '),
+        sent: false,
+        configured: false,
+    };
+}
+
+async function sendBookingRequestEmailPair({ request, customerSubject, customerHtml, businessSubject, businessHtml, idempotencyPrefix }) {
+    const customerEmail = request.booking?.customer?.email;
+    const jobs = [
+        sendViaResend({
+            to: BOOKINGS_EMAIL,
+            subject: businessSubject,
+            html: businessHtml,
+            replyTo: customerEmail || undefined,
+            attachments: request.booking?.contractFileBase64 && request.booking?.contractFileName
+                ? [{ filename: request.booking.contractFileName, content: request.booking.contractFileBase64 }]
+                : undefined,
+            idempotencyKey: `${idempotencyPrefix}-business-${request.id}`,
+        }),
+    ];
+    if (customerEmail) {
+        jobs.unshift(sendViaResend({
+            to: customerEmail,
+            subject: customerSubject,
+            html: customerHtml,
+            replyTo: BOOKINGS_EMAIL,
+            idempotencyKey: `${idempotencyPrefix}-customer-${request.id}`,
+        }));
+    }
+    const results = await Promise.allSettled(jobs);
+    const failures = results
+        .map((result, index) => ({ result, recipient: index === 0 && customerEmail ? 'customer' : 'business' }))
+        .filter(({ result }) => result.status === 'rejected');
+    if (failures.length) {
+        failures.forEach(({ recipient, result }) => {
+            console.error(`[booking request ${idempotencyPrefix} email failed]`, request.reference, recipient, result.reason);
+        });
+    }
+    return {
+        customerSent: Boolean(customerEmail && results[0]?.status === 'fulfilled' && !results[0].value?.skipped),
+        businessSent: results.at(-1)?.status === 'fulfilled' && !results.at(-1).value?.skipped,
+        customerSkipped: Boolean(customerEmail && results[0]?.status === 'fulfilled' && results[0].value?.skipped),
+        businessSkipped: results.at(-1)?.status === 'fulfilled' && results.at(-1).value?.skipped,
+        failed: failures.length > 0,
+    };
+}
+
+export async function sendBookingRequestReceivedEmails(request, statusUrl) {
+    return sendBookingRequestEmailPair({
+        request,
+        customerSubject: `Booking request received — ${request.reference}`,
+        customerHtml: buildBookingRequestReceivedEmail(request, statusUrl),
+        businessSubject: `PENDING APPROVAL · New booking request — ${request.reference}`,
+        businessHtml: buildBookingRequestBusinessEmail(
+            request,
+            process.env.BUSINESS_MANAGER_URL || '',
+        ),
+        idempotencyPrefix: 'booking-request-received',
+    });
+}
+
+export async function sendBookingRequestApprovedEmail(request, continuationUrl, retryId = '') {
+    return sendViaResend({
+        to: request.booking.customer.email,
+        subject: `Booking request approved — ${request.reference}`,
+        html: buildBookingApprovedEmail(request, continuationUrl),
+        replyTo: BOOKINGS_EMAIL,
+        idempotencyKey: `booking-request-approved-${request.id}${retryId ? `-${retryId}` : ''}`,
+    });
+}
+
+export async function sendBookingRequestDeclinedEmail(request, retryId = '') {
+    return sendViaResend({
+        to: request.booking.customer.email,
+        subject: `Booking request update — ${request.reference}`,
+        html: buildBookingDeclinedEmail(request),
+        replyTo: BOOKINGS_EMAIL,
+        idempotencyKey: `booking-request-declined-${request.id}${retryId ? `-${retryId}` : ''}`,
     });
 }
 

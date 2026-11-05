@@ -1,6 +1,7 @@
 import { applyCors } from '../api/_lib/cors.js';
 import { releaseMonthlyWashReservation } from '../api/_lib/monthly-promos.js';
 import { cancelPendingBookingByToken, releaseSharedPromoCode } from '../api/_lib/store.js';
+import { markBookingRequestCancelled } from '../api/_lib/booking-approval.js';
 
 export default async function handler(req, res) {
     if (applyCors(req, res)) return;
@@ -19,6 +20,7 @@ export default async function handler(req, res) {
         const result = await cancelPendingBookingByToken(cancellationToken);
         const booking = result?.booking;
         const cancelled = result?.status === 'CANCELLED' || result?.status === 'cancelled';
+        if (cancelled && booking?.reference) await markBookingRequestCancelled(booking.reference);
 
         if (cancelled && booking?.appliedPromoType === 'shared-code' && booking.appliedPromo && booking.promoReservationId) {
             await releaseSharedPromoCode(booking.appliedPromo, booking.promoReservationId);

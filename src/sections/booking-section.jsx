@@ -29,9 +29,8 @@ import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/servic
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-const YOCO_CHECKOUT_ENDPOINT = `${API_BASE_URL}/api/payments/yoco/checkout`;
 const CANCEL_BOOKING_ENDPOINT = `${API_BASE_URL}/api/bookings/cancel`;
-const ONSITE_BOOKING_ENDPOINT = `${API_BASE_URL}/api/bookings/onsite`;
+const BOOKING_REQUEST_ENDPOINT = `${API_BASE_URL}/api/bookings/request`;
 const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
 const BOOKING_CLOCK_REFRESH_MS = 10_000;
@@ -207,6 +206,7 @@ export default function BookingSection() {
     const [selectedVehicleType, setSelectedVehicleType] = useState(readSingleWashVehicle);
     const [requirementsOpen, setRequirementsOpen] = useState(false);
     const [checkoutOpen, setCheckoutOpen] = useState(false);
+    const [requestConfirmation, setRequestConfirmation] = useState(null);
     const [monthlySelectionOpen, setMonthlySelectionOpen] = useState(false);
     const [monthlySelectionStep, setMonthlySelectionStep] = useState(1);
     const [monthlyClientType, setMonthlyClientType] = useState('');
@@ -616,6 +616,7 @@ export default function BookingSection() {
                     promoCode: purchaseType === 'single' && promoCode.trim() ? promoCode.trim().toUpperCase() : null,
                     serviceAreaAccepted,
                     termsAccepted,
+                    requestedPaymentMethod: paymentMethod,
                     contractAccepted: isMonthly ? contractAccepted : false,
                     customer: {
                         ...customer,
@@ -626,31 +627,22 @@ export default function BookingSection() {
             formData.append('booking', JSON.stringify(bookingPayload));
             if (isMonthly) contractFiles.forEach((file) => formData.append('contract_files', file, file.name));
 
-            const endpoint = paymentMethod === 'onsite' ? ONSITE_BOOKING_ENDPOINT : YOCO_CHECKOUT_ENDPOINT;
-            const response = await fetch(endpoint, {
+            const response = await fetch(BOOKING_REQUEST_ENDPOINT, {
                 method: 'POST',
                 body: formData,
             });
 
             const result = await response.json().catch(() => ({}));
-            if (!response.ok || !result.reference) {
-                throw new Error(result.message || 'Booking could not be confirmed.');
+            if (!response.ok || !result.reference || !result.statusUrl) {
+                throw new Error(result.message || 'Booking request could not be submitted.');
             }
             setCheckoutOpen(false);
-            if (paymentMethod === 'onsite') {
-                setPaymentReference(result.reference);
-                setPaymentStatus(result.monthlyCovered ? 'covered' : result.receiptSent ? 'onsite' : 'onsiteEmailIssue');
-                return;
-            }
-            if (result.monthlyCovered) {
-                setPaymentReference(result.reference);
-                setPaymentStatus('covered');
-                return;
-            }
-            if (!result.redirectUrl) {
-                throw new Error('Secure payment could not be started. Please try again.');
-            }
-            window.location.assign(result.redirectUrl);
+            setRequestConfirmation({
+                reference: result.reference,
+                statusUrl: result.statusUrl,
+                emailSent: result.emailStatus?.customerSent,
+                businessEmailSent: result.emailStatus?.businessSent,
+            });
         } catch (error) {
             setPaymentError(error instanceof Error ? error.message : 'Secure payment could not be started. Please try again.');
         } finally {
@@ -836,7 +828,7 @@ export default function BookingSection() {
                             className='group mt-2 flex min-h-[38px] w-full items-center justify-center gap-2 rounded-[11px] border border-[#31553c]/35 bg-[#edf4ee] px-4 text-[10px] font-semibold text-[#1e4931] transition hover:-translate-y-px hover:border-[#31553c] hover:bg-[#e2eee4] disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[44px] sm:text-[11px]'
                         >
                             <Package className='size-3.5' />
-                            Monthly Clients
+                            Monthly Users
                             <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' />
                         </button>
                     </div>
@@ -1282,6 +1274,24 @@ export default function BookingSection() {
                 onClose={() => setPromoRegistrationOpen(false)}
                 defaults={{ ...customer }}
             />
+            {requestConfirmation && (
+                <div className='fixed inset-0 z-[120] grid place-items-center bg-[#102016]/60 px-4 py-6' role='presentation'>
+                    <section className='w-full max-w-lg rounded-2xl border border-[#dce6de] bg-white p-6 text-center shadow-2xl sm:p-9' role='dialog' aria-modal='true' aria-labelledby='booking-request-received-title'>
+                        <div className='mx-auto grid size-12 place-items-center rounded-full bg-[#edf4ee] text-[#31553c]'><CheckCircle2 className='size-6' /></div>
+                        <h2 id='booking-request-received-title' className='mt-4 font-display text-2xl font-semibold text-[#1e3128]'>Booking Request Received!</h2>
+                        <p className='mt-3 text-sm leading-6 text-[#5b6560]'>Thank you for submitting your booking request. Your details have been sent to our team for review.</p>
+                        <p className='mt-2 text-sm leading-6 text-[#5b6560]'>Your booking is not yet confirmed. We’ll notify you by email as soon as your request has been reviewed. Once approved, you’ll receive a link to continue and complete your booking.</p>
+                        <p className='mt-4 text-sm font-semibold text-[#35483b]'>Reference: {requestConfirmation.reference}</p>
+                        {!requestConfirmation.emailSent && <p className='mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900'>We could not confirm email delivery. Save this private status link to check your request.</p>}
+                        {!requestConfirmation.businessEmailSent && <p className='mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900'>Our team notification email could not be confirmed. Please contact us if you do not hear back.</p>}
+                        <div className='mt-6 flex flex-col justify-center gap-2 sm:flex-row'>
+                            <a href={requestConfirmation.statusUrl} className='inline-flex min-h-11 items-center justify-center rounded-xl border border-[#dce6de] px-4 text-sm font-semibold text-[#31553c]'>Check request status</a>
+                            <button type='button' onClick={() => setRequestConfirmation(null)} className='min-h-11 rounded-xl bg-[#1e3128] px-5 text-sm font-bold text-white'>Close</button>
+                        </div>
+                        <p className='mt-4 text-xs text-[#68776e]'>Thank you for your patience!</p>
+                    </section>
+                </div>
+            )}
         </section>
     );
 }

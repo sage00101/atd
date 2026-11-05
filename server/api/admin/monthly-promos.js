@@ -8,6 +8,7 @@ import {
     getMonthlyEntitlementsForAdmin,
     getMonthlyDistributionRuns,
     getPendingMonthlyPurchasesForAdmin,
+    generateMonthlyEntitlementCode,
     recordMonthlyEntitlementPayment,
     sendMonthlyCodesForRun,
     updateMonthlyEntitlement,
@@ -53,6 +54,12 @@ export default async function handler(req, res) {
                 paymentReference: String(req.body?.paymentReference || '').trim(),
                 amountCents: req.body?.amountCents,
             });
+            res.status(200).json({ entitlement });
+            return;
+        }
+
+        if (req.method === 'POST' && req.body?.action === 'generate-code') {
+            const entitlement = await generateMonthlyEntitlementCode(String(req.body?.id || '').trim());
             res.status(200).json({ entitlement });
             return;
         }

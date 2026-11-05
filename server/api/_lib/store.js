@@ -52,6 +52,12 @@ redis.call('DEL', KEYS[1])
 redis.call('SREM', KEYS[2], ARGV[2])
 return 1
 `;
+const RESERVE_BOOKING_SLOT_SCRIPT = `
+local owner = redis.call('GET', KEYS[1])
+if owner and owner ~= ARGV[1] then return 0 end
+redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+return 1
+`;
 
 /** Generates a reference number and atomically claims it, retrying on the astronomically rare collision. */
 export async function claimUniqueReferenceNumber() {
@@ -293,11 +299,10 @@ export async function getBooking(checkoutId) {
 /** Atomically claims a date/time slot. Returns false if it's already actively held by someone else. */
 export async function reserveBookingSlot(bookingDate, bookingTime, token, ttlSeconds = PENDING_BOOKING_TTL_SECONDS) {
     if (!bookingDate || !bookingTime) return true;
-    const claimed = await redis.set(slotKey(bookingDate, bookingTime), token, {
-        nx: true,
-        ex: ttlSeconds,
-    });
-    if (claimed !== 'OK') return false;
+    const claimed = await redis.eval(RESERVE_BOOKING_SLOT_SCRIPT, [
+        slotKey(bookingDate, bookingTime),
+    ], [token, String(ttlSeconds)]);
+    if (!claimed) return false;
     const key = dateIndexKey(bookingDate);
     await redis.sadd(key, bookingTime);
     await redis.expire(key, DATE_INDEX_TTL_SECONDS);

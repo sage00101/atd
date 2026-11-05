@@ -5,6 +5,11 @@ import { applyCors } from '../api/_lib/cors.js';
 import { sendReceiptEmail } from '../api/_lib/email.js';
 import { getServiceAreaError } from '../api/_lib/service-area.js';
 import {
+    beginBookingContinuation,
+    completeBookingContinuation,
+    resetBookingContinuation,
+} from '../api/_lib/booking-approval.js';
+import {
     confirmMonthlyWashReservation,
     getMonthlyReservationError,
     releaseMonthlyWashReservation,
@@ -17,7 +22,8 @@ import {
     looksLikeVehicleRegistration,
     normaliseEmail,
     normaliseReg,
-    releaseBookingSlot,
+    releaseBookingSlot as releaseUnapprovedBookingSlot,
+    releaseBookingSlotIfOwned,
     releaseSharedPromoCode,
     reserveBookingSlot,
     reserveSharedPromoCode,
@@ -63,6 +69,19 @@ export default async function handler(req, res) {
     let monthlyEntitlementDetails = null;
     let reservedSlotDate = null;
     let reservedSlotTime = null;
+    let approvalRequest = null;
+    const releaseBookingSlot = async (date, time) => {
+        if (!approvalRequest) {
+            await releaseUnapprovedBookingSlot(date, time);
+            return;
+        }
+        const remainingTtl = Math.ceil((Number(approvalRequest.approvalExpiresAt) - Date.now()) / 1000);
+        if (remainingTtl > 0) {
+            await reserveBookingSlot(date, time, approvalRequest.reference, remainingTtl);
+        } else {
+            await releaseBookingSlotIfOwned(date, time, approvalRequest.reference);
+        }
+    };
     try {
         const { fields, files } = await parseMultipart(req);
         const bookingRaw = Array.isArray(fields.booking) ? fields.booking[0] : fields.booking;
@@ -74,6 +93,31 @@ export default async function handler(req, res) {
             res.status(400).json({ message: 'Invalid booking payload.' });
             return;
         }
+
+        const approvalToken = String(booking.approvalToken || '').trim();
+        if (!approvalToken) {
+            res.status(403).json({ message: 'A valid approved booking request is required before booking.' });
+            return;
+        }
+        let continuation;
+        try {
+            continuation = await beginBookingContinuation(approvalToken);
+        } catch (error) {
+            res.status(403).json({ message: error instanceof Error ? error.message : 'This booking approval link is invalid or expired.' });
+            return;
+        }
+        if (continuation.status === 'EXISTING_CHECKOUT') {
+            res.status(409).json({ message: 'This booking is already awaiting completion.' });
+            return;
+        }
+        approvalRequest = continuation.request;
+        if (approvalRequest.booking.requestedPaymentMethod !== 'onsite') {
+            await resetBookingContinuation(approvalRequest.id);
+            approvalRequest = null;
+            res.status(400).json({ message: 'Continue this booking using the payment method selected in your request.' });
+            return;
+        }
+        booking = { ...approvalRequest.booking, paymentMethod: 'onsite' };
 
         booking = {
             ...booking,
@@ -152,7 +196,7 @@ export default async function handler(req, res) {
             res.status(400).json({ message: 'Promo codes are available for single washes only.' });
             return;
         }
-        const reference = await claimUniqueReferenceNumber();
+        const reference = approvalRequest.reference || await claimUniqueReferenceNumber();
         if (!await reserveBookingSlot(bookingDate, bookingTime, reference, 60 * 60 * 24 * 90)) {
             res.status(409).json({ message: 'That time slot was just booked by someone else. Please choose another.' });
             return;
@@ -453,6 +497,7 @@ export default async function handler(req, res) {
             console.error('[onsite receipt email failed]', receipt.reference, err);
         }
 
+        await completeBookingContinuation(approvalRequest.id, { status: 'confirmed' });
         res.status(200).json({ success: true, reference, receiptSent, monthlyCovered });
     } catch (err) {
         if (reservedMonthlyWash) {
@@ -466,5 +511,11 @@ export default async function handler(req, res) {
         }
         console.error(err);
         res.status(500).json({ message: 'Booking could not be confirmed. Please try again.' });
+    } finally {
+        if (approvalRequest) {
+            await resetBookingContinuation(approvalRequest.id).catch((error) => {
+                console.error('[booking approval continuation lock release failed]', approvalRequest.reference, error);
+            });
+        }
     }
 }

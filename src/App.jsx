@@ -15,6 +15,7 @@ import ContactSection from './sections/contact-section';
 import PromoSection from './sections/promo-section';
 import FaqSection from './sections/faq-section';
 import MonthlyCheckoutPage from './sections/monthly-checkout-page';
+import BookingRequestStatusPage from './sections/booking-request-status';
 
 export default function App() {
     const [vacanciesOpen, setVacanciesOpen] = useState(false);
@@ -27,7 +28,12 @@ export default function App() {
         }
     }, []);
 
-    if (new URLSearchParams(window.location.search).get('monthly-checkout') === '1') {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('booking-request') || params.has('booking-continuation')) {
+        return <BookingRequestStatusPage />;
+    }
+
+    if (params.get('monthly-checkout') === '1') {
         return <MonthlyCheckoutPage />;
     }
 
