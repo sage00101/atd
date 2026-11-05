@@ -4,6 +4,7 @@ import { buildSupportEmailHtml } from './support-email-template.js';
 import { buildMonthlyCodeEmailHtml } from './monthly-code-email-template.js';
 import { buildPassphraseEmailHtml } from './passphrase-email-template.js';
 import { buildDistributionReportHtml } from './distribution-report-template.js';
+import { getBusinessSmsNumber, sendSms } from './sms.js';
 import {
     buildBookingApprovedEmail,
     buildBookingCancelledEmail,
@@ -15,32 +16,7 @@ import {
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const BOOKINGS_EMAIL = process.env.BUSINESS_EMAIL || 'bookings@a10tion.co.za';
 const SUPPORT_EMAIL = 'support@a10tion.co.za';
-const DEFAULT_BUSINESS_SMS = '+27733069217';
-
-function normaliseBusinessSmsNumber(rawNumber) {
-    if (!rawNumber) return '';
-    const digits = String(rawNumber).replace(/\D/g, '');
-    if (!digits) return '';
-
-    if (digits.startsWith('27') && digits.length >= 11) return `+${digits}`;
-    if (digits.startsWith('0') && digits.length === 10) return `+27${digits.slice(1)}`;
-    if (digits.length === 9) return `+27${digits}`;
-    return `+${digits}`;
-}
-
 async function sendBusinessBookingSms(receipt) {
-    const to = normaliseBusinessSmsNumber(
-        process.env.BUSINESS_SMS || process.env.BUSINESS_SMS_NUMBER || DEFAULT_BUSINESS_SMS
-    );
-    const username = process.env.AFRICAS_TALKING_USERNAME;
-    const apiKey = process.env.AFRICAS_TALKING_API_KEY;
-    const senderId = process.env.AFRICAS_TALKING_SENDER_ID || process.env.AFRICAS_TALKING_FROM;
-
-    if (!username || !apiKey || !to) {
-        console.log('[sms skipped — AFRICAS_TALKING_USERNAME/API_KEY or BUSINESS_SMS not set]', { to, reference: receipt.reference });
-        return { skipped: true };
-    }
-
     const body = [
         `A10tion booking: ${receipt.customerName || 'Customer'} ${receipt.packageName || 'wash'} booked.`,
         `Ref: ${receipt.reference}`,
@@ -50,26 +26,12 @@ async function sendBusinessBookingSms(receipt) {
         `Amount: ${receipt.amountZar || '—'}`,
         `Contact: ${receipt.customerMobile || receipt.customerEmail || '—'}`,
     ].join(' | ');
-
-    const payload = new URLSearchParams({ username, to, message: body });
-    if (senderId) payload.set('from', senderId);
-
-    const response = await fetch('https://api.africastalking.com/version1/messaging', {
-        method: 'POST',
-        headers: {
-            Accept: 'application/json',
-            apikey: apiKey,
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: payload,
+    return sendSms({
+        to: getBusinessSmsNumber(),
+        message: body,
+        campaign: 'Confirmed bookings',
+        dataField: receipt.reference,
     });
-
-    if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        throw new Error(`Africa's Talking SMS failed (${response.status}): ${text}`);
-    }
-
-    return response.json();
 }
 
 async function sendViaResend({ to, bcc, subject, html, replyTo, attachments, safeFailure = false, idempotencyKey }) {

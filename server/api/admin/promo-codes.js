@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { applyCors } from '../_lib/cors.js';
 import { getSharedPromoBatchForAdmin, saveSharedPromoBatch, looksLikeEmail } from '../_lib/store.js';
 import { sendPassphraseEmail } from '../_lib/email.js';
+import { getBusinessSmsNumber, isSmsConfigured, sendSms } from '../_lib/sms.js';
 
 const managerLogoUrl = new URL(
     'assets/android-chrome-192x192.png',
@@ -14,6 +15,8 @@ const adminPage = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Business Manager | A10tion To Detail</title>
+<link rel="icon" type="image/png" sizes="192x192" href="${managerLogoUrl}">
+<link rel="apple-touch-icon" href="${managerLogoUrl}">
 <style>
 :root{color-scheme:light;--bg:#f6f8f6;--surface:#fff;--surface-2:#f8faf8;--surface-3:#eef4ef;--line:rgba(38,77,49,.12);--line-2:rgba(38,77,49,.2);--ink:#1d2c22;--ink-2:#405448;--muted:#718076;--accent:#4d8b5e;--accent-2:#39764d;--accent-ink:#fff;--accent-soft:rgba(77,139,94,.1);--danger:#b44740;--danger-soft:rgba(180,71,64,.1);--warn:#896516;--warn-soft:rgba(180,137,40,.12);--info:#347b94;--info-soft:rgba(52,123,148,.1);font-family:Inter,ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased}
 *{box-sizing:border-box;scrollbar-color:#d5e0d7 transparent}
@@ -366,6 +369,11 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 <p class="hint">Passwords are exact and case-sensitive. Duplicate promo codes are allowed, but that promo code can only be redeemed once across the batch.</p>
 <div class="buttons"><button id="save" type="button">Save active batch</button></div>
 <pre id="summary"></pre>
+<section class="distribution-panel" style="display:block" aria-label="Booking request SMS alerts">
+  <div><h3>Booking request SMS alerts</h3><p>New booking requests are texted to the company cell number through SMSMessenger. Send a test message to confirm it is connected.</p></div>
+  <div class="buttons"><button id="smsTest" class="secondary" type="button">Send test SMS</button></div>
+  <p id="smsTestNotice" class="inline-notice" role="status" aria-live="polite" hidden></p>
+</section>
 <section class="distribution-panel" style="display:block" aria-label="Email a passphrase">
   <div><h3>Email a passphrase</h3><p>Send a passphrase, and optionally its promo code, to a customer in the A10tion To Detail branded email.</p></div>
   <form id="passphraseForm" class="manager-form">
@@ -1197,6 +1205,17 @@ bulkConfirmButton.addEventListener('click',async()=>{
   }catch(error){setStatus(error.message,'error');showNotice(bulkEmailNotice,error.message,'error');}
   finally{bulkConfirmButton.disabled=false;}
 });
+const smsTestButton=document.getElementById('smsTest');
+const smsTestNotice=document.getElementById('smsTestNotice');
+smsTestButton.addEventListener('click',async()=>{
+  smsTestButton.disabled=true;
+  showNotice(smsTestNotice,'Sending test SMS…','');
+  try{
+    const result=await request('POST',{action:'test-sms'});
+    showNotice(smsTestNotice,'✓ Test SMS sent to +'+result.to+'.','ok');
+  }catch(error){showNotice(smsTestNotice,'SMS was NOT sent: '+error.message,'error');}
+  finally{smsTestButton.disabled=false;}
+});
 const passphraseForm=document.getElementById('passphraseForm');
 const passphraseNotice=document.getElementById('passphraseNotice');
 passphraseForm.addEventListener('submit',async event=>{
@@ -1448,6 +1467,19 @@ export default async function handler(req, res) {
         }
 
         if (req.method === 'POST') {
+            if (req.body?.action === 'test-sms') {
+                if (!isSmsConfigured()) {
+                    res.status(502).json({ message: 'SMS is not configured on the server (SMSMESSENGER_EMAIL / SMSMESSENGER_API_KEY missing).' });
+                    return;
+                }
+                const sent = await sendSms({
+                    to: getBusinessSmsNumber(),
+                    message: 'A10tion Business Manager: test SMS. Booking request alerts are working.',
+                    campaign: 'Test',
+                });
+                res.status(200).json({ sent: Boolean(sent?.sent), to: getBusinessSmsNumber() });
+                return;
+            }
             if (req.body?.action !== 'email-passphrase') {
                 res.status(400).json({ message: 'Unknown promo code action.' });
                 return;

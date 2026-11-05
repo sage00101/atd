@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/business-manager",
+      "destination": "/api/admin/promo-codes"
+    },
+    {
       "source": "/api/bookings/availability",
       "destination": "/api/booking-router?__route=availability"
     },
