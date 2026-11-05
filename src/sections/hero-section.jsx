@@ -273,15 +273,17 @@ export default function HeroSection() {
                 </div>
 
                 <div className="relative w-[58%] overflow-hidden [container-type:inline-size] xl:w-[60%]">
-                    <img
+                    <div className="absolute inset-0 overflow-hidden [clip-path:polygon(9%_0,100%_0,100%_100%,0_100%)]">
+                        <img
                         src={HERO_IMAGE_DESKTOP}
                         alt="A10tion To Detail — professional mobile car care in Cape Town"
-                        className="hero-wipe absolute h-auto max-w-none [clip-path:polygon(9%_0,100%_0,100%_100%,0_100%)]"
+                        className="hero-wipe absolute h-auto max-w-none"
                         style={DESKTOP_IMAGE_STYLE}
                         draggable={false}
                         loading="lazy"
                         decoding="async"
                     />
+                    </div>
 
                     <div className="pointer-events-none absolute inset-0 [clip-path:polygon(9%_0,100%_0,100%_100%,0_100%)] bg-gradient-to-t from-black/30 via-transparent to-black/10" />
                     <div className="pointer-events-none absolute inset-y-0 left-0 w-[22%] bg-gradient-to-r from-[#05100a]/50 to-transparent" />
