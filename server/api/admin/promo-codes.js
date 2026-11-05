@@ -350,11 +350,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 <section class="content">
 <p id="status" role="status" aria-live="polite"></p>
 <section id="promoPanel" class="tab-panel" role="tabpanel" aria-labelledby="promoTab" hidden>
-<nav class="promo-tabs" role="tablist" aria-label="Promo code type">
-  <button id="singleWashTab" class="promo-tab" type="button" role="tab" aria-selected="true" aria-controls="singleWashPanel">Single Washes</button>
-  <button id="monthlyWashTab" class="promo-tab" type="button" role="tab" aria-selected="false" aria-controls="monthlyWashPanel">Monthly Clients</button>
-</nav>
-<section id="singleWashPanel" class="promo-panel" role="tabpanel" aria-labelledby="singleWashTab">
+<section id="singleWashPanel" class="promo-panel" role="tabpanel" aria-labelledby="promoTab">
 <p class="note">Paste up to 50 rows from your spreadsheet. Use tab-separated columns: number, password, promo code (or just password, promo code). Saving replaces the active batch. Redeemed promo codes stay permanently blocked, even after rotating batches.</p>
 <div class="buttons"><button id="load" class="secondary" type="button">Load current batch</button></div>
 <label for="pairs">Password and promo-code rows</label>
@@ -363,7 +359,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 <div class="buttons"><button id="save" type="button">Save active batch</button></div>
 <pre id="summary"></pre>
 </section>
-<section id="monthlyWashPanel" class="promo-panel" role="tabpanel" aria-labelledby="monthlyWashTab" hidden>
+<section id="monthlyWashPanel" class="promo-panel" role="tabpanel" aria-labelledby="clientsTab" hidden>
   <p class="note">A confirmed first package payment automatically creates and emails a random access code. Standard permits up to 2 bookings per billing period and Premium up to 4. Unused prepaid washes roll over, but the per-period booking cap remains. Each recorded payment creates a fresh access code, and emails the customer.</p>
   <div id="monthlyStats" class="stat-row" hidden></div>
   <h2 id="monthlyFormTitle" class="section-title">Create monthly entitlement</h2>
@@ -533,7 +529,6 @@ const expiredRequestCards=document.getElementById('expiredRequestCards');
 const expiredRequestsEmpty=document.getElementById('expiredRequestsEmpty');
 const activityCards=document.getElementById('activityCards');
 const activityEmpty=document.getElementById('activityEmpty');
-const promoTabsNode=document.querySelector('.promo-tabs');
 const managerTabs=[...document.querySelectorAll('#managerTabs .tab')];
 const managerShell=document.getElementById('managerShell');
 const authGate=document.getElementById('authGate');
@@ -560,8 +555,6 @@ const declineConfirmDialog=document.getElementById('declineConfirmDialog');
 const declineReasonDialog=document.getElementById('declineReasonDialog');
 const declineReason=document.getElementById('declineReason');
 const declineSubmit=document.getElementById('declineSubmit');
-const singleWashTab=document.getElementById('singleWashTab');
-const monthlyWashTab=document.getElementById('monthlyWashTab');
 const singleWashPanel=document.getElementById('singleWashPanel');
 const monthlyWashPanel=document.getElementById('monthlyWashPanel');
 const monthlyForm=document.getElementById('monthlyForm');
@@ -619,7 +612,6 @@ function activateTab(tab){
     button.classList.toggle('active',active);
     button.setAttribute('aria-current',active?'page':'false');
   });
-  promoTabsNode.hidden=tab==='clients';
   if(tab==='clients') activatePromoTab('monthly');
   if(tab==='promo') activatePromoTab('single');
   closeManagerMenu();
@@ -629,8 +621,6 @@ function activateTab(tab){
 }
 function activatePromoTab(tab){
   const isMonthly=tab==='monthly';
-  singleWashTab.setAttribute('aria-selected',String(!isMonthly));
-  monthlyWashTab.setAttribute('aria-selected',String(isMonthly));
   singleWashPanel.hidden=isMonthly;
   monthlyWashPanel.hidden=!isMonthly;
   if(isMonthly) loadMonthlyEntitlements();
@@ -1140,16 +1130,6 @@ bulkConfirmButton.addEventListener('click',async()=>{
   }catch(error){setStatus(error.message,'error');showNotice(bulkEmailNotice,error.message,'error');}
   finally{bulkConfirmButton.disabled=false;}
 });
-singleWashTab.addEventListener('click',()=>activatePromoTab('single'));
-monthlyWashTab.addEventListener('click',()=>activatePromoTab('monthly'));
-document.querySelectorAll('.promo-tab').forEach((tab,index)=>tab.addEventListener('keydown',event=>{
-  if(event.key==='ArrowLeft'||event.key==='ArrowRight'){
-    event.preventDefault();
-    const next=index===0?monthlyWashTab:singleWashTab;
-    next.focus();
-    next.click();
-  }
-}));
 function connectManagers(){
   const key=keyInput.value.trim();
   if(!key){authStatus.textContent='Enter an admin or calendar API key to connect.';keyInput.focus();return false;}
