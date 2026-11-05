@@ -25,6 +25,15 @@ body{margin:0;padding:28px 18px 56px;min-height:100vh;background:radial-gradient
 .auth-card h2{margin:16px 0 6px;font-size:26px;letter-spacing:-.04em}
 .auth-card p{margin:0 0 20px;color:var(--muted);font-size:13px;line-height:1.55}
 .auth-card .field-label{text-align:left}
+.auth-card #connect{position:relative;width:100%;margin-top:22px;padding:15px 20px;border:0;border-radius:14px;background:linear-gradient(135deg,#5aa06d 0%,#39764d 55%,#2f6542 100%);color:#fff;font-size:15px;font-weight:700;letter-spacing:.03em;box-shadow:0 14px 28px -12px rgba(47,101,66,.65),inset 0 1px 0 rgba(255,255,255,.25);overflow:hidden;cursor:pointer;transition:transform .18s,box-shadow .18s,filter .18s}
+.auth-card #connect::after{content:"→";display:inline-block;margin-left:10px;transition:transform .2s}
+.auth-card #connect::before{content:"";position:absolute;top:0;left:-70%;width:50%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-20deg);transition:left .6s}
+.auth-card #connect:hover{transform:translateY(-2px);filter:brightness(1.05);box-shadow:0 18px 32px -12px rgba(47,101,66,.75),inset 0 1px 0 rgba(255,255,255,.3)}
+.auth-card #connect:hover::before{left:130%}
+.auth-card #connect:hover::after{transform:translateX(4px)}
+.auth-card #connect:active{transform:translateY(0);box-shadow:0 8px 18px -10px rgba(47,101,66,.7)}
+.auth-card #connect:focus-visible{outline:none;box-shadow:0 0 0 4px rgba(77,139,94,.3),0 14px 28px -12px rgba(47,101,66,.65)}
+.auth-card #connect:disabled{opacity:.7;cursor:wait;transform:none}
 .auth-gate{background:radial-gradient(700px 420px at 15% 10%,rgba(77,139,94,.22),transparent 60%),radial-gradient(600px 400px at 90% 90%,rgba(77,139,94,.16),transparent 60%),rgba(238,244,239,.82)}
 .auth-card{position:relative;overflow:hidden;padding:34px 30px 28px}
 .auth-card::before{content:"";position:absolute;left:0;right:0;top:0;height:5px;background:linear-gradient(90deg,var(--accent-2),#8cc79c)}
@@ -62,8 +71,10 @@ body{margin:0;padding:28px 18px 56px;min-height:100vh;background:radial-gradient
 .account-collapse{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
 .account-collapse>summary{display:flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#f8faf8;color:var(--ink-2);font-size:12px;font-weight:750;cursor:pointer;list-style:none}
 .account-collapse>summary::-webkit-details-marker{display:none}
-.account-collapse>summary::after{content:"＋";font-size:16px;color:var(--accent)}
-.account-collapse[open]>summary::after{content:"−"}
+.account-collapse>summary::after{content:"";width:9px;height:9px;border-right:2.5px solid var(--accent-2);border-bottom:2.5px solid var(--accent-2);transform:rotate(45deg) translate(-2px,-2px);transition:transform .2s}
+.account-collapse[open]>summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
+.entitlement-title{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.entitlement-title .status-pill{margin:0}
 .account-collapse-body{padding-top:8px}
 .payment-form{display:grid;gap:14px}
 .payment-form .field-label{margin:0}
@@ -479,7 +490,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
     <input id="adminName" class="manager-input" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="40" placeholder="Your name" required>
     <label class="field-label" for="adminKey" style="margin-top:12px">API key (password)</label>
     <input id="adminKey" class="manager-input" type="password" autocomplete="current-password" placeholder="Enter API key" required>
-    <button id="connect" type="submit" style="width:100%;margin-top:18px">Sign in</button>
+    <button id="connect" type="submit">Sign in</button>
     <p id="authStatus" class="auth-status" role="alert" aria-live="polite"></p>
   </form>
 </div>
@@ -574,8 +585,9 @@ let selectedPaymentEntitlementId='';
 const managerStorageKey='a10tion-admin-manager-key';
 function setStatus(message,type=''){statusNode.textContent=message;statusNode.className=type;}
 function setConn(isOn){connStateNode.dataset.state=isOn?'on':'off';connStateNode.textContent=isOn?'Connected':'Not connected';}
+function isArchivedRecord(record){return Boolean(record.archived)||record.active===false;}
 function renderMonthlyStats(){
-  const liveClients=monthlyEntitlements.filter(record=>!record.archived);
+  const liveClients=monthlyEntitlements.filter(record=>!isArchivedRecord(record));
   const activeCount=liveClients.filter(record=>record.status==='Active').length;
   const review=pendingMonthlyPurchases.length;
   const tiles=[
@@ -670,7 +682,7 @@ function renderBookingRequestCard(record,showActions=false){
         ?'<div class="booking-request-actions"><button type="button" data-request-action="resend-email" data-id="'+escapeHtml(record.id)+'">Resend customer decision email</button></div>'
         :'';
     const occurredAt=record.approvedAt||record.declinedAt||record.updatedAt||record.submittedAt;
-    return '<article class="booking-request-card" data-id="'+escapeHtml(record.id)+'"><div class="entitlement-top"><div><h3>'+escapeHtml(identity)+'</h3><p class="booking-request-meta">'+escapeHtml(customer.email||'')+' · '+escapeHtml(record.reference)+'<br>'+escapeHtml(record.publicStatus||record.status)+'</p></div><span class="status-pill">'+escapeHtml(record.publicStatus||record.status)+'</span></div>'+(showActions?'':'<p class="booking-request-meta">Activity · '+escapeHtml(occurredAt||'')+'</p>')+'<details><summary>Open full request details</summary><dl class="booking-request-details">'+details+'</dl></details>'+actions+'</article>';
+    return '<article class="booking-request-card" data-id="'+escapeHtml(record.id)+'"><div class="entitlement-top"><div><h3>'+escapeHtml(identity)+'</h3><p class="booking-request-meta">'+escapeHtml(customer.email||'')+' · '+escapeHtml(record.reference)+'</p></div><span class="status-pill">'+escapeHtml(record.publicStatus||record.status)+'</span></div>'+(showActions?'':'<p class="booking-request-meta">Activity · '+escapeHtml(occurredAt||'')+'</p>')+'<details><summary>Open full request details</summary><dl class="booking-request-details">'+details+'</dl></details>'+actions+'</article>';
 }
 function renderBookingRequests(){
   const pending=bookingRequests.filter(record=>record.status==='pending_approval');
@@ -691,7 +703,7 @@ function renderBookingActivity(){
   activityEmpty.hidden=activity.length>0;
 }
 function renderNotifications(){
-  const exhausted=monthlyEntitlements.filter(record=>!record.archived&&record.active&&Number(record.creditsAvailable)<1);
+  const exhausted=monthlyEntitlements.filter(record=>!isArchivedRecord(record)&&record.active&&Number(record.creditsAvailable)<1);
   const expired=bookingRequests.filter(record=>['expired','cancelled'].includes(record.status));
   const pending=bookingRequests.filter(record=>record.status==='pending_approval');
   const items=[
@@ -830,22 +842,22 @@ function renderEntitlementCard(record){
     .filter(entry=>entry.code&&entry.code!==record.code)
     .map(entry=>'<li><code>'+escapeHtml(entry.code)+'</code><button type="button" data-action="copy" data-code="'+escapeHtml(entry.code)+'">Copy</button> · generated '+escapeHtml(new Date(entry.createdAt).toLocaleDateString('en-ZA'))+'</li>').join('');
   const dateRange='Active '+escapeHtml(record.validFrom||'')+(record.validUntil?' – '+escapeHtml(record.validUntil):' · no end date');
-  const canIssueCode=record.active&&!record.archived;
+  const canIssueCode=record.active&&!isArchivedRecord(record);
   const actions=[
     canIssueCode?'<button type="button" data-action="generate-code">'+(record.code?'Generate another code':'Generate code')+'</button>':'',
     canIssueCode&&record.code?'<button type="button" data-action="email">Email latest code</button>':'',
     canIssueCode?'<button type="button" data-action="payment">Record payment</button>':'',
     '<button type="button" data-action="edit">Edit details</button>',
-    '<button'+(record.archived?'':' class="danger"')+' type="button" data-action="toggle">'+(record.archived?'Restore & reactivate':'Deactivate account')+'</button>',
+    '<button'+(isArchivedRecord(record)?'':' class="danger"')+' type="button" data-action="toggle">'+(isArchivedRecord(record)?'Restore & reactivate':'Deactivate account')+'</button>',
 
   ].filter(Boolean).join('');
   const codeBlock=record.code
     ?'<div class="entitlement-code"><code>'+escapeHtml(record.code)+'</code><button type="button" data-action="copy" data-code="'+escapeHtml(record.code)+'">Copy</button></div>'
     :'<p class="hint" role="status">'+(record.active?'No active code. Generate a new code to restore customer access.':'Access code revoked. Reactivate, then generate a fresh code if needed.')+'</p>';
   return '<article class="entitlement-card" data-id="'+escapeHtml(record.id)+'">'+
-    '<div class="entitlement-top"><div><h3 class="entitlement-name">'+escapeHtml(record.customerName)+'</h3><p class="entitlement-meta">'+escapeHtml(record.email)+' · '+escapeHtml(record.customerPhone||'No phone')+'<br>'+escapeHtml(packageLabel(record))+'</p></div><span class="status-pill '+slug+'">'+escapeHtml(record.status)+'</span></div>'+
-    (record.archived?'<span class="archive-label">Archived record</span>':'')+
-    '<details class="account-collapse"><summary>Expand / collapse account</summary><div class="account-collapse-body">'+
+    '<div class="entitlement-top"><div><div class="entitlement-title"><h3 class="entitlement-name">'+escapeHtml(record.customerName)+'</h3><span class="status-pill '+slug+'">'+escapeHtml(isArchivedRecord(record)&&record.active===false?'Deactivated':record.status)+'</span></div><p class="entitlement-meta">'+escapeHtml(record.email)+' · '+escapeHtml(record.customerPhone||'No phone')+'<br>'+escapeHtml(packageLabel(record))+'</p></div></div>'+
+    ''+
+    '<details class="account-collapse"><summary aria-label="Expand or collapse account"></summary><div class="account-collapse-body">'+
     '<p class="entitlement-meta">'+escapeHtml(record.businessName||'')+(record.businessName?'<br>':'')+escapeHtml(dateRange)+(record.vehicleType?'<br>'+escapeHtml(record.vehicleType):'')+(record.contractOption?'<br>'+escapeHtml(record.contractOption)+' contract':'')+'</p>'+
     codeBlock+(additionalCodes?'<details class="entitlement-history"><summary>Other account codes ('+(record.codes.length-1)+')</summary><ul class="history-list">'+additionalCodes+'</ul></details>':'')+
     '<div class="usage-grid"><div class="usage-cell"><strong>'+record.monthlyAllowance+'</strong><span>Booking cap · '+escapeHtml(formatMonth(record.period))+'</span></div><div class="usage-cell"><strong>'+record.used+'</strong><span>Used this period'+(record.reserved?' · '+record.reserved+' pending':'')+'</span></div><div class="usage-cell"><strong>'+record.periodRemaining+'</strong>    <span>Booking slots left</span></div></div>'+
@@ -855,8 +867,8 @@ function renderEntitlementCard(record){
     '</div></details></article>';
 }
 function renderMonthlyEntitlements(){
-  const records=monthlyEntitlements.filter(record=>!record.archived&&matchesEntitlement(record,monthlySearch.value));
-  const activeClients=monthlyEntitlements.filter(record=>!record.archived);
+  const records=monthlyEntitlements.filter(record=>!isArchivedRecord(record)&&matchesEntitlement(record,monthlySearch.value));
+  const activeClients=monthlyEntitlements.filter(record=>!isArchivedRecord(record));
   monthlyCount.textContent=records.length+' of '+activeClients.length+' clients';
   monthlyEmpty.hidden=records.length>0;
   monthlyCards.innerHTML=records.map(renderEntitlementCard).join('');
@@ -867,7 +879,7 @@ function renderMonthlyEntitlements(){
   renderNotifications();
 }
 function renderArchivedEntitlements(){
-  const records=monthlyEntitlements.filter(record=>record.archived&&matchesEntitlement(record,archiveSearch.value));
+  const records=monthlyEntitlements.filter(record=>isArchivedRecord(record)&&matchesEntitlement(record,archiveSearch.value));
   archiveCount.textContent=records.length+' archived clients';
   archiveEmpty.hidden=records.length>0;
   archiveCards.innerHTML=records.map(renderEntitlementCard).join('');
@@ -998,7 +1010,7 @@ async function handleMonthlyCardAction(event){
     }
     if(button.dataset.action==='edit'){editMonthlyEntitlement(record);return;}
     if(button.dataset.action==='toggle'){
-      if(record.archived){
+      if(isArchivedRecord(record)){
         if(!window.confirm('Restore this archived account? Previously issued codes remain revoked; generate a new code after restoring if the customer needs access.'))return;
         await monthlyRequest('PUT',{id:record.id,active:true,archived:false,deactivationReason:'Restored and reactivated by '+managerAdminName()+'.'});
         setStatus('Client restored to Monthly clients. Old codes remain invalid; generate a new code to issue access.','ok');
