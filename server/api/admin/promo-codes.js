@@ -2,6 +2,11 @@ import crypto from 'node:crypto';
 import { applyCors } from '../_lib/cors.js';
 import { getSharedPromoBatchForAdmin, saveSharedPromoBatch } from '../_lib/store.js';
 
+const managerLogoUrl = new URL(
+    'assets/android-chrome-192x192.png',
+    process.env.SITE_URL || 'https://sage00101.github.io/atd/',
+).toString();
+
 const adminPage = `<!doctype html>
 <html lang="en">
 <head>
@@ -12,6 +17,53 @@ const adminPage = `<!doctype html>
 :root{color-scheme:light;--bg:#f6f8f6;--surface:#fff;--surface-2:#f8faf8;--surface-3:#eef4ef;--line:rgba(38,77,49,.12);--line-2:rgba(38,77,49,.2);--ink:#1d2c22;--ink-2:#405448;--muted:#718076;--accent:#4d8b5e;--accent-2:#39764d;--accent-ink:#fff;--accent-soft:rgba(77,139,94,.1);--danger:#b44740;--danger-soft:rgba(180,71,64,.1);--warn:#896516;--warn-soft:rgba(180,137,40,.12);--info:#347b94;--info-soft:rgba(52,123,148,.1);font-family:Inter,ui-sans-serif,system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased}
 *{box-sizing:border-box;scrollbar-color:#d5e0d7 transparent}
 body{margin:0;padding:28px 18px 56px;min-height:100vh;background:radial-gradient(1000px 520px at 12% -8%,rgba(77,139,94,.08),transparent 62%),radial-gradient(760px 420px at 104% 2%,rgba(77,139,94,.04),transparent 58%),var(--bg);background-attachment:fixed}
+.shell.auth-locked>.head,.shell.auth-locked>.content{filter:blur(8px);pointer-events:none;user-select:none}
+.auth-gate{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px;background:rgba(22,39,28,.26);backdrop-filter:blur(10px)}
+.auth-gate[hidden]{display:none}
+.auth-card{width:min(440px,100%);padding:30px;border:1px solid rgba(38,77,49,.16);border-radius:24px;background:rgba(255,255,255,.97);box-shadow:0 32px 100px -38px rgba(20,40,27,.42);text-align:center}
+.auth-logo{width:128px;height:128px;object-fit:contain;padding:12px;border-radius:22px;background:#1d3425}
+.auth-card h2{margin:16px 0 6px;font-size:26px;letter-spacing:-.04em}
+.auth-card p{margin:0 0 20px;color:var(--muted);font-size:13px;line-height:1.55}
+.auth-card .field-label{text-align:left}
+.auth-card #status{margin-top:12px;text-align:left}
+.manager-topbar{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.manager-brand{display:flex;align-items:center;gap:14px;min-width:0}
+.manager-brand img{width:62px;height:62px;flex:0 0 62px;object-fit:contain;padding:5px;border-radius:15px;background:#1d3425}
+.manager-brand h1{margin:0;font-size:clamp(25px,4vw,36px);line-height:1;letter-spacing:-.04em;color:#1d3425}
+.manager-brand p{margin:7px 0 0;color:var(--muted);font-size:13px}
+.manager-tools{display:flex;align-items:center;gap:8px}
+.menu-button{display:none}
+.icon-button,.menu-button{position:relative;align-items:center;justify-content:center;gap:8px;min-width:42px;min-height:42px;padding:9px 12px;border:1px solid var(--line-2);border-radius:12px;background:#fff;color:var(--ink-2);font-weight:750}
+.icon-button{display:inline-flex}
+.icon-button svg,.menu-button svg{width:18px;height:18px}
+.notification-count{position:absolute;top:-6px;right:-6px;display:grid;place-items:center;min-width:19px;height:19px;padding:0 4px;border-radius:999px;background:var(--danger);color:#fff;font-size:10px;font-weight:800}
+.manager-navbar{margin-top:22px}
+.manager-drawer-backdrop{position:fixed;inset:0;z-index:800;background:rgba(20,36,26,.36);opacity:0;pointer-events:none;transition:opacity .2s}
+.manager-drawer-backdrop.open{opacity:1;pointer-events:auto}
+.notification-drawer{position:fixed;z-index:810;inset:0 0 0 auto;width:min(420px,92vw);padding:24px;background:#fff;box-shadow:-24px 0 80px -35px rgba(18,34,24,.35);transform:translateX(105%);transition:transform .24s;overflow:auto}
+.notification-drawer.open{transform:translateX(0)}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.drawer-head h2{margin:0;font-size:20px}
+.drawer-close{width:38px;height:38px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-size:20px}
+.notification-list{display:grid;gap:10px;margin-top:18px}
+.notification-item{padding:14px;border:1px solid var(--line);border-radius:13px;background:#f8faf8}
+.notification-item strong{display:block;color:var(--ink);font-size:13px}
+.notification-item span{display:block;margin-top:5px;color:var(--muted);font-size:12px;line-height:1.5}
+.notification-item button{margin-top:10px;padding:7px 10px;border:1px solid var(--line-2);border-radius:8px;background:#fff;color:var(--accent-2);font-size:11px;font-weight:750}
+.toolbar-inline{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.toolbar-inline .manager-search{flex:1;min-width:min(100%,240px)}
+.account-collapse{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+.account-collapse>summary{display:flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#f8faf8;color:var(--ink-2);font-size:12px;font-weight:750;cursor:pointer;list-style:none}
+.account-collapse>summary::-webkit-details-marker{display:none}
+.account-collapse>summary::after{content:"＋";font-size:16px;color:var(--accent)}
+.account-collapse[open]>summary::after{content:"−"}
+.account-collapse-body{padding-top:8px}
+.payment-form{display:grid;gap:14px}
+.payment-form .field-label{margin:0}
+.payment-form .manager-input{margin-top:7px}
+.dialog-close{position:absolute;top:15px;right:15px;width:36px;height:36px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-size:20px}
+.manager-dialog-inner.has-close{position:relative;padding-top:30px}
+.notification-empty{padding:18px;border:1px dashed var(--line-2);border-radius:12px;color:var(--muted);font-size:13px;text-align:center}
 
 /* ---------- shell + header ---------- */
 .shell{max-width:1240px;margin:0 auto;border:1px solid var(--line);border-radius:24px;overflow:hidden;background:var(--surface);box-shadow:0 28px 80px -52px rgba(32,54,38,.22),0 1px 3px rgba(32,54,38,.06)}
@@ -195,24 +247,87 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 @media(max-width:420px){.calendar-frame{min-height:520px}.content{padding:16px 12px 24px}.entitlement-top{display:block}.status-pill{margin-top:10px}.promo-tab{flex:1;padding:9px 6px;font-size:11.5px}.entitlement-actions button{flex-basis:40%}.stat strong{font-size:23px}}
 
 .calendar-frame{display:block;width:100%;height:min(1050px,calc(100vh - 190px));min-height:680px;border:1px solid var(--line);border-radius:18px;background:#fff}
+.manager-navbar{display:flex;flex-wrap:wrap;width:100%;align-items:center}
+.manager-navbar .tab{flex:1 1 auto;padding:10px 12px}
+.manager-navbar .tab.active{color:var(--ink);background:linear-gradient(180deg,#fff,#f5f8f5);border-color:var(--line-2);box-shadow:inset 0 -2px 0 var(--accent)}
+.manager-navbar .tab[aria-current="page"]{color:var(--ink)}
+.account-collapse .entitlement-actions{margin-top:12px}
+.account-collapse .entitlement-history{margin-top:12px}
+.archive-label{display:inline-flex;margin-top:8px;padding:4px 8px;border-radius:999px;background:var(--danger-soft);color:var(--danger);font-size:10px;font-weight:800;text-transform:uppercase}
+@media(max-width:700px){
+  body{padding:8px 6px 24px}
+  .shell{border-radius:16px}
+  .head{padding:16px 14px}
+  .head-top{align-items:flex-start}
+  .manager-tools{margin-left:auto}
+  .manager-brand{gap:10px}
+  .manager-brand img{width:48px;height:48px;flex-basis:48px;border-radius:12px}
+  .manager-brand h1{font-size:25px}
+  .manager-brand p{font-size:11px}
+  .head .sub{font-size:12px}
+  .content{padding:15px 11px 22px}
+  .menu-button{display:inline-flex;font-size:0;width:42px;padding:9px}
+  .menu-button svg{width:19px;height:19px}
+  .manager-navbar{position:fixed;z-index:805;inset:0 auto 0 0;width:min(330px,88vw);height:100dvh;margin:0;padding:72px 14px 18px;border:0;border-radius:0 20px 20px 0;background:#fff;box-shadow:24px 0 70px -38px rgba(18,34,24,.4);display:flex;flex-direction:column;align-items:stretch;flex-wrap:nowrap;overflow:auto;transform:translateX(-105%);transition:transform .24s}
+  .manager-navbar.open{transform:translateX(0)}
+  .manager-navbar .tab{flex:0 0 auto;justify-content:flex-start;min-height:46px;padding:12px 14px;text-align:left}
+  .manager-drawer-backdrop{z-index:800}
+  .entitlement-card{padding:13px;border-radius:14px}
+  .entitlement-top{display:flex;align-items:flex-start;gap:8px}
+  .entitlement-name{font-size:15px}
+  .entitlement-meta{font-size:11.5px;line-height:1.5}
+  .status-pill{font-size:9px;padding:5px 8px}
+  .entitlement-code{margin-top:11px;padding:9px}
+  .usage-grid{gap:6px;margin-top:10px}
+  .usage-cell{padding:8px 5px}
+  .usage-cell strong{font-size:17px}
+  .usage-cell span{font-size:9px}
+  .entitlement-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:11px}
+  .entitlement-actions button{min-width:0;padding:9px 7px;font-size:10.5px;line-height:1.25}
+  .booking-request-grid,.monthly-grid{grid-template-columns:minmax(0,1fr);gap:10px}
+  .booking-request-card{padding:13px}
+  .booking-request-actions{display:grid;grid-template-columns:1fr}
+  .booking-request-actions button{min-height:42px}
+  .manager-dialog{max-height:90dvh;border-radius:16px}
+  .manager-dialog-inner{padding:20px}
+  .dialog-actions{flex-direction:column-reverse}
+  .dialog-actions button{width:100%;min-height:43px}
+  .payment-form{gap:12px}
+  .calendar-frame{height:calc(100dvh - 185px);min-height:460px}
+}
+@media(max-width:420px){
+  .conn{padding:5px 8px;font-size:9px}
+  .manager-brand h1{font-size:21px}
+  .manager-brand p{max-width:185px}
+  .icon-button,.menu-button{min-width:38px;min-height:38px}
+  .manager-tools{gap:5px}
+  .entitlement-top{display:flex}
+  .entitlement-actions{grid-template-columns:1fr 1fr}
+  .usage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .toolbar-inline{align-items:stretch}
+}
 </style>
 </head>
 <body>
-<main class="shell">
+<main class="shell auth-locked" id="managerShell">
 <header class="head">
-  <div class="head-top"><p class="eyebrow"><span class="pulse"></span>A10tion To Detail · Operations</p><span id="connState" class="conn" data-state="off" role="status">Not connected</span></div>
-  <h1>Business manager</h1>
-  <p class="sub">Review booking requests, manage promo code batches and monthly clients, and update booking availability.</p>
+  <div class="head-top"><p class="eyebrow"><span class="pulse"></span>A10tion To Detail · Operations</p><div class="manager-tools"><span id="connState" class="conn" data-state="off" role="status">Not connected</span><button id="notificationButton" class="icon-button" type="button" aria-label="Open notifications" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg><span id="notificationCount" class="notification-count" hidden>0</span></button><button id="menuButton" class="menu-button" type="button" aria-expanded="false" aria-controls="managerTabs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Menu</span></button></div></div>
+  <div class="manager-topbar"><div class="manager-brand"><img src="${managerLogoUrl}" alt="A10tion To Detail logo"><div><h1>Welcome A10tion</h1><p>Your bookings and customer accounts, at a glance.</p></div></div></div>
+  <p class="sub">Start with new booking requests, then manage monthly clients, activity, and availability from one place.</p>
+  <div class="manager-drawer-backdrop" id="managerDrawerBackdrop"></div>
+  <nav id="managerTabs" class="tabs manager-navbar" role="navigation" aria-label="Business manager menu">
+    <button id="bookingRequestsTab" class="tab active" data-tab="requests" type="button" aria-current="page">New requests</button>
+    <button id="clientsTab" class="tab" data-tab="clients" type="button">Monthly clients</button>
+    <button id="archivedTab" class="tab" data-tab="archived" type="button">Archived</button>
+    <button id="expiredTab" class="tab" data-tab="expired" type="button">Expired requests</button>
+    <button id="activityTab" class="tab" data-tab="activity" type="button">Activity</button>
+    <button id="promoTab" class="tab" data-tab="promo" type="button">Promo codes</button>
+    <button id="calendarTab" class="tab" data-tab="calendar" type="button">Calendar</button>
+  </nav>
 </header>
 <section class="content">
-<div class="auth-row"><input id="adminKey" type="password" autocomplete="current-password" placeholder="Admin or calendar API key" aria-label="Admin or calendar API key"><button id="connect" type="button">Connect managers</button></div>
 <p id="status" role="status" aria-live="polite"></p>
-<nav class="tabs" role="tablist" aria-label="Business manager sections">
-  <button id="promoTab" class="tab" type="button" role="tab" aria-selected="true" aria-controls="promoPanel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>Promo codes</button>
-  <button id="bookingRequestsTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="bookingRequestsPanel">Booking Requests</button>
-  <button id="calendarTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="calendarPanel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 10h18"/></svg>Calendar</button>
-</nav>
-<section id="promoPanel" class="tab-panel" role="tabpanel" aria-labelledby="promoTab">
+<section id="promoPanel" class="tab-panel" role="tabpanel" aria-labelledby="promoTab" hidden>
 <nav class="promo-tabs" role="tablist" aria-label="Promo code type">
   <button id="singleWashTab" class="promo-tab" type="button" role="tab" aria-selected="true" aria-controls="singleWashPanel">Single Washes</button>
   <button id="monthlyWashTab" class="promo-tab" type="button" role="tab" aria-selected="false" aria-controls="monthlyWashPanel">Monthly Clients</button>
@@ -227,7 +342,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 <pre id="summary"></pre>
 </section>
 <section id="monthlyWashPanel" class="promo-panel" role="tabpanel" aria-labelledby="monthlyWashTab" hidden>
-  <p class="note">A confirmed first package payment automatically creates and emails a random access code. Standard permits up to 2 bookings per billing period and Premium up to 4. Unused prepaid washes roll over, but the per-period booking cap remains. Record each later payment here; the customer keeps the same code and receives the added wash credits by email.</p>
+  <p class="note">A confirmed first package payment automatically creates and emails a random access code. Standard permits up to 2 bookings per billing period and Premium up to 4. Unused prepaid washes roll over, but the per-period booking cap remains. Each recorded payment adds the package credits, creates a fresh access code, and emails the customer.</p>
   <div id="monthlyStats" class="stat-row" hidden></div>
   <h2 id="monthlyFormTitle" class="section-title">Create monthly entitlement</h2>
   <form id="monthlyForm" class="manager-form">
@@ -273,9 +388,23 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
       </div>
     </div>
   </dialog>
+  <dialog id="paymentDialog" class="manager-dialog">
+    <form id="paymentForm" class="manager-dialog-inner has-close payment-form">
+      <button id="paymentClose" class="dialog-close" type="button" aria-label="Close payment form">×</button>
+      <h2>Record payment</h2>
+      <p>Save the payment and email the customer a newly generated access code.</p>
+      <label class="field-label">Amount paid (R)<input id="paymentAmount" class="manager-input" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
+      <label class="field-label">Payment date<input id="paymentDate" class="manager-input" type="date" required></label>
+      <label class="field-label">Payment reference <span class="optional">(optional)</span><input id="paymentReference" class="manager-input" maxlength="120" placeholder="Receipt, bank or card reference"></label>
+      <div class="dialog-actions">
+        <button id="paymentCancel" class="secondary" type="button">Close</button>
+        <button id="paymentSubmit" type="submit">Record payment</button>
+      </div>
+    </form>
+  </dialog>
 </section>
 </section>
-<section id="bookingRequestsPanel" class="tab-panel" role="tabpanel" aria-labelledby="bookingRequestsTab" hidden>
+<section id="bookingRequestsPanel" class="tab-panel" role="tabpanel" aria-labelledby="bookingRequestsTab">
   <p class="note">Review website booking requests before payment or final confirmation. Pending requests hold their selected time for 3 days; monthly wash credits are not reserved until the approved customer completes the booking.</p>
   <div class="booking-requests-toolbar">
     <label class="field-label">Administrator name<input id="bookingRequestAdmin" class="manager-input" maxlength="100" autocomplete="name" placeholder="Business Manager admin"></label>
@@ -307,11 +436,45 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
     </div>
   </dialog>
 </section>
+<section id="archivedPanel" class="tab-panel" hidden>
+  <div class="toolbar-inline"><div><h2 class="section-title" style="margin-top:0">Archived monthly clients</h2><p class="hint">Archived records are retained for history and cannot use access codes.</p></div><input id="archiveSearch" class="manager-search" type="search" placeholder="Search archived accounts" aria-label="Search archived clients"></div>
+  <p id="archiveCount" class="hint" aria-live="polite"></p>
+  <div id="archiveCards" class="monthly-grid"></div>
+  <div id="archiveEmpty" class="empty-state" hidden>No archived clients match your search.</div>
+</section>
+<section id="expiredRequestsPanel" class="tab-panel" hidden>
+  <h2 class="section-title" style="margin-top:0">Expired requests</h2>
+  <p class="hint">Booking requests and continuation links that expired or were cancelled.</p>
+  <div id="expiredRequestCards" class="booking-request-grid"></div>
+  <div id="expiredRequestsEmpty" class="empty-state" hidden>No expired or cancelled requests.</div>
+</section>
+<section id="activityPanel" class="tab-panel" hidden>
+  <h2 class="section-title" style="margin-top:0">Recent booking activity</h2>
+  <p class="hint">Recently accepted and declined booking requests.</p>
+  <div id="activityCards" class="booking-request-grid"></div>
+  <div id="activityEmpty" class="empty-state" hidden>No recent accepted or declined requests.</div>
+</section>
 <section id="calendarPanel" class="tab-panel" role="tabpanel" aria-labelledby="calendarTab" hidden>
   <iframe id="calendarFrame" class="calendar-frame" title="Booking calendar manager" loading="lazy"></iframe>
 </section>
 </section>
 </main>
+<div id="authGate" class="auth-gate">
+  <form id="authForm" class="auth-card">
+    <img class="auth-logo" src="${managerLogoUrl}" alt="A10tion To Detail logo">
+    <h2>Welcome A10tion</h2>
+    <p>Enter your Business Manager API key to securely open your operations dashboard.</p>
+    <label class="field-label" for="adminKey">Business Manager API key</label>
+    <input id="adminKey" class="manager-input" type="password" autocomplete="current-password" placeholder="Enter API key" required>
+    <button id="connect" type="submit" style="width:100%;margin-top:14px">Open Business Manager</button>
+    <p id="authStatus" class="hint" role="status" aria-live="polite"></p>
+  </form>
+</div>
+<aside id="notificationDrawer" class="notification-drawer" aria-label="Important notifications" aria-hidden="true">
+  <div class="drawer-head"><h2>Important notifications</h2><button id="notificationClose" class="drawer-close" type="button" aria-label="Close notifications">×</button></div>
+  <p class="hint">Accounts that need attention appear here.</p>
+  <div id="notificationList" class="notification-list"></div>
+</aside>
 <script>
 const keyInput=document.getElementById('adminKey');
 const rowsInput=document.getElementById('pairs');
@@ -327,6 +490,37 @@ const bookingRequestsTab=document.getElementById('bookingRequestsTab');
 const promoPanel=document.getElementById('promoPanel');
 const calendarPanel=document.getElementById('calendarPanel');
 const bookingRequestsPanel=document.getElementById('bookingRequestsPanel');
+const archivedPanel=document.getElementById('archivedPanel');
+const expiredRequestsPanel=document.getElementById('expiredRequestsPanel');
+const activityPanel=document.getElementById('activityPanel');
+const archiveCards=document.getElementById('archiveCards');
+const managerTabsNode=document.getElementById('managerTabs');
+const archiveSearch=document.getElementById('archiveSearch');
+const archiveCount=document.getElementById('archiveCount');
+const archiveEmpty=document.getElementById('archiveEmpty');
+const expiredRequestCards=document.getElementById('expiredRequestCards');
+const expiredRequestsEmpty=document.getElementById('expiredRequestsEmpty');
+const activityCards=document.getElementById('activityCards');
+const activityEmpty=document.getElementById('activityEmpty');
+const promoTabsNode=document.querySelector('.promo-tabs');
+const managerTabs=[...document.querySelectorAll('#managerTabs .tab')];
+const managerShell=document.getElementById('managerShell');
+const authGate=document.getElementById('authGate');
+const authForm=document.getElementById('authForm');
+const authStatus=document.getElementById('authStatus');
+const menuButton=document.getElementById('menuButton');
+const managerDrawerBackdrop=document.getElementById('managerDrawerBackdrop');
+const notificationButton=document.getElementById('notificationButton');
+const notificationCount=document.getElementById('notificationCount');
+const notificationDrawer=document.getElementById('notificationDrawer');
+const notificationClose=document.getElementById('notificationClose');
+const notificationList=document.getElementById('notificationList');
+const paymentDialog=document.getElementById('paymentDialog');
+const paymentForm=document.getElementById('paymentForm');
+const paymentAmount=document.getElementById('paymentAmount');
+const paymentDate=document.getElementById('paymentDate');
+const paymentReference=document.getElementById('paymentReference');
+const paymentSubmit=document.getElementById('paymentSubmit');
 const bookingRequestCards=document.getElementById('bookingRequestCards');
 const bookingRequestsEmpty=document.getElementById('bookingRequestsEmpty');
 const bookingRequestsCount=document.getElementById('bookingRequestsCount');
@@ -364,6 +558,7 @@ let pendingMonthlyPurchases=[];
 let pendingBulkRunId='';
 let bookingRequests=[];
 let selectedDeclineRequestId='';
+let selectedPaymentEntitlementId='';
 const managerStorageKey='a10tion-admin-manager-key';
 function setStatus(message,type=''){statusNode.textContent=message;statusNode.className=type;}
 function setConn(isOn){connStateNode.dataset.state=isOn?'on':'off';connStateNode.textContent=isOn?'Connected':'Not connected';}
@@ -381,18 +576,24 @@ function renderMonthlyStats(){
   monthlyStatsNode.hidden=false;
 }
 function activateTab(tab){
-  const isCalendar=tab==='calendar';
-  const isRequests=tab==='requests';
-  promoTab.setAttribute('aria-selected',String(!isCalendar&&!isRequests));
-  bookingRequestsTab.setAttribute('aria-selected',String(isRequests));
-  calendarTab.setAttribute('aria-selected',String(isCalendar));
-  promoPanel.hidden=isCalendar||isRequests;
-  bookingRequestsPanel.hidden=!isRequests;
-  calendarPanel.hidden=!isCalendar;
-  if(isRequests) loadBookingRequests();
-  if(isCalendar&&!calendarFrame.src){
-    if(!connectManagers()) return;
-  }
+  bookingRequestsPanel.hidden=tab!=='requests';
+  promoPanel.hidden=tab!=='clients'&&tab!=='promo';
+  archivedPanel.hidden=tab!=='archived';
+  expiredRequestsPanel.hidden=tab!=='expired';
+  activityPanel.hidden=tab!=='activity';
+  calendarPanel.hidden=tab!=='calendar';
+  managerTabs.forEach(button=>{
+    const active=button.dataset.tab===tab;
+    button.classList.toggle('active',active);
+    button.setAttribute('aria-current',active?'page':'false');
+  });
+  promoTabsNode.hidden=tab==='clients';
+  if(tab==='clients') activatePromoTab('monthly');
+  if(tab==='promo') activatePromoTab('single');
+  closeManagerMenu();
+  if(['requests','expired','activity'].includes(tab)) loadBookingRequests();
+  if(tab==='archived') loadMonthlyEntitlements();
+  if(tab==='calendar'&&!calendarFrame.src) connectManagers();
 }
 function activatePromoTab(tab){
   const isMonthly=tab==='monthly';
@@ -437,10 +638,7 @@ function requestDisplayValue(value){
   if(value===null||value===undefined||value==='') return '—';
   return typeof value==='object'?JSON.stringify(value):String(value);
 }
-function renderBookingRequests(){
-  bookingRequestsCount.textContent=bookingRequests.length+' requests';
-  bookingRequestsEmpty.hidden=bookingRequests.length>0;
-  bookingRequestCards.innerHTML=bookingRequests.map(record=>{
+function renderBookingRequestCard(record,showActions=false){
     const customer=record.booking?.customer||{};
     const identity=(String(customer.firstName||'')+' '+String(customer.surname||'')).trim()||'Customer';
     const detailRows=[];
@@ -455,13 +653,51 @@ function renderBookingRequests(){
     if(record.approvedBy) detailRows.push(['Approved by',record.approvedBy],['Approved at',record.approvedAt]);
     if(record.declinedBy) detailRows.push(['Declined by',record.declinedBy],['Declined at',record.declinedAt],['Decline reason',record.declineReason]);
     const details=detailRows.map(([label,value])=>'<dt>'+escapeHtml(label)+'</dt><dd>'+escapeHtml(requestDisplayValue(value))+'</dd>').join('');
-    const actions=record.status==='pending_approval'
+    const actions=showActions&&record.status==='pending_approval'
       ?'<div class="booking-request-actions"><button type="button" data-request-action="accept" data-id="'+escapeHtml(record.id)+'">Accept Booking</button><button type="button" class="danger" data-request-action="decline" data-id="'+escapeHtml(record.id)+'">Decline Booking</button></div>'
-      :['approved','awaiting_completion','declined'].includes(record.status)
+      :showActions&&['approved','awaiting_completion','declined'].includes(record.status)
         ?'<div class="booking-request-actions"><button type="button" data-request-action="resend-email" data-id="'+escapeHtml(record.id)+'">Resend customer decision email</button></div>'
         :'';
-    return '<article class="booking-request-card" data-id="'+escapeHtml(record.id)+'"><div class="entitlement-top"><div><h3>'+escapeHtml(identity)+'</h3><p class="booking-request-meta">'+escapeHtml(customer.email||'')+' · '+escapeHtml(record.reference)+'<br>'+escapeHtml(record.publicStatus||record.status)+'</p></div><span class="status-pill">'+escapeHtml(record.publicStatus||record.status)+'</span></div><details><summary>Open full request details</summary><dl class="booking-request-details">'+details+'</dl></details>'+actions+'</article>';
-  }).join('');
+    const occurredAt=record.approvedAt||record.declinedAt||record.updatedAt||record.submittedAt;
+    return '<article class="booking-request-card" data-id="'+escapeHtml(record.id)+'"><div class="entitlement-top"><div><h3>'+escapeHtml(identity)+'</h3><p class="booking-request-meta">'+escapeHtml(customer.email||'')+' · '+escapeHtml(record.reference)+'<br>'+escapeHtml(record.publicStatus||record.status)+'</p></div><span class="status-pill">'+escapeHtml(record.publicStatus||record.status)+'</span></div>'+(showActions?'':'<p class="booking-request-meta">Activity · '+escapeHtml(occurredAt||'')+'</p>')+'<details><summary>Open full request details</summary><dl class="booking-request-details">'+details+'</dl></details>'+actions+'</article>';
+}
+function renderBookingRequests(){
+  const pending=bookingRequests.filter(record=>record.status==='pending_approval');
+  bookingRequestsCount.textContent=pending.length+' pending request'+(pending.length===1?'':'s');
+  bookingRequestsEmpty.hidden=pending.length>0;
+  bookingRequestCards.innerHTML=pending.map(record=>renderBookingRequestCard(record,true)).join('');
+}
+function renderExpiredRequests(){
+  const expired=bookingRequests.filter(record=>['expired','cancelled'].includes(record.status));
+  expiredRequestCards.innerHTML=expired.map(record=>renderBookingRequestCard(record)).join('');
+  expiredRequestsEmpty.hidden=expired.length>0;
+}
+function renderBookingActivity(){
+  const activity=bookingRequests.filter(record=>['approved','awaiting_completion','confirmed','declined'].includes(record.status))
+    .sort((left,right)=>new Date(right.approvedAt||right.declinedAt||right.updatedAt||0)-new Date(left.approvedAt||left.declinedAt||left.updatedAt||0))
+    .slice(0,100);
+  activityCards.innerHTML=activity.map(record=>renderBookingRequestCard(record)).join('');
+  activityEmpty.hidden=activity.length>0;
+}
+function renderNotifications(){
+  const exhausted=monthlyEntitlements.filter(record=>!record.archived&&record.active&&Number(record.creditsAvailable)<1);
+  const expired=bookingRequests.filter(record=>['expired','cancelled'].includes(record.status));
+  const pending=bookingRequests.filter(record=>record.status==='pending_approval');
+  const items=[
+    ...exhausted.map(record=>'<article class="notification-item"><strong>Wash credits exhausted</strong><span>'+escapeHtml(record.customerName)+' · '+escapeHtml(record.email)+' has no prepaid washes remaining.</span><button type="button" data-open-tab="clients">Open monthly clients</button></article>'),
+    ...(expired.length?['<article class="notification-item"><strong>'+expired.length+' expired or cancelled request'+(expired.length===1?'':'s')+'</strong><span>Review requests that can no longer be completed.</span><button type="button" data-open-tab="expired">Review expired requests</button></article>']:[]),
+    ...(pending.length?['<article class="notification-item"><strong>'+pending.length+' request'+(pending.length===1?'':'s')+' awaiting review</strong><span>New bookings are waiting for an accept or decline decision.</span><button type="button" data-open-tab="requests">Open new requests</button></article>']:[]),
+  ];
+  const count=items.length;
+  notificationCount.textContent=count>99?'99+':String(count);
+  notificationCount.hidden=count===0;
+  notificationList.innerHTML=items.join('')||'<div class="notification-empty">You’re all caught up. No important notifications.</div>';
+}
+function renderBookingDashboards(){
+  renderBookingRequests();
+  renderExpiredRequests();
+  renderBookingActivity();
+  renderNotifications();
 }
 async function loadBookingRequests(){
   bookingRequestsReload.disabled=true;
@@ -469,12 +705,18 @@ async function loadBookingRequests(){
   try{
     const result=await bookingRequestsApi();
     bookingRequests=Array.isArray(result.requests)?result.requests:[];
-    renderBookingRequests();
-    setStatus('Booking requests refreshed.','ok');
+    renderBookingDashboards();
+    if(['requests','expired','activity'].some(tab=>managerTabs.find(button=>button.dataset.tab===tab)?.classList.contains('active')))setStatus('Booking requests refreshed.','ok');
   }catch(error){
+    bookingRequests=[];
     bookingRequestCards.innerHTML='';
+    expiredRequestCards.innerHTML='';
+    activityCards.innerHTML='';
+    renderNotifications();
     bookingRequestsEmpty.hidden=false;
     bookingRequestsEmpty.textContent=error.message;
+    expiredRequestsEmpty.hidden=false;
+    activityEmpty.hidden=false;
     setStatus(error.message,'error');
   }finally{
     bookingRequestCards.removeAttribute('aria-busy');
@@ -522,58 +764,100 @@ function formatMonth(value){
 function formatZar(cents){
   return 'R'+(Number(cents||0)/100).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
+function localToday(){
+  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Johannesburg',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const values=Object.fromEntries(parts.map(({type,value})=>[type,value]));
+  return values.year+'-'+values.month+'-'+values.day;
+}
 function packageLabel(record){
   const group=record.clientType==='business'?'Business / Fleet / Family':'Private Client';
   const tier=record.packageTier==='premium'?'Premium':'Standard';
   return group+' · '+tier+' Package';
 }
-function renderMonthlyEntitlements(){
-  const query=monthlySearch.value.trim().toLowerCase();
-  const records=monthlyEntitlements.filter(record=>[
-    record.customerName,record.email,record.customerPhone,record.businessName,record.code,record.clientType,record.packageTier,record.status,
-  ].some(value=>String(value||'').toLowerCase().includes(query)));
-  monthlyCount.textContent=records.length+' of '+monthlyEntitlements.length+' entitlements';
-  monthlyEmpty.hidden=records.length>0;
-  monthlyCards.innerHTML=records.map(record=>{
-    const slug=String(record.status||'').toLowerCase().replace(/\\s+/g,'-');
-    const codeHistory=(record.codeHistory||[]).map(entry=>{
-      const oldCode=String(entry.code||'');
-      const masked=oldCode.includes('****')?oldCode:(oldCode.length>4?oldCode.slice(0,5)+'****'+oldCode.slice(-4):'****');
-      return '<li>Previous code <strong>'+escapeHtml(masked)+'</strong> · replaced '+escapeHtml(new Date(entry.replacedAt).toLocaleDateString('en-ZA'))+'</li>';
-    }).join('');
-    const auditHistory=(record.auditHistory||[]).map(entry=>{
-      const changes=Object.entries(entry.changes||{}).map(([field,value])=>field+': '+String(value.from??'—')+' → '+String(value.to??'—')).join('; ');
-      return '<li><strong>'+escapeHtml(entry.action||'updated')+'</strong> · '+escapeHtml(new Date(entry.createdAt).toLocaleString('en-ZA'))+(changes?' · '+escapeHtml(changes):'')+(entry.reason?' · Reason: '+escapeHtml(entry.reason):'')+'</li>';
-    }).join('');
-    const emailHistory=(record.distributionHistory||[]).map(entry=>{
-      const emailStatus=entry.status==='accepted'?'accepted by provider · delivery pending':entry.status||'unknown';
-      return '<li><strong>Access-code email '+escapeHtml(emailStatus)+'</strong> · '+escapeHtml(new Date(entry.createdAt).toLocaleString('en-ZA'))+' · '+escapeHtml(entry.recipient||record.email)+' · Code '+escapeHtml(entry.codeReference||'masked')+(entry.providerStatus?' · '+escapeHtml(entry.providerStatus):'')+(entry.providerEmailId?' · Resend ID '+escapeHtml(entry.providerEmailId):'')+(entry.failureReason?' · '+escapeHtml(entry.failureReason):'')+'</li>';
-    }).join('');
-    const usageHistory=(record.history||[]).map(entry=>{
-      if(typeof entry==='string'){try{entry=JSON.parse(entry);}catch{return '';}}
-      const packageDetails=entry.customerTypeLabel&&entry.packageLabel?' · '+escapeHtml(entry.customerTypeLabel)+' · '+escapeHtml(entry.packageLabel)+' ('+escapeHtml(entry.monthlyAllowance)+' washes)':'';
-      const remainingDetails=entry.remainingAfter!==undefined?' · '+escapeHtml(entry.remainingAfter)+' remaining after booking':'';
-      const contactDetails=[entry.businessName,entry.customerPhone].filter(Boolean).map(escapeHtml).join(' · ');
-      return '<li><strong>'+escapeHtml(entry.bookingDate||'')+' '+escapeHtml(entry.bookingTime||'')+'</strong> · '+escapeHtml(entry.vehicleType||'Wash')+packageDetails+(contactDetails?' · '+contactDetails:'')+' · '+escapeHtml(entry.registration||'')+' · Ref '+escapeHtml(entry.reference||'')+' · '+escapeHtml(formatMonth(entry.period||''))+remainingDetails+'</li>';
-    }).join('');
-    const paymentHistory=(record.paymentHistory||[]).map(entry=>'<li><strong>'+escapeHtml(entry.type==='initial'?'Initial package payment':'Monthly payment')+'</strong> · '+escapeHtml(new Date(entry.paidAt).toLocaleString('en-ZA'))+' · '+escapeHtml(formatZar(entry.amountCents))+' · '+escapeHtml(entry.creditsAdded||record.monthlyAllowance)+' washes added · Ref '+escapeHtml(entry.reference||'')+(entry.packageName?' · '+escapeHtml(entry.packageName):'')+'</li>').join('');
-    const additionalCodes=(record.codes||[])
-      .filter(entry=>entry.code&&entry.code!==record.code)
-      .map(entry=>'<li><code>'+escapeHtml(entry.code)+'</code><button type="button" data-action="copy" data-code="'+escapeHtml(entry.code)+'">Copy</button> · generated '+escapeHtml(new Date(entry.createdAt).toLocaleDateString('en-ZA'))+'</li>').join('');
-    const dateRange='Active '+escapeHtml(record.validFrom||'')+(record.validUntil?' – '+escapeHtml(record.validUntil):' · no end date');
-    return '<article class="entitlement-card" data-id="'+escapeHtml(record.id)+'">'+
-      '<div class="entitlement-top"><div><h3 class="entitlement-name">'+escapeHtml(record.customerName)+'</h3><p class="entitlement-meta">'+escapeHtml(record.email)+' · '+escapeHtml(record.customerPhone||'No phone')+(record.businessName?'<br>'+escapeHtml(record.businessName):'')+'<br>'+escapeHtml(packageLabel(record))+' · '+escapeHtml(dateRange)+(record.vehicleType?'<br>'+escapeHtml(record.vehicleType):'')+(record.contractOption?'<br>'+escapeHtml(record.contractOption)+' contract':'')+'</p></div><span class="status-pill '+slug+'">'+escapeHtml(record.status)+'</span></div>'+
-      '<div class="entitlement-code"><code>'+escapeHtml(record.code)+'</code><button type="button" data-action="copy" data-code="'+escapeHtml(record.code)+'">Copy</button></div>'+
-      (additionalCodes?'<details class="entitlement-history"><summary>Other account codes ('+(record.codes.length-1)+')</summary><ul class="history-list">'+additionalCodes+'</ul></details>':'')+
-      '<div class="usage-grid"><div class="usage-cell"><strong>'+record.monthlyAllowance+'</strong><span>Booking cap · '+escapeHtml(formatMonth(record.period))+'</span></div><div class="usage-cell"><strong>'+record.used+'</strong><span>Used this period'+(record.reserved?' · '+record.reserved+' pending':'')+'</span></div><div class="usage-cell"><strong>'+record.periodRemaining+'</strong><span>Booking slots left</span></div><div class="usage-cell"><strong>'+record.creditsAvailable+'</strong><span>Wash credits available</span></div></div>'+
-      '<p class="hint" style="margin:8px 0 0">Reserved credits across bookings: '+escapeHtml(record.creditsReserved||0)+' · Billing period: '+escapeHtml(record.period)+' to '+escapeHtml(record.periodEnd||'')+'</p>'+
-      '<div class="entitlement-actions"><button type="button" data-action="generate-code">Generate another code</button><button type="button" data-action="email">Email latest code</button><button type="button" data-action="payment">Record monthly payment</button><button type="button" data-action="edit">Edit details</button><button type="button" data-action="replace">Replace all codes</button><button type="button" data-action="toggle">'+(record.active?'Deactivate account':'Reactivate account')+'</button><button class="danger" type="button" data-action="archive">Archive</button></div>'+
-      '<details class="entitlement-history"><summary>Booking, payment, access and audit history ('+((record.history||[]).length+(record.paymentHistory||[]).length+(record.codeHistory||[]).length+(record.distributionHistory||[]).length+(record.auditHistory||[]).length)+')</summary><ul class="history-list">'+(usageHistory||'<li>No confirmed monthly wash bookings yet.</li>')+paymentHistory+codeHistory+emailHistory+auditHistory+(record.deactivationReason?'<li>Current status reason: '+escapeHtml(record.deactivationReason)+'</li>':'')+'</ul></details>'+
-      '</article>';
+function normalizeSearch(value){
+  return String(value||'').toLocaleLowerCase('en-ZA').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+}
+function matchesEntitlement(record,query){
+  if(!query)return true;
+  const fields=[
+    record.customerName,record.firstName,record.surname,record.email,record.customerPhone,
+    String(record.customerPhone||'').replace(/\D/g,''),record.businessName,record.clientType,
+    record.packageTier,record.status,record.id,record.code,
+    ...(record.codes||[]).map(entry=>entry.code),
+    ...(record.codeHistory||[]).map(entry=>entry.code),
+    ...(record.paymentHistory||[]).flatMap(entry=>[entry.reference,entry.gatewayReference]),
+  ].filter(Boolean).map(normalizeSearch);
+  const tokens=normalizeSearch(query).split(/\s+/).filter(Boolean);
+  return tokens.every(token=>fields.some(field=>field.includes(token)));
+}
+function renderEntitlementCard(record){
+  const slug=String(record.status||'').toLowerCase().replace(/\\s+/g,'-');
+  const codeHistory=(record.codeHistory||[]).map(entry=>{
+    const oldCode=String(entry.code||'');
+    const masked=oldCode.includes('****')?oldCode:(oldCode.length>4?oldCode.slice(0,5)+'****'+oldCode.slice(-4):'****');
+    return '<li>Previous code <strong>'+escapeHtml(masked)+'</strong> · revoked/replaced '+escapeHtml(new Date(entry.replacedAt).toLocaleDateString('en-ZA'))+'</li>';
   }).join('');
+  const auditHistory=(record.auditHistory||[]).map(entry=>{
+    const changes=Object.entries(entry.changes||{}).map(([field,value])=>field+': '+String(value.from??'—')+' → '+String(value.to??'—')).join('; ');
+    return '<li><strong>'+escapeHtml(entry.action||'updated')+'</strong> · '+escapeHtml(new Date(entry.createdAt).toLocaleString('en-ZA'))+(changes?' · '+escapeHtml(changes):'')+(entry.reason?' · Reason: '+escapeHtml(entry.reason):'')+'</li>';
+  }).join('');
+  const emailHistory=(record.distributionHistory||[]).map(entry=>{
+    const emailStatus=entry.status==='accepted'?'accepted by provider · delivery pending':entry.status||'unknown';
+    return '<li><strong>Access-code email '+escapeHtml(emailStatus)+'</strong> · '+escapeHtml(new Date(entry.createdAt).toLocaleString('en-ZA'))+' · '+escapeHtml(entry.recipient||record.email)+' · Code '+escapeHtml(entry.codeReference||'masked')+(entry.providerStatus?' · '+escapeHtml(entry.providerStatus):'')+(entry.providerEmailId?' · Resend ID '+escapeHtml(entry.providerEmailId):'')+(entry.failureReason?' · '+escapeHtml(entry.failureReason):'')+'</li>';
+  }).join('');
+  const usageHistory=(record.history||[]).map(entry=>{
+    if(typeof entry==='string'){try{entry=JSON.parse(entry);}catch{return '';}}
+    const packageDetails=entry.customerTypeLabel&&entry.packageLabel?' · '+escapeHtml(entry.customerTypeLabel)+' · '+escapeHtml(entry.packageLabel)+' ('+escapeHtml(entry.monthlyAllowance)+' washes)':'';
+    const remainingDetails=entry.remainingAfter!==undefined?' · '+escapeHtml(entry.remainingAfter)+' remaining after booking':'';
+    const contactDetails=[entry.businessName,entry.customerPhone].filter(Boolean).map(escapeHtml).join(' · ');
+    return '<li><strong>'+escapeHtml(entry.bookingDate||'')+' '+escapeHtml(entry.bookingTime||'')+'</strong> · '+escapeHtml(entry.vehicleType||'Wash')+packageDetails+(contactDetails?' · '+contactDetails:'')+' · '+escapeHtml(entry.registration||'')+' · Ref '+escapeHtml(entry.reference||'')+' · '+escapeHtml(formatMonth(entry.period||''))+remainingDetails+'</li>';
+  }).join('');
+  const paymentHistory=(record.paymentHistory||[]).map(entry=>'<li><strong>'+escapeHtml(entry.type==='initial'?'Initial package payment':'Payment')+'</strong> · '+escapeHtml(entry.paidAt?new Date(entry.paidAt).toLocaleDateString('en-ZA'):'')+' · '+escapeHtml(formatZar(entry.amountCents))+' · '+escapeHtml(entry.creditsAdded||record.monthlyAllowance)+' washes added · Ref '+escapeHtml(entry.reference||'')+(entry.packageName?' · '+escapeHtml(entry.packageName):'')+'</li>').join('');
+  const additionalCodes=(record.codes||[])
+    .filter(entry=>entry.code&&entry.code!==record.code)
+    .map(entry=>'<li><code>'+escapeHtml(entry.code)+'</code><button type="button" data-action="copy" data-code="'+escapeHtml(entry.code)+'">Copy</button> · generated '+escapeHtml(new Date(entry.createdAt).toLocaleDateString('en-ZA'))+'</li>').join('');
+  const dateRange='Active '+escapeHtml(record.validFrom||'')+(record.validUntil?' – '+escapeHtml(record.validUntil):' · no end date');
+  const canIssueCode=record.active&&!record.archived;
+  const actions=[
+    canIssueCode?'<button type="button" data-action="generate-code">'+(record.code?'Generate another code':'Generate code')+'</button>':'',
+    canIssueCode&&record.code?'<button type="button" data-action="email">Email latest code</button>':'',
+    canIssueCode?'<button type="button" data-action="payment">Record payment</button>':'',
+    '<button type="button" data-action="edit">Edit details</button>',
+    '<button type="button" data-action="toggle">'+(record.archived?'Restore & reactivate':record.active?'Deactivate account':'Reactivate account')+'</button>',
+    !record.archived?'<button class="danger" type="button" data-action="archive">Archive</button>':'',
+  ].filter(Boolean).join('');
+  const codeBlock=record.code
+    ?'<div class="entitlement-code"><code>'+escapeHtml(record.code)+'</code><button type="button" data-action="copy" data-code="'+escapeHtml(record.code)+'">Copy</button></div>'
+    :'<p class="hint" role="status">'+(record.active?'No active code. Generate a new code to restore customer access.':'Access code revoked. Reactivate, then generate a fresh code if needed.')+'</p>';
+  return '<article class="entitlement-card" data-id="'+escapeHtml(record.id)+'">'+
+    '<div class="entitlement-top"><div><h3 class="entitlement-name">'+escapeHtml(record.customerName)+'</h3><p class="entitlement-meta">'+escapeHtml(record.email)+' · '+escapeHtml(record.customerPhone||'No phone')+'<br>'+escapeHtml(packageLabel(record))+' · '+escapeHtml(record.creditsAvailable)+' credits left</p></div><span class="status-pill '+slug+'">'+escapeHtml(record.status)+'</span></div>'+
+    (record.archived?'<span class="archive-label">Archived record</span>':'')+
+    '<details class="account-collapse"><summary>Expand / collapse account</summary><div class="account-collapse-body">'+
+    '<p class="entitlement-meta">'+escapeHtml(record.businessName||'')+(record.businessName?'<br>':'')+escapeHtml(dateRange)+(record.vehicleType?'<br>'+escapeHtml(record.vehicleType):'')+(record.contractOption?'<br>'+escapeHtml(record.contractOption)+' contract':'')+'</p>'+
+    codeBlock+(additionalCodes?'<details class="entitlement-history"><summary>Other account codes ('+(record.codes.length-1)+')</summary><ul class="history-list">'+additionalCodes+'</ul></details>':'')+
+    '<div class="usage-grid"><div class="usage-cell"><strong>'+record.monthlyAllowance+'</strong><span>Booking cap · '+escapeHtml(formatMonth(record.period))+'</span></div><div class="usage-cell"><strong>'+record.used+'</strong><span>Used this period'+(record.reserved?' · '+record.reserved+' pending':'')+'</span></div><div class="usage-cell"><strong>'+record.periodRemaining+'</strong><span>Booking slots left</span></div><div class="usage-cell"><strong>'+record.creditsAvailable+'</strong><span>Wash credits available</span></div></div>'+
+    '<p class="hint" style="margin:8px 0 0">Reserved credits across bookings: '+escapeHtml(record.creditsReserved||0)+' · Billing period: '+escapeHtml(record.period)+' to '+escapeHtml(record.periodEnd||'')+'</p>'+
+    '<div class="entitlement-actions">'+actions+'</div>'+
+    '<details class="entitlement-history"><summary>Booking, payment, access and audit history ('+((record.history||[]).length+(record.paymentHistory||[]).length+(record.codeHistory||[]).length+(record.distributionHistory||[]).length+(record.auditHistory||[]).length)+')</summary><ul class="history-list">'+(usageHistory||'<li>No confirmed monthly wash bookings yet.</li>')+paymentHistory+codeHistory+emailHistory+auditHistory+(record.deactivationReason?'<li>Current status reason: '+escapeHtml(record.deactivationReason)+'</li>':'')+'</ul></details>'+
+    '</div></details></article>';
+}
+function renderMonthlyEntitlements(){
+  const records=monthlyEntitlements.filter(record=>!record.archived&&matchesEntitlement(record,monthlySearch.value));
+  const activeClients=monthlyEntitlements.filter(record=>!record.archived);
+  monthlyCount.textContent=records.length+' of '+activeClients.length+' clients';
+  monthlyEmpty.hidden=records.length>0;
+  monthlyCards.innerHTML=records.map(renderEntitlementCard).join('');
+  renderArchivedEntitlements();
   renderMonthlyStats();
   renderPendingMonthlyPurchases();
   renderMonthlyDistributionRuns();
+  renderNotifications();
+}
+function renderArchivedEntitlements(){
+  const records=monthlyEntitlements.filter(record=>record.archived&&matchesEntitlement(record,archiveSearch.value));
+  archiveCount.textContent=records.length+' archived clients';
+  archiveEmpty.hidden=records.length>0;
+  archiveCards.innerHTML=records.map(renderEntitlementCard).join('');
 }
 function renderPendingMonthlyPurchases(){
   if(!pendingMonthlyPurchases.length){
@@ -609,9 +893,14 @@ async function loadMonthlyEntitlements(){
     setConn(true);
     setStatus('Monthly entitlement dashboard refreshed.','ok');
   }catch(error){
+    monthlyEntitlements=[];
+    monthlyDistributionRuns=[];
+    pendingMonthlyPurchases=[];
     monthlyCards.innerHTML='';
+    archiveCards.innerHTML='';
     monthlyEmpty.hidden=false;
     monthlyEmpty.textContent=error.message;
+    renderNotifications();
     setStatus(error.message,'error');
   }finally{monthlyCards.removeAttribute('aria-busy');}
 }
@@ -657,12 +946,14 @@ monthlyForm.addEventListener('submit',async event=>{
 monthlyCancel.addEventListener('click',resetMonthlyForm);
 document.getElementById('monthlyReload').addEventListener('click',loadMonthlyEntitlements);
 monthlySearch.addEventListener('input',renderMonthlyEntitlements);
-monthlyCards.addEventListener('click',async event=>{
+archiveSearch.addEventListener('input',renderArchivedEntitlements);
+async function handleMonthlyCardAction(event){
   const button=event.target.closest('button[data-action]');
-  if(!button)return;
+  if(!button||button.disabled)return;
   const card=button.closest('.entitlement-card');
   const record=monthlyEntitlements.find(item=>item.id===card?.dataset.id);
   if(!record)return;
+  button.disabled=true;
   try{
     if(button.dataset.action==='copy'){
       await navigator.clipboard.writeText(button.dataset.code);
@@ -673,7 +964,7 @@ monthlyCards.addEventListener('click',async event=>{
       button.disabled=true;
       await monthlyRequest('POST',{action:'generate-code',id:record.id});
       await loadMonthlyEntitlements();
-      setStatus('Another code was generated for this client. All their codes share the same account status and wash balance.','ok');
+      setStatus('A new account code was generated. Previous active account codes remain linked to the same balance.','ok');
       return;
     }
     if(button.dataset.action==='email'){
@@ -685,30 +976,29 @@ monthlyCards.addEventListener('click',async event=>{
       return;
     }
     if(button.dataset.action==='payment'){
-      const amountText=window.prompt('Enter the monthly payment received in rand (for example 1150.00):');
-      if(amountText===null)return;
-      const amountCents=Math.round(Number(amountText.replace(/[R\\s,]/g,''))*100);
-      if(!Number.isSafeInteger(amountCents)||amountCents<1){setStatus('Enter a valid payment amount greater than zero.','error');return;}
-      const paymentReference=window.prompt('Enter a unique bank, card-machine or receipt reference:');
-      if(paymentReference===null)return;
-      button.disabled=true;
-      const result=await monthlyRequest('POST',{action:'record-payment',id:record.id,paymentReference:paymentReference.trim(),amountCents});
-      await loadMonthlyEntitlements();
-      setStatus(result.entitlement?.emailError?'Payment recorded, but code email failed: '+result.entitlement.emailError:'Payment recorded; '+record.monthlyAllowance+' wash credits were added and the access code email was queued.',result.entitlement?.emailError?'error':'ok');
+      selectedPaymentEntitlementId=record.id;
+      paymentForm.reset();
+      paymentDate.value=localToday();
+      paymentDialog.showModal();
+      paymentAmount.focus();
       return;
     }
     if(button.dataset.action==='edit'){editMonthlyEntitlement(record);return;}
-    if(button.dataset.action==='replace'){
-      if(!window.confirm('Replace all codes? Every previously issued code will stop working; booking history, monthly credits and account status will stay attached to this customer.'))return;
-      await monthlyRequest('PUT',{id:record.id,replaceCode:true});
-      setStatus('Monthly code replaced; historical usage is preserved.','ok');
-    }else if(button.dataset.action==='toggle'){
-      const message=record.active
-        ?"Are you sure? This will deactivate this user's account. Their saved information and history will be retained, and their access code will stop working."
-        :'Reactivate this monthly client and allow their access code to work again?';
+    if(button.dataset.action==='toggle'){
+      const message=record.archived
+        ?'Restore this archived account? Previously issued codes remain revoked; generate a new code after restoring if the customer needs access.'
+        :record.active
+          ?"Are you sure? This will deactivate this user's account and permanently revoke every code already issued to them. Reactivating later will not restore those codes."
+          :'Reactivate this monthly client? Previous codes remain permanently revoked.';
       if(!window.confirm(message))return;
-      await monthlyRequest('PUT',{id:record.id,active:!record.active,deactivationReason:record.active?'Deactivated by administrator.':'Reactivated by administrator.',...(!record.active&&record.archived?{archived:false}:{})});
-      setStatus(record.active?'Monthly client deactivated. Saved information and history were retained.':'Monthly client activated.','ok');
+      const restore=record.archived;
+      await monthlyRequest('PUT',{
+        id:record.id,
+        active:restore?true:!record.active,
+        ...(restore?{archived:false}:{}),
+        deactivationReason:restore?'Restored and reactivated by administrator.':record.active?'Deactivated by administrator.':'Reactivated by administrator.',
+      });
+      setStatus(record.archived?'Client restored. Old codes remain invalid; generate a new code to issue access.':record.active?'Client deactivated and all issued codes were revoked.':'Client reactivated. Old codes remain invalid.','ok');
     }else if(button.dataset.action==='archive'){
       const reason=window.prompt('Why are you archiving this monthly client? Their code will stop working, but booking history will remain.');
       if(reason===null)return;
@@ -719,6 +1009,48 @@ monthlyCards.addEventListener('click',async event=>{
     await loadMonthlyEntitlements();
   }catch(error){setStatus(error.message,'error');}
   finally{button.disabled=false;}
+}
+monthlyCards.addEventListener('click',handleMonthlyCardAction);
+archiveCards.addEventListener('click',handleMonthlyCardAction);
+function closePaymentDialog(){
+  if(paymentDialog.open)paymentDialog.close();
+  selectedPaymentEntitlementId='';
+  paymentForm.reset();
+}
+document.getElementById('paymentClose').addEventListener('click',closePaymentDialog);
+document.getElementById('paymentCancel').addEventListener('click',closePaymentDialog);
+paymentDialog.addEventListener('close',()=>{selectedPaymentEntitlementId='';});
+paymentForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const amountCents=Math.round(Number(paymentAmount.value)*100);
+  if(!selectedPaymentEntitlementId||!paymentForm.reportValidity())return;
+  if(!Number.isSafeInteger(amountCents)||amountCents<1){
+    setStatus('Enter a valid payment amount greater than zero.','error');
+    paymentAmount.focus();
+    return;
+  }
+  paymentSubmit.disabled=true;
+  try{
+    const result=await monthlyRequest('POST',{
+      action:'record-payment',
+      id:selectedPaymentEntitlementId,
+      amountCents,
+      paymentDate:paymentDate.value,
+      paymentReference:paymentReference.value.trim(),
+    });
+    paymentDialog.close();
+    await loadMonthlyEntitlements();
+    const emailFailed=Boolean(result.entitlement?.emailError);
+    const emailPending=result.entitlement?.emailStatus==='accepted';
+    setStatus(emailFailed
+      ?'Payment recorded and new code generated, but code email failed: '+result.entitlement.emailError
+      :emailPending
+        ?'Payment recorded and new code generated. The email was accepted by the provider; delivery confirmation is pending.'
+        :'Payment recorded, wash credits added, and a new access code emailed to the customer.',
+    emailFailed?'error':'ok');
+  }catch(error){
+    setStatus(error.message,'error');
+  }finally{paymentSubmit.disabled=false;}
 });
 pendingMonthlyPurchasesNode.addEventListener('click',async event=>{
   const button=event.target.closest('button[data-action="apply-purchase"]');
@@ -729,9 +1061,9 @@ pendingMonthlyPurchasesNode.addEventListener('click',async event=>{
   if(!window.confirm('Apply the paid '+packageLabel(purchase)+' purchase ('+formatZar(purchase.amountCents)+') to '+record.customerName+'? The package must match the existing customer record.'))return;
   button.disabled=true;
   try{
-    const result=await monthlyRequest('POST',{action:'record-payment',id:record.id,paymentReference:purchase.reference,amountCents:purchase.amountCents});
+    const result=await monthlyRequest('POST',{action:'record-payment',id:record.id,paymentReference:purchase.reference,amountCents:purchase.amountCents,paymentDate:localToday()});
     await loadMonthlyEntitlements();
-    setStatus(result.entitlement?.emailError?'Payment applied, but code email failed: '+result.entitlement.emailError:'Paid purchase applied; wash credits were added and the current code email was queued.',result.entitlement?.emailError?'error':'ok');
+    setStatus(result.entitlement?.emailError?'Payment applied and a new code was generated, but email failed: '+result.entitlement.emailError:'Paid purchase applied; wash credits were added and a new code was emailed.',result.entitlement?.emailError?'error':'ok');
   }catch(error){setStatus(error.message,'error');}
   finally{button.disabled=false;}
 });
@@ -790,33 +1122,98 @@ document.querySelectorAll('.promo-tab').forEach((tab,index)=>tab.addEventListene
 }));
 function connectManagers(){
   const key=keyInput.value.trim();
-  if(!key){setStatus('Enter an admin or calendar API key to connect.','error');keyInput.focus();return false;}
-  sessionStorage.setItem(managerStorageKey,key);
+  if(!key){authStatus.textContent='Enter an admin or calendar API key to connect.';keyInput.focus();return false;}
   sessionStorage.setItem('a10tion-calendar-key',key);
   calendarFrame.src='/api/admin/calendar?embedded=1&v='+Date.now();
   return true;
 }
-connectButton.addEventListener('click',async()=>{
-  connectButton.disabled=true;setStatus('Connecting to the business managers…');
+function closeManagerMenu(){
+  managerTabsNode.classList.remove('open');
+  managerDrawerBackdrop.classList.remove('open');
+  menuButton.setAttribute('aria-expanded','false');
+}
+function closeNotifications(){
+  notificationDrawer.classList.remove('open');
+  notificationDrawer.setAttribute('aria-hidden','true');
+  notificationButton.setAttribute('aria-expanded','false');
+  managerDrawerBackdrop.classList.remove('open');
+}
+async function authenticateManager(){
+  const key=keyInput.value.trim();
+  if(!key){authStatus.textContent='Enter your Business Manager API key.';keyInput.focus();return false;}
+  connectButton.disabled=true;
+  authStatus.textContent='Securing your workspace…';
   try{
     if(!connectManagers()) return;
-    await loadBatch();
-  }catch(error){setStatus(error.message,'error');}
-  finally{connectButton.disabled=false;}
+    const valid=await loadBatch();
+    if(!valid){
+      authStatus.textContent=statusNode.textContent||'That API key could not connect.';
+      try{localStorage.removeItem(managerStorageKey);}catch(error){console.warn('Could not clear the rejected Business Manager key.',error);}
+      return false;
+    }
+    try{
+      localStorage.setItem(managerStorageKey,key);
+      sessionStorage.setItem(managerStorageKey,key);
+      sessionStorage.setItem('a10tion-calendar-key',key);
+    }catch(error){
+      console.warn('Business Manager key could not be saved on this device.',error);
+      authStatus.textContent='Connected for this session. This browser could not save the key on this device.';
+    }
+    managerShell.classList.remove('auth-locked');
+    authGate.hidden=true;
+    setConn(true);
+    await Promise.all([loadBookingRequests(),loadMonthlyEntitlements()]);
+    const initialTab=new URLSearchParams(location.search).get('tab');
+    if(['clients','archived','expired','activity','promo','calendar','requests'].includes(initialTab))activateTab(initialTab);
+    else activateTab('requests');
+    return true;
+  }catch(error){
+    authStatus.textContent=error.message||'Could not connect to the Business Manager.';
+    return false;
+  }finally{connectButton.disabled=false;}
+}
+authForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  await authenticateManager();
 });
-promoTab.addEventListener('click',()=>activateTab('promo'));
-bookingRequestsTab.addEventListener('click',()=>activateTab('requests'));
-calendarTab.addEventListener('click',()=>activateTab('calendar'));
-const managerTabs=[promoTab,bookingRequestsTab,calendarTab];
-managerTabs.forEach((tab,index)=>tab.addEventListener('keydown',event=>{
-  if(event.key==='ArrowLeft'||event.key==='ArrowRight'){
-    event.preventDefault();
-    const direction=event.key==='ArrowRight'?1:-1;
-    const next=managerTabs[(index+direction+managerTabs.length)%managerTabs.length];
-    next.focus();
-    next.click();
-  }
-}));
+menuButton.addEventListener('click',()=>{
+  const open=!managerTabsNode.classList.contains('open');
+  if(open)closeNotifications();
+  managerTabsNode.classList.toggle('open',open);
+  managerDrawerBackdrop.classList.toggle('open',open);
+  menuButton.setAttribute('aria-expanded',String(open));
+});
+managerDrawerBackdrop.addEventListener('click',()=>{
+  closeManagerMenu();
+  closeNotifications();
+});
+notificationButton.addEventListener('click',()=>{
+  const open=!notificationDrawer.classList.contains('open');
+  if(open)closeManagerMenu();
+  notificationDrawer.classList.toggle('open',open);
+  notificationDrawer.setAttribute('aria-hidden',String(!open));
+  notificationButton.setAttribute('aria-expanded',String(open));
+  managerDrawerBackdrop.classList.toggle('open',open);
+});
+notificationClose.addEventListener('click',closeNotifications);
+notificationList.addEventListener('click',event=>{
+  const button=event.target.closest('button[data-open-tab]');
+  if(!button)return;
+  closeNotifications();
+  activateTab(button.dataset.openTab);
+});
+managerTabs.forEach(tab=>{
+  tab.addEventListener('click',()=>activateTab(tab.dataset.tab));
+  tab.addEventListener('keydown',event=>{
+    if(event.key==='ArrowLeft'||event.key==='ArrowRight'){
+      event.preventDefault();
+      const index=managerTabs.indexOf(tab);
+      const direction=event.key==='ArrowRight'?1:-1;
+      const next=managerTabs[(index+direction+managerTabs.length)%managerTabs.length];
+      next.focus();
+    }
+  });
+});
 bookingRequestsReload.addEventListener('click',loadBookingRequests);
 bookingRequestCards.addEventListener('click',event=>{
   const button=event.target.closest('button[data-request-action]');
@@ -866,7 +1263,8 @@ async function loadBatch(){
     summaryNode.textContent=result.pairs?.length?\`Batch \${result.batchId} · \${result.pairs.length} passwords · \${used} promo codes redeemed\\n\`+(result.pairs||[]).map((pair,index)=>\`\${String(index+1).padStart(2,'0')}  \${pair.promoCode}  \${pair.used?'REDEEMED':'available'}\`).join('\\n'):'No active batch is saved yet.';
     setConn(true);
     setStatus('Current batch loaded.','ok');
-  }catch(error){setConn(false);setStatus(error.message,'error');}
+    return true;
+  }catch(error){setConn(false);setStatus(error.message,'error');return false;}
   finally{loadButton.disabled=false;}
 }
 loadButton.addEventListener('click',async()=>{
@@ -885,16 +1283,17 @@ saveButton.addEventListener('click',async()=>{
   finally{saveButton.disabled=false;}
 });
 keyInput.addEventListener('keydown',event=>{if(event.key==='Enter')connectButton.click();});
-const savedKey=sessionStorage.getItem(managerStorageKey)||sessionStorage.getItem('a10tion-calendar-key');
+let savedKey='';
+try{savedKey=localStorage.getItem(managerStorageKey)||sessionStorage.getItem(managerStorageKey)||sessionStorage.getItem('a10tion-calendar-key')||'';}catch(error){console.warn('Could not read the saved Business Manager key.',error);}
 if(savedKey){
   keyInput.value=savedKey;
-  connectManagers();
-  loadBatch();
+  authenticateManager();
+}else{
+  managerShell.classList.add('auth-locked');
+  authGate.hidden=false;
+  setTimeout(()=>keyInput.focus(),0);
 }
 resetMonthlyForm();
-const initialTab=new URLSearchParams(location.search).get('tab');
-if(initialTab==='calendar') activateTab('calendar');
-if(initialTab==='requests') activateTab('requests');
 </script>
 </body>
 </html>`;

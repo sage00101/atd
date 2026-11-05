@@ -1,5 +1,5 @@
-// Shared CORS handling for all API routes. Only the configured GitHub Pages
-// origin (or localhost during development) may call this API.
+// Shared CORS handling for all API routes. Keep the known site origins allowed
+// even when additional origins are configured for a deployment.
 const DEFAULT_ALLOWED_ORIGINS = [
     'https://a10tion.co.za',
     'https://sage00101.github.io',
@@ -12,7 +12,7 @@ function getAllowedOrigins() {
         .split(',')
         .map((origin) => origin.trim())
         .filter(Boolean);
-    return configured.length ? configured : DEFAULT_ALLOWED_ORIGINS;
+    return [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...configured])];
 }
 
 /** Returns true if the request was a handled OPTIONS preflight (caller should stop). */

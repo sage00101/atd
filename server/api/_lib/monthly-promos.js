@@ -71,8 +71,11 @@ return {'OK'}
 const GENERATE_ENTITLEMENT_CODE_SCRIPT = `
 local raw = redis.call('GET', KEYS[1])
 if not raw then return {'NOT_FOUND'} end
+local existing = cjson.decode(raw)
+if existing.archived then return {'ARCHIVED'} end
+if not existing.active then return {'INACTIVE'} end
 if redis.call('EXISTS', KEYS[2]) == 1 then return {'CODE_EXISTS'} end
-local entitlement = cjson.decode(raw)
+local entitlement = existing
 local code = cjson.decode(ARGV[1])
 entitlement.codes = entitlement.codes or {}
 entitlement.codeDigests = entitlement.codeDigests or {}
@@ -107,6 +110,14 @@ if ARGV[3] == '1' then
   if redis.call('EXISTS', KEYS[4]) == 1 then return 'CODE_EXISTS' end
   redis.call('SET', KEYS[4], ARGV[2])
 end
+if ARGV[6] == '1' then
+  for _, codeDigest in ipairs(existing.codeDigests or {}) do
+    redis.call('DEL', 'promo:monthly:code:' .. codeDigest)
+  end
+  if existing.currentCodeDigest then
+    redis.call('DEL', 'promo:monthly:code:' .. existing.currentCodeDigest)
+  end
+end
 if KEYS[2] ~= KEYS[3] then
   redis.call('SET', KEYS[3], ARGV[2])
   if redis.call('GET', KEYS[2]) == ARGV[2] then redis.call('DEL', KEYS[2]) end
@@ -129,6 +140,7 @@ local entitlement = cjson.decode(raw)
 if entitlement.updatedAt ~= ARGV[1] then return {'STALE'} end
 if entitlement.archived then return {'ARCHIVED'} end
 if not entitlement.active then return {'INACTIVE'} end
+if redis.call('EXISTS', KEYS[5]) == 1 then return {'CODE_EXISTS'} end
 local existingPurchase = redis.call('GET', KEYS[2])
 if existingPurchase == entitlement.id then return {'DUPLICATE'} end
 if existingPurchase and existingPurchase ~= 'pending:' .. ARGV[7] then return {'PURCHASE_EXISTS'} end
@@ -149,14 +161,22 @@ entitlement.billingAnchor = ARGV[8]
 entitlement.billingCyclesPaid = tonumber(ARGV[9])
 entitlement.validUntil = ARGV[10]
 entitlement.lastPaidAt = ARGV[4]
-entitlement.updatedAt = ARGV[4]
+entitlement.updatedAt = ARGV[12]
 entitlement.paymentHistory = entitlement.paymentHistory or {}
 table.insert(entitlement.paymentHistory, 1, cjson.decode(ARGV[5]))
+local code = cjson.decode(ARGV[11])
+entitlement.codes = entitlement.codes or {}
+entitlement.codeDigests = entitlement.codeDigests or {}
+table.insert(entitlement.codes, code)
+table.insert(entitlement.codeDigests, code.digest)
+entitlement.code = code.code
+entitlement.currentCodeDigest = code.digest
 entitlement.auditHistory = entitlement.auditHistory or {}
 table.insert(entitlement.auditHistory, 1, cjson.decode(ARGV[6]))
 while #entitlement.auditHistory > 50 do table.remove(entitlement.auditHistory) end
 redis.call('SET', KEYS[1], cjson.encode(entitlement))
 redis.call('SET', KEYS[2], entitlement.id)
+redis.call('SET', KEYS[5], entitlement.id)
 if pendingRaw then
   redis.call('DEL', KEYS[3])
   redis.call('LREM', KEYS[4], 0, ARGV[7])
@@ -682,7 +702,13 @@ export async function getMonthlyPromoForCode(code) {
     if (!normalisedCode) return null;
     const id = await redis.get(codeKey(normalisedCode));
     if (!id) return null;
-    return redis.get(entitlementKey(id));
+    const entitlement = await redis.get(entitlementKey(id));
+    if (!entitlement || !entitlement.active || entitlement.archived) return null;
+    const codeDigest = digest(normalisedCode);
+    const validCode = entitlement.codeDigests
+        ? entitlement.codeDigests.includes(codeDigest)
+        : entitlement.currentCodeDigest === codeDigest;
+    return validCode ? entitlement : null;
 }
 
 export async function createMonthlyEntitlement(input) {
@@ -739,6 +765,9 @@ export async function generateMonthlyEntitlementCode(id) {
     }
     if (result[0] === 'CODE_EXISTS') {
         throw new Error('Could not generate a unique monthly promo code. Please try again.');
+    }
+    if (result[0] === 'ARCHIVED' || result[0] === 'INACTIVE') {
+        throw new Error('Reactivate this monthly account before generating an access code.');
     }
     if (result[0] !== 'OK') throw new Error('Could not generate a monthly promo code.');
     return typeof result[1] === 'string' ? JSON.parse(result[1]) : result[1];
@@ -892,13 +921,22 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
     }
 }
 
-export async function recordMonthlyEntitlementPayment({ entitlementId, paymentReference, amountCents }) {
+export async function recordMonthlyEntitlementPayment({
+    entitlementId,
+    paymentReference,
+    amountCents,
+    paymentDate,
+}) {
     const id = String(entitlementId || '').trim();
-    const reference = String(paymentReference || '').trim();
+    const suppliedReference = String(paymentReference || '').trim();
     const amount = Number(amountCents);
+    const enteredPaymentDate = String(paymentDate || '').trim();
     if (!id) throw new Error('Monthly entitlement id is required.');
-    if (!/^[\w.:-]{3,120}$/.test(reference)) throw new Error('Enter a valid unique payment reference.');
+    if (suppliedReference && !/^[\w.:-]{3,120}$/.test(suppliedReference)) {
+        throw new Error('Enter a valid payment reference.');
+    }
     if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('Enter the amount paid in cents.');
+    if (!isValidDate(enteredPaymentDate)) throw new Error('Choose a valid payment date.');
 
     let entitlement = await redis.get(entitlementKey(id));
     if (!entitlement) throw new Error('Monthly entitlement not found.');
@@ -908,6 +946,7 @@ export async function recordMonthlyEntitlementPayment({ entitlementId, paymentRe
     await migratePeriodHistory(id, currentPeriod, entitlement.billingAnchor || entitlement.validFrom);
     entitlement = await ensureCreditLedger(entitlement, currentPeriod);
 
+    const reference = suppliedReference || `manual-${crypto.randomUUID()}`;
     const pending = await redis.get(pendingPurchaseKey(reference));
     if (pending) {
         if (normaliseEmail(pending.email) !== normaliseEmail(entitlement.email)) {
@@ -921,17 +960,17 @@ export async function recordMonthlyEntitlementPayment({ entitlementId, paymentRe
         }
     }
 
-    const paidAt = pending?.paidAt || now;
-    const paymentDate = getSouthAfricanDate(new Date(paidAt));
-    const stillCurrent = entitlement.validUntil && entitlement.validUntil >= paymentDate;
+    const paidAt = pending?.paidAt || `${enteredPaymentDate}T12:00:00+02:00`;
+    const effectivePaymentDate = getSouthAfricanDate(new Date(paidAt));
+    const stillCurrent = entitlement.validUntil && entitlement.validUntil >= effectivePaymentDate;
     let billingAnchor = stillCurrent
         ? (entitlement.billingAnchor || entitlement.validFrom)
-        : paymentDate;
+        : effectivePaymentDate;
     let billingCyclesPaid = stillCurrent
         ? getBillingCycleCount(billingAnchor, entitlement.validUntil)
         : 0;
     if (!billingCyclesPaid) {
-        billingAnchor = stillCurrent ? addDays(entitlement.validUntil, 1) : paymentDate;
+        billingAnchor = stillCurrent ? addDays(entitlement.validUntil, 1) : effectivePaymentDate;
         billingCyclesPaid = 1;
     } else {
         billingCyclesPaid += 1;
@@ -940,6 +979,7 @@ export async function recordMonthlyEntitlementPayment({ entitlementId, paymentRe
     const payment = {
         type: pending ? 'renewal_purchase' : 'manual_renewal',
         paidAt,
+        paymentDate: effectivePaymentDate,
         amountCents: amount,
         paymentMethod: pending?.paymentMethod || 'manual',
         reference,
@@ -958,23 +998,32 @@ export async function recordMonthlyEntitlementPayment({ entitlementId, paymentRe
         performedBy: 'admin',
         createdAt: paidAt,
     };
-    const result = await redis.eval(RECORD_MONTHLY_PAYMENT_SCRIPT, [
-        entitlementKey(id),
-        purchaseKey(reference),
-        pendingPurchaseKey(reference),
-        pendingPurchaseIndexKey,
-    ], [
-        entitlement.updatedAt,
-        '',
-        '',
-        paidAt,
-        JSON.stringify(payment),
-        JSON.stringify(auditEntry),
-        reference,
-        billingAnchor,
-        String(billingCyclesPaid),
-        validUntil,
-    ]);
+    let result;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        const code = await createUniqueCode();
+        const codeRecord = { code, digest: digest(code), createdAt: now };
+        result = await redis.eval(RECORD_MONTHLY_PAYMENT_SCRIPT, [
+            entitlementKey(id),
+            purchaseKey(reference),
+            pendingPurchaseKey(reference),
+            pendingPurchaseIndexKey,
+            codeKey(code),
+        ], [
+            entitlement.updatedAt,
+            '',
+            '',
+            paidAt,
+            JSON.stringify(payment),
+            JSON.stringify(auditEntry),
+            reference,
+            billingAnchor,
+            String(billingCyclesPaid),
+            validUntil,
+            JSON.stringify(codeRecord),
+            now,
+        ]);
+        if (result?.[0] !== 'CODE_EXISTS') break;
+    }
     if (!Array.isArray(result) || result[0] === 'NOT_FOUND') throw new Error('Monthly entitlement not found.');
     if (result[0] === 'STALE') throw new Error('This monthly record changed during the payment update. Refresh and try again.');
     if (result[0] === 'ARCHIVED' || result[0] === 'INACTIVE') throw new Error('Reactivate this monthly entitlement before recording a payment.');
@@ -983,6 +1032,7 @@ export async function recordMonthlyEntitlementPayment({ entitlementId, paymentRe
     if (result[0] === 'PURCHASE_NOT_FOUND') throw new Error('The paid purchase could not be found.');
     if (result[0] === 'PURCHASE_MISMATCH') throw new Error('The paid purchase does not match this customer.');
     if (result[0] === 'PACKAGE_MISMATCH') throw new Error('Update the customer package to match this paid purchase before applying it.');
+    if (result[0] === 'CODE_EXISTS') throw new Error('Could not generate a unique monthly promo code. Please try recording the payment again.');
     if (result[0] !== 'OK') throw new Error('Could not record the monthly payment.');
     const updated = typeof result[1] === 'string' ? JSON.parse(result[1]) : result[1];
     try {
@@ -1036,6 +1086,7 @@ export async function updateMonthlyEntitlement(id, input) {
         ? deactivationReason
         : deactivationReason || existing.deactivationReason || '';
     const replaceCode = input?.replaceCode === true;
+    const revokeCodes = existing.active && !active;
     const code = replaceCode ? await createUniqueCode() : existing.code;
     const now = new Date().toISOString();
     const changedFields = ['customerName', 'firstName', 'surname', 'email', 'customerPhone', 'businessName', 'clientType', 'packageTier', 'validFrom', 'validUntil']
@@ -1075,12 +1126,16 @@ export async function updateMonthlyEntitlement(id, input) {
         creditsReserved: Number(existing.creditsReserved || 0),
         creditsUsedTotal: Number(existing.creditsUsedTotal || 0),
         creditsGrantedTotal: Math.max(Number(existing.creditsGrantedTotal ?? existing.monthlyAllowance) + details.monthlyAllowance - existing.monthlyAllowance, 0),
-        code,
-        currentCodeDigest: replaceCode ? digest(code) : existing.currentCodeDigest,
-        codeDigests: replaceCode
+        code: revokeCodes ? null : code,
+        currentCodeDigest: revokeCodes ? null : replaceCode ? digest(code) : existing.currentCodeDigest,
+        codeDigests: revokeCodes
+            ? []
+            : replaceCode
             ? [digest(code)]
             : existing.codeDigests || (existing.currentCodeDigest ? [existing.currentCodeDigest] : []),
-        codes: replaceCode
+        codes: revokeCodes
+            ? []
+            : replaceCode
             ? [{ code, digest: digest(code), createdAt: now }]
             : existing.codes || (existing.code ? [{ code: existing.code, digest: existing.currentCodeDigest, createdAt: existing.createdAt }] : []),
         active,
@@ -1088,7 +1143,10 @@ export async function updateMonthlyEntitlement(id, input) {
         deactivationReason: !active || archived ? savedStatusReason : null,
         updatedAt: now,
         auditHistory: [auditEntry, ...(existing.auditHistory || [])],
-        codeHistory: replaceCode
+        codeHistory: revokeCodes
+            ? [...(existing.codes || (existing.code ? [{ code: existing.code }] : []))
+                .map(({ code: oldCode }) => ({ code: maskCode(oldCode), replacedAt: now })), ...(existing.codeHistory || [])]
+            : replaceCode
             ? [{ code: maskCode(existing.code), replacedAt: now }, ...(existing.codeHistory || [])]
             : existing.codeHistory || [],
     };
@@ -1097,7 +1155,7 @@ export async function updateMonthlyEntitlement(id, input) {
         customerKey(existing.email),
         customerKey(details.email),
         codeKey(code),
-    ], [JSON.stringify(next), id, replaceCode ? '1' : '0', JSON.stringify(auditEntry), maskCode(existing.code)]);
+    ], [JSON.stringify(next), id, replaceCode ? '1' : '0', JSON.stringify(auditEntry), maskCode(existing.code), revokeCodes ? '1' : '0']);
     if (result === 'NOT_FOUND') throw new Error('Monthly entitlement not found.');
     if (result === 'EMAIL_EXISTS') throw new Error('Another customer already has an entitlement for that email.');
     if (result !== 'OK') throw new Error('Could not update the monthly entitlement.');

@@ -53,6 +53,7 @@ export default async function handler(req, res) {
                 entitlementId: String(req.body?.id || '').trim(),
                 paymentReference: String(req.body?.paymentReference || '').trim(),
                 amountCents: req.body?.amountCents,
+                paymentDate: String(req.body?.paymentDate || '').trim(),
             });
             res.status(200).json({ entitlement });
             return;
