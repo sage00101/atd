@@ -24,7 +24,8 @@ const HERO_IMAGE_MOBILE = heroImage;
    Format: 'x% y%'. 0% = left/top edge, 100% = right/bottom edge. */
 // The photo is portrait, so it is sized by width: zoomed 1.15x and pinned so its bottom edge sits just above the white road line.
 const DESKTOP_IMAGE_STYLE = { width: '115%', left: '-7.5%', bottom: '-32.7cqw' };
-const MOBILE_IMAGE_POSITION = '50% 85%';
+// Zoomed 1.1x and pinned so the photo ends just above the white road line.
+const MOBILE_IMAGE_STYLE = { width: '110%', left: '-5%', bottom: '-29.3cqw' };
 
 /* ============================================================
    PRIMARY BUTTON
@@ -170,19 +171,19 @@ export default function HeroSection() {
             ===================================================== */}
 
             <div className="lg:hidden">
-                <div className="relative h-[45svh] min-h-[320px] w-full overflow-hidden">
-                    <picture>
+                <div className="relative h-[45svh] min-h-[320px] w-full overflow-hidden [container-type:inline-size]">
+                        <div className="absolute inset-0 overflow-hidden [clip-path:polygon(0_0,100%_0,100%_94%,0_100%)]">
                         <img
                             src={HERO_IMAGE_MOBILE}
                             alt="A10tion To Detail — professional mobile car care in Cape Town"
-                            className="hero-wipe absolute inset-0 h-full w-full object-cover [clip-path:polygon(0_0,100%_0,100%_94%,0_100%)]"
-                            style={{ objectPosition: MOBILE_IMAGE_POSITION }}
+                            className="hero-wipe absolute h-auto max-w-none"
+                            style={MOBILE_IMAGE_STYLE}
                             draggable={false}
                             loading="eager"
                             fetchPriority="high"
                             decoding="async"
                         />
-                    </picture>
+                        </div>
 
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#05100a]/70 via-transparent to-transparent" />
                     <div className="pointer-events-none absolute inset-0 [clip-path:polygon(0_0,100%_0,100%_94%,0_100%)] bg-gradient-to-t from-[#05100a]/55 via-transparent to-transparent" />
