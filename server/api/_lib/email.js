@@ -44,14 +44,7 @@ async function sendViaResend({ to, bcc, subject, html, replyTo, attachments, saf
         return { skipped: true };
     }
 
-    const response = await fetch(RESEND_ENDPOINT, {
-        method: 'POST',
-        headers: {
-            Authorization: `Bearer ${apiKey}`,
-            ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+    const payload = {
             from,
             to: [to],
             bcc: bcc ? [bcc] : undefined,
@@ -59,8 +52,22 @@ async function sendViaResend({ to, bcc, subject, html, replyTo, attachments, saf
             subject,
             html,
             attachments: attachments?.length ? attachments : undefined,
-        }),
-    });
+    };
+    let response;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+        response = await fetch(RESEND_ENDPOINT, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${apiKey}`,
+            ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        });
+        // Resend allows about 2 requests a second; wait and retry when rate limited or briefly unavailable.
+        if (response.status !== 429 && response.status < 500) break;
+        await new Promise((resolve) => setTimeout(resolve, 700 * (attempt + 1)));
+    }
 
     if (!response.ok) {
         const body = await response.text().catch(() => '');
@@ -140,31 +147,48 @@ export function buildBookingSmsNotificationPayload(request) {
 
 async function sendBookingRequestEmailPair({ request, customerSubject, customerHtml, businessSubject, businessHtml, idempotencyPrefix }) {
     const customerEmail = request.booking?.customer?.email;
-    const jobs = [
-        sendViaResend({
-            to: BOOKINGS_EMAIL,
-            subject: businessSubject,
-            html: businessHtml,
-            replyTo: customerEmail || undefined,
-            attachments: request.booking?.contractFileBase64 && request.booking?.contractFileName
-                ? [{ filename: request.booking.contractFileName, content: request.booking.contractFileBase64 }]
-                : undefined,
-            idempotencyKey: `${idempotencyPrefix}-business-${request.id}`,
-        }),
-    ];
-    if (customerEmail) {
-        jobs.unshift(sendViaResend({
-            to: customerEmail,
-            subject: customerSubject,
-            html: customerHtml,
-            replyTo: BOOKINGS_EMAIL,
-            idempotencyKey: `${idempotencyPrefix}-customer-${request.id}`,
-        }));
+    const attachments = request.booking?.contractFileBase64 && request.booking?.contractFileName
+        ? [{ filename: request.booking.contractFileName, content: request.booking.contractFileBase64 }]
+        : undefined;
+    const sendBusiness = (withAttachments) => sendViaResend({
+        to: BOOKINGS_EMAIL,
+        subject: businessSubject,
+        html: businessHtml,
+        replyTo: customerEmail || undefined,
+        attachments: withAttachments ? attachments : undefined,
+        idempotencyKey: `${idempotencyPrefix}-business-${request.id}${withAttachments ? '' : '-plain'}`,
+    });
+    // The business email goes first, one at a time, so it is never lost to the provider rate limit.
+    let businessResult;
+    try {
+        businessResult = await sendBusiness(true);
+    } catch (firstError) {
+        console.error(`[booking request ${idempotencyPrefix} business email failed, retrying]`, request.reference, firstError);
+        try {
+            businessResult = await sendBusiness(false);
+        } catch (secondError) {
+            businessResult = { failedReason: secondError };
+        }
     }
-    const results = await Promise.allSettled(jobs);
-    const failures = results
-        .map((result, index) => ({ result, recipient: index === 0 && customerEmail ? 'customer' : 'business' }))
-        .filter(({ result }) => result.status === 'rejected');
+    let customerResult = null;
+    if (customerEmail) {
+        try {
+            customerResult = await sendViaResend({
+                to: customerEmail,
+                subject: customerSubject,
+                html: customerHtml,
+                replyTo: BOOKINGS_EMAIL,
+                idempotencyKey: `${idempotencyPrefix}-customer-${request.id}`,
+            });
+        } catch (error) {
+            customerResult = { failedReason: error };
+        }
+    }
+    const results = [customerResult, businessResult].filter((result) => result !== null)
+        .map((value) => (value.failedReason ? { status: 'rejected', reason: value.failedReason } : { status: 'fulfilled', value }));
+    const failures = [];
+    if (customerResult?.failedReason) failures.push({ recipient: 'customer', result: results[0] });
+    if (businessResult?.failedReason) failures.push({ recipient: 'business', result: results.at(-1) });
     if (failures.length) {
         failures.forEach(({ recipient, result }) => {
             console.error(`[booking request ${idempotencyPrefix} email failed]`, request.reference, recipient, result.reason);
