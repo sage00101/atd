@@ -116,6 +116,13 @@ body{margin:0;padding:28px 18px 56px;min-height:100vh;background:radial-gradient
 .auth-row input:focus,.manager-input:focus,.manager-select:focus,.manager-search:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);background:#fff}
 .manager-select{appearance:none;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23718076' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
 .manager-select option{background:#fff;color:var(--ink)}
+.pairs-grid{display:grid;grid-template-columns:44px minmax(0,1fr) minmax(0,1fr) 36px;gap:8px;margin-top:8px;padding:14px;border:1px solid var(--line-2);border-radius:14px;background:#fff}
+.pairs-grid .pg-head{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#6b7a70);padding:0 4px 2px}
+.pairs-grid .pg-num{align-self:center;text-align:center;font:600 12px ui-monospace,Consolas,monospace;color:var(--muted,#6b7a70)}
+.pairs-grid input{padding:9px 12px;font:13px ui-monospace,SFMono-Regular,Consolas,Menlo,monospace}
+.pairs-grid .pg-del{border:0;background:transparent;color:#a33;font-size:18px;cursor:pointer;border-radius:8px}
+.pairs-grid .pg-del:hover{background:#fbeaea}
+@media(max-width:600px){.pairs-grid{grid-template-columns:30px minmax(0,1fr) minmax(0,1fr) 28px;gap:6px;padding:10px}}
 textarea{display:block;min-height:300px;margin-top:8px;padding:14px 16px;font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,Menlo,monospace;white-space:pre;overflow:auto;resize:vertical}
 label{display:block;margin-top:20px;font-size:13px;font-weight:700;color:var(--ink-2)}
 .field-label{display:block;margin:0;font-size:12px;font-weight:700;letter-spacing:.02em;color:var(--ink-2)}
@@ -364,11 +371,11 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 <section id="singleWashPanel" class="promo-panel" role="tabpanel" aria-labelledby="promoTab">
 <p class="note">Paste up to 50 rows from your spreadsheet. Use tab-separated columns: number, password, promo code (or just password, promo code). Saving replaces the active batch. Redeemed promo codes stay permanently blocked, even after rotating batches.</p>
 <div class="buttons"><button id="load" class="secondary" type="button">Load current batch</button></div>
-<label for="pairs">Password and promo-code rows</label>
-<textarea id="pairs" spellcheck="false" placeholder="01&#9;A10x!7Qp&#9;Detail10&#10;02&#9;ATD#42Lm&#9;Shine10"></textarea>
+<label>Password and promo-code rows</label>
+<div id="pairs" class="pairs-grid" role="group" aria-label="Password and promo-code rows"></div>
+<div class="buttons"><button id="addPairRow" class="secondary" type="button">+ Add row</button><button id="clearPairRows" class="secondary" type="button">Clear rows</button></div>
 <p class="hint">Passwords are exact and case-sensitive. Duplicate promo codes are allowed, but that promo code can only be redeemed once across the batch.</p>
 <div class="buttons"><button id="save" type="button">Save active batch</button></div>
-<pre id="summary"></pre>
 <section class="distribution-panel" style="display:block" aria-label="Booking request SMS alerts">
   <div><h3>Booking request SMS alerts</h3><p>New booking requests are texted to the company cell number through SMSMessenger. Send a test message to confirm it is connected.</p></div>
   <div class="buttons"><button id="smsTest" class="secondary" type="button">Send test SMS</button></div>
@@ -542,9 +549,40 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 <script>
 const keyInput=document.getElementById('adminKey');
 const adminNameInput=document.getElementById('adminName');
-const rowsInput=document.getElementById('pairs');
+const pairsGrid=document.getElementById('pairs');
+function pairRowHtml(number,password,code){
+  return '<div class="pg-num">'+number+'</div><input class="pg-pass" type="text" spellcheck="false" autocomplete="off" placeholder="Passphrase" value="'+escapeHtml(password)+'"><input class="pg-code" type="text" spellcheck="false" autocomplete="off" placeholder="Promo code" value="'+escapeHtml(code)+'"><button class="pg-del" type="button" aria-label="Remove row">×</button>';
+}
+function renderPairRows(rows){
+  const list=rows.length?rows:[['','']];
+  pairsGrid.innerHTML='<div class="pg-head">#</div><div class="pg-head">Passphrase</div><div class="pg-head">Promo code</div><div></div>'+list.map((row,index)=>pairRowHtml(String(index+1).padStart(2,'0'),row[0],row[1])).join('');
+}
+function readPairRows(){
+  const passes=[...pairsGrid.querySelectorAll('.pg-pass')],codes=[...pairsGrid.querySelectorAll('.pg-code')];
+  return passes.map((input,index)=>[input.value,codes[index].value]);
+}
+const rowsInput={
+  get value(){return readPairRows().filter(row=>row[0].trim()||row[1].trim()).map((row,index)=>[String(index+1).padStart(2,'0'),row[0].trim(),row[1].trim()].join('\\t')).join('\\n');},
+  set value(text){renderPairRows(String(text||'').split('\\n').filter(Boolean).map(line=>{const cells=line.split('\\t');return cells.length>=3?[cells[1],cells[2]]:[cells[0]||'',cells[1]||''];}));}
+};
+renderPairRows([]);
+document.getElementById('addPairRow').addEventListener('click',()=>{const rows=readPairRows();rows.push(['','']);renderPairRows(rows);pairsGrid.querySelectorAll('.pg-pass')[rows.length-1].focus();});
+document.getElementById('clearPairRows').addEventListener('click',()=>renderPairRows([]));
+pairsGrid.addEventListener('click',event=>{const button=event.target.closest('.pg-del');if(!button)return;const index=[...pairsGrid.querySelectorAll('.pg-del')].indexOf(button);const rows=readPairRows();rows.splice(index,1);renderPairRows(rows);});
+pairsGrid.addEventListener('paste',event=>{
+  const text=(event.clipboardData||window.clipboardData).getData('text');
+  if(!/[\\n\\t]/.test(text))return;
+  event.preventDefault();
+  const pasted=text.split(/\\r?\\n/).filter(line=>line.trim()).map(line=>{const cells=line.split('\\t');return cells.length>=3?[cells[1],cells[2]]:[cells[0]||'',cells[1]||''];});
+  const rows=readPairRows();
+  const input=event.target.closest('input');
+  const start=input?[...pairsGrid.querySelectorAll('.pg-pass')].indexOf(input.classList.contains('pg-pass')?input:pairsGrid.querySelectorAll('.pg-pass')[[...pairsGrid.querySelectorAll('.pg-code')].indexOf(input)]):0;
+  const from=Math.max(start,0);
+  pasted.forEach((row,offset)=>{rows[from+offset]=row;});
+  renderPairRows(rows.map(row=>row||['','']));
+});
 const statusNode=document.getElementById('status');
-const summaryNode=document.getElementById('summary');
+
 const loadButton=document.getElementById('load');
 const saveButton=document.getElementById('save');
 const connectButton=document.getElementById('connect');
@@ -1392,12 +1430,10 @@ declineSubmit.addEventListener('click',async()=>{
   declineSubmit.disabled=false;
 });
 async function loadBatch(){
-  loadButton.disabled=true;setStatus('Loading current batch…');summaryNode.textContent='';
+  loadButton.disabled=true;setStatus('Loading current batch…');
   try{
     const result=await request('GET');
     rowsInput.value=(result.pairs||[]).map((pair,index)=>[String(index+1).padStart(2,'0'),pair.password,pair.promoCode].join('\\t')).join('\\n');
-    const used=(result.pairs||[]).filter(pair=>pair.used).length;
-    summaryNode.textContent=result.pairs?.length?\`Batch \${result.batchId} · \${result.pairs.length} passwords · \${used} promo codes redeemed\\n\`+(result.pairs||[]).map((pair,index)=>\`\${String(index+1).padStart(2,'0')}  \${pair.promoCode}  \${pair.used?'REDEEMED':'available'}\`).join('\\n'):'No active batch is saved yet.';
     setConn(true);
     setStatus('Current batch loaded.','ok');
     return true;
@@ -1409,12 +1445,11 @@ loadButton.addEventListener('click',async()=>{
   await loadBatch();
 });
 saveButton.addEventListener('click',async()=>{
-  saveButton.disabled=true;setStatus('Saving batch…');summaryNode.textContent='';
+  saveButton.disabled=true;setStatus('Saving batch…');
   try{
     const pairs=parseRows(rowsInput.value);
     const result=await request('PUT',{pairs});
     rowsInput.value=(result.pairs||[]).map((pair,index)=>[String(index+1).padStart(2,'0'),pair.password,pair.promoCode].join('\\t')).join('\\n');
-    summaryNode.textContent=\`Batch \${result.batchId} saved with \${result.pairs.length} password/code pairs.\`;
     setStatus('Batch saved. Promo codes are ready to reveal.','ok');
   }catch(error){setStatus(error.message,'error');}
   finally{saveButton.disabled=false;}
