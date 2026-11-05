@@ -4,7 +4,7 @@ import { buildSupportEmailHtml } from './support-email-template.js';
 import { buildMonthlyCodeEmailHtml } from './monthly-code-email-template.js';
 import { buildPassphraseEmailHtml } from './passphrase-email-template.js';
 import { buildDistributionReportHtml } from './distribution-report-template.js';
-import { getBusinessSmsNumber, sendSms } from './sms.js';
+import { buildMapsLink, getBusinessSmsNumber, sendSms } from './sms.js';
 import {
     buildBookingApprovedEmail,
     buildBookingCancelledEmail,
@@ -23,6 +23,7 @@ async function sendBusinessBookingSms(receipt) {
         `Date: ${receipt.bookingDate} ${receipt.bookingTime}`,
         `Vehicle: ${receipt.registration || '—'}`,
         `Address: ${receipt.address || '—'}`,
+        ...(receipt.address ? [`Map: ${buildMapsLink(receipt.address)}`] : []),
         `Amount: ${receipt.amountZar || '—'}`,
         `Contact: ${receipt.customerMobile || receipt.customerEmail || '—'}`,
     ].join(' | ');

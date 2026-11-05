@@ -56,6 +56,15 @@ export async function sendSms({ to, message, campaign = 'A10tion', dataField = '
     return { sent: true, messageId: result.messageId || '' };
 }
 
+export function buildMapsLink(address) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(address || '').trim())}`;
+}
+
+export function buildAddressSmsLines(address) {
+    const clean = String(address || '').trim();
+    return clean ? [`Address: ${clean}`, `Map: ${buildMapsLink(clean)}`] : [];
+}
+
 export function buildBookingRequestSmsText(request) {
     const booking = request.booking || {};
     const customer = booking.customer || {};
@@ -66,6 +75,7 @@ export function buildBookingRequestSmsText(request) {
         `${kind} · ${name}`,
         `Date: ${`${booking.bookingDate || ''} ${booking.bookingTime || ''}`.trim() || '—'}`,
         `Contact: ${customer.mobile || customer.email || '—'}`,
+        ...buildAddressSmsLines(customer.address),
         `Ref: ${request.reference}`,
         'Open the Business Manager to accept or decline.',
     ].join('\n');
