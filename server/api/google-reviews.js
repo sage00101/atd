@@ -16,7 +16,7 @@ export default async function handler(req, res) {
         const reviews = Array.isArray(queue?.approved) ? queue.approved : [];
         const averageRating = Number(queue?.averageRating)
             || (reviews.length ? reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviews.length : 0);
-        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=900, stale-while-revalidate=3600');
+        res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=60, must-revalidate');
         res.status(200).json({
             reviews: reviews.slice(0, limit),
             averageRating,

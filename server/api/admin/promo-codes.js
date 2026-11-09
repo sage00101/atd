@@ -635,7 +635,7 @@ const googleReviewsStatus=document.getElementById('googleReviewsStatus');
 const googleReviewsFetchedAt=document.getElementById('googleReviewsFetchedAt');
 const googleReviewsPending=document.getElementById('googleReviewsPending');
 const googleReviewsApproved=document.getElementById('googleReviewsApproved');
-let googleReviewsLoaded=false;
+let googleReviewQueue={pending:[],approved:[]};
 const managerShell=document.getElementById('managerShell');
 const authGate=document.getElementById('authGate');
 const authForm=document.getElementById('authForm');
@@ -752,7 +752,7 @@ function activateTab(tab){
   if(['requests','expired','activity'].includes(tab)) loadBookingRequests();
   if(tab==='archived') loadMonthlyEntitlements();
   if(tab==='calendar'&&!calendarFrame.src) connectManagers();
-  if(tab==='reviews'&&!googleReviewsLoaded) loadGoogleReviewQueue();
+  if(tab==='reviews') loadGoogleReviewQueue();
 }
 function activatePromoTab(tab){
   const isMonthly=tab==='monthly';
@@ -802,17 +802,21 @@ function renderGoogleReviewCard(review,pending){
 function renderGoogleReviewQueue(queue){
   const pending=Array.isArray(queue.pending)?queue.pending:[];
   const approved=Array.isArray(queue.approved)?queue.approved:[];
+  googleReviewQueue={...queue,pending,approved};
   googleReviewsPending.innerHTML=pending.length?pending.map(review=>renderGoogleReviewCard(review,true)).join(''):'<p class="empty-state">No reviews are waiting for approval.</p>';
   googleReviewsApproved.innerHTML=approved.length?approved.map(review=>renderGoogleReviewCard(review,false)).join(''):'<p class="empty-state">No reviews have been added to the website yet.</p>';
   googleReviewsFetchedAt.textContent=queue.fetchedAt?'Last fetched '+new Date(queue.fetchedAt).toLocaleString('en-ZA'):'';
+  renderNotifications();
 }
-async function loadGoogleReviewQueue(){
+async function loadGoogleReviewQueue(fetchLatest=false){
   googleReviewsStatus.hidden=true;
   try{
-    const queue=await googleReviewsRequest();
+    const queue=await googleReviewsRequest(fetchLatest?{action:'fetch'}:undefined);
     renderGoogleReviewQueue(queue);
-    googleReviewsLoaded=true;
-  }catch(error){showNotice(googleReviewsStatus,error.message,'error');}
+  }catch(error){
+    showNotice(googleReviewsStatus,error.message,'error');
+    if(fetchLatest)setStatus('Google review sync failed: '+error.message,'error');
+  }
 }
 googleReviewsFetchButton.addEventListener('click',async()=>{
   googleReviewsFetchButton.disabled=true;
@@ -820,7 +824,6 @@ googleReviewsFetchButton.addEventListener('click',async()=>{
   try{
     const queue=await googleReviewsRequest({action:'fetch'});
     renderGoogleReviewQueue(queue);
-    googleReviewsLoaded=true;
     showNotice(googleReviewsStatus,'Google reviews refreshed. '+queue.pending.length+' awaiting approval.','ok');
   }catch(error){showNotice(googleReviewsStatus,error.message,'error');}
   finally{googleReviewsFetchButton.disabled=false;}
@@ -891,10 +894,12 @@ function renderNotifications(){
   const exhausted=monthlyEntitlements.filter(record=>!isArchivedRecord(record)&&record.active&&Number(record.creditsAvailable)<1);
   const expired=bookingRequests.filter(record=>['expired','cancelled'].includes(record.status));
   const pending=bookingRequests.filter(record=>record.status==='pending_approval');
+  const pendingGoogleReviews=googleReviewQueue.pending||[];
   const entries=[
     ...exhausted.map(record=>({key:'credits:'+record.id,html:'<article class="notification-item"><strong>Wash credits exhausted</strong><span>'+escapeHtml(record.customerName)+' · '+escapeHtml(record.email)+' has no prepaid washes remaining.</span><button type="button" data-open-tab="clients">Open monthly clients</button></article>'})),
     ...(expired.length?[{key:'expired:'+expired.map(record=>record.id).sort().join(','),html:'<article class="notification-item"><strong>'+expired.length+' expired or cancelled request'+(expired.length===1?'':'s')+'</strong><span>Review requests that can no longer be completed.</span><button type="button" data-open-tab="expired">Review expired requests</button></article>'}]:[]),
     ...(pending.length?[{key:'pending:'+pending.map(record=>record.id).sort().join(','),html:'<article class="notification-item"><strong>'+pending.length+' request'+(pending.length===1?'':'s')+' awaiting review</strong><span>New bookings are waiting for an accept or decline decision.</span><button type="button" data-open-tab="requests">Open new requests</button></article>'}]:[]),
+    ...(pendingGoogleReviews.length?[{key:'google-reviews:'+pendingGoogleReviews.map(review=>review.id).sort().join(','),html:'<article class="notification-item"><strong>'+pendingGoogleReviews.length+' Google review'+(pendingGoogleReviews.length===1?'':'s')+' awaiting approval</strong><span>Choose whether to add '+(pendingGoogleReviews.length===1?'this review':'these reviews')+' to the website.</span><button type="button" data-open-tab="reviews">Review Google reviews</button></article>'}]:[]),
   ];
   const dismissed=readDismissedNotifications();
   const visible=entries.filter(entry=>!dismissed.includes(entry.key));
@@ -1416,7 +1421,7 @@ async function authenticateManager(){
     managerShell.classList.remove('auth-locked');
     authGate.hidden=true;
     setConn(true);
-    await Promise.all([loadBookingRequests(),loadMonthlyEntitlements()]);
+    await Promise.all([loadBookingRequests(),loadMonthlyEntitlements(),loadGoogleReviewQueue(true)]);
     const initialTab=new URLSearchParams(location.search).get('tab');
     if(['clients','archived','expired','activity','promo','calendar','requests','reviews'].includes(initialTab))activateTab(initialTab);
     else activateTab('requests');
