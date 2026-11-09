@@ -524,16 +524,15 @@ export async function markWebhookProcessed(webhookId) {
 }
 
 // ---------------------------------------------------------------------------
-// Google reviews cache (avoids burning SerpApi search credits on every page load)
+// Google review moderation queue
 // ---------------------------------------------------------------------------
 
-const GOOGLE_REVIEWS_CACHE_KEY = 'google-reviews:cache';
-const GOOGLE_REVIEWS_CACHE_TTL_SECONDS = 60 * 60 * 6; // 6 hours
+const GOOGLE_REVIEW_QUEUE_KEY = 'google-reviews:moderation';
 
-export async function getCachedGoogleReviews() {
-    return redis.get(GOOGLE_REVIEWS_CACHE_KEY);
+export async function getGoogleReviewQueue() {
+    return redis.get(GOOGLE_REVIEW_QUEUE_KEY);
 }
 
-export async function setCachedGoogleReviews(payload) {
-    await redis.set(GOOGLE_REVIEWS_CACHE_KEY, payload, { ex: GOOGLE_REVIEWS_CACHE_TTL_SECONDS });
+export async function setGoogleReviewQueue(queue) {
+    await redis.set(GOOGLE_REVIEW_QUEUE_KEY, queue);
 }

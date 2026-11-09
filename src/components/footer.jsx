@@ -8,6 +8,7 @@ import {
     Music2,
     Phone,
     ShieldCheck,
+    Download,
 } from 'lucide-react';
 import footerLogo from '../assets/logos/footer-logo.svg';
 
@@ -33,12 +34,17 @@ const navLinks = [
 const policyLinks = [
     { label: 'Privacy', href: `${TERMS_URL}#confidentiality` },
     { label: 'Terms', href: TERMS_URL },
-    { label: 'Download T&C booklet', href: TERMS_BOOKLET_URL, download: true },
+    { label: "Download T's & C's", href: TERMS_BOOKLET_URL, download: true },
     { label: 'Cancellation', href: `${TERMS_URL}#cancellation` },
     { label: 'No-show', href: `${TERMS_URL}#cancellation` },
 ];
 
 const socialLinks = [
+    {
+        label: 'Facebook',
+        href: 'https://www.facebook.com/profile.php?id=61596203663345',
+        icon: Facebook,
+    },
     {
         label: 'Instagram',
         href: import.meta.env.VITE_INSTAGRAM_URL || 'https://www.instagram.com/a10tiontodetail?igsi=MWc0bWFuNmw4ODV4dA%3D%3D&utm_source=qr',
@@ -193,8 +199,11 @@ export default function Footer({ onOpenVacancies }) {
                                 key={link.href}
                                 href={link.href}
                                 download={link.download ? 'A10tion To Detail - Client Terms and Conditions Booklet.pdf' : undefined}
-                                className='text-[8.5px] font-medium text-[#29332c]/70 transition hover:text-[#1d3426] sm:text-[9.5px]'
+                                className={link.download
+                                    ? 'inline-flex min-h-[32px] items-center gap-1.5 rounded-full bg-[#1d3426] px-3 text-[8.5px] font-semibold text-white transition hover:bg-[#294532] sm:min-h-[34px] sm:text-[9.5px]'
+                                    : 'text-[8.5px] font-medium text-[#29332c]/70 transition hover:text-[#1d3426] sm:text-[9.5px]'}
                             >
+                                {link.download && <Download className='size-3.5' aria-hidden='true' />}
                                 {link.label}
                             </a>
                         ))}

@@ -168,6 +168,12 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 .promo-tab[aria-selected="true"]{color:var(--accent);background:var(--accent-soft);border-color:rgba(95,224,122,.35)}
 .tab-panel[hidden],.promo-panel[hidden]{display:none}
 .tab-panel,.promo-panel{min-width:0;animation:rise .28s ease both}
+.review-manager-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:12px}
+.review-manager-card{min-width:0;border:1px solid var(--line);border-radius:14px;background:#fff;padding:14px}
+.review-manager-card img{max-width:100%;object-fit:cover}
+.review-manager-images{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.review-manager-images img{width:112px;height:84px;border-radius:8px}
+.review-manager-actions{display:flex;align-items:center;gap:8px;margin-top:12px}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
 /* ---------- notes, titles, hints ---------- */
@@ -366,6 +372,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
     <button id="activityTab" class="tab" data-tab="activity" type="button">Activity</button>
     <button id="promoTab" class="tab" data-tab="promo" type="button">Promo codes</button>
     <button id="calendarTab" class="tab" data-tab="calendar" type="button">Calendar</button>
+    <button id="googleReviewsTab" class="tab" data-tab="reviews" type="button">Reviews</button>
   </nav>
 </header>
 <section class="content">
@@ -517,6 +524,20 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 <section id="calendarPanel" class="tab-panel" role="tabpanel" aria-labelledby="calendarTab" hidden>
   <iframe id="calendarFrame" class="calendar-frame" title="Booking calendar manager" loading="lazy"></iframe>
 </section>
+<section id="googleReviewsPanel" class="tab-panel" role="tabpanel" aria-labelledby="googleReviewsTab" hidden>
+  <h2 class="section-title" style="margin-top:0">Google reviews</h2>
+  <p class="note">Fetch reviews manually when you are ready. Reviews appear on the website only after you choose Yes.</p>
+  <div class="buttons"><button id="googleReviewsFetch" type="button">Fetch Google reviews</button><span id="googleReviewsFetchedAt" class="hint" aria-live="polite"></span></div>
+  <p id="googleReviewsStatus" class="inline-notice" role="status" aria-live="polite" hidden></p>
+  <section class="distribution-panel" aria-label="Google reviews awaiting approval">
+    <div><h3>Awaiting approval</h3><p>Choose whether each review should be added to the website.</p></div>
+    <div id="googleReviewsPending" class="review-manager-grid" aria-live="polite"></div>
+  </section>
+  <section class="distribution-panel" aria-label="Reviews published on the website">
+    <div><h3>On the website</h3><p>These approved reviews are displayed in the public Reviews section.</p></div>
+    <div id="googleReviewsApproved" class="review-manager-grid" aria-live="polite"></div>
+  </section>
+</section>
 </section>
 </main>
 <div id="authGate" class="auth-gate">
@@ -608,6 +629,13 @@ const expiredRequestsEmpty=document.getElementById('expiredRequestsEmpty');
 const activityCards=document.getElementById('activityCards');
 const activityEmpty=document.getElementById('activityEmpty');
 const managerTabs=[...document.querySelectorAll('#managerTabs .tab')];
+const googleReviewsPanel=document.getElementById('googleReviewsPanel');
+const googleReviewsFetchButton=document.getElementById('googleReviewsFetch');
+const googleReviewsStatus=document.getElementById('googleReviewsStatus');
+const googleReviewsFetchedAt=document.getElementById('googleReviewsFetchedAt');
+const googleReviewsPending=document.getElementById('googleReviewsPending');
+const googleReviewsApproved=document.getElementById('googleReviewsApproved');
+let googleReviewsLoaded=false;
 const managerShell=document.getElementById('managerShell');
 const authGate=document.getElementById('authGate');
 const authForm=document.getElementById('authForm');
@@ -712,6 +740,7 @@ function activateTab(tab){
   expiredRequestsPanel.hidden=tab!=='expired';
   activityPanel.hidden=tab!=='activity';
   calendarPanel.hidden=tab!=='calendar';
+  googleReviewsPanel.hidden=tab!=='reviews';
   managerTabs.forEach(button=>{
     const active=button.dataset.tab===tab;
     button.classList.toggle('active',active);
@@ -723,6 +752,7 @@ function activateTab(tab){
   if(['requests','expired','activity'].includes(tab)) loadBookingRequests();
   if(tab==='archived') loadMonthlyEntitlements();
   if(tab==='calendar'&&!calendarFrame.src) connectManagers();
+  if(tab==='reviews'&&!googleReviewsLoaded) loadGoogleReviewQueue();
 }
 function activatePromoTab(tab){
   const isMonthly=tab==='monthly';
@@ -755,6 +785,57 @@ async function monthlyRequest(method,body){
   if(!response.ok) throw new Error(result.message||'Monthly entitlement request failed.');
   return result;
 }
+async function googleReviewsRequest(body){
+  const response=await fetch('/api/admin/google-reviews',{method:body?'POST':'GET',headers:{'Accept':'application/json','Content-Type':'application/json','x-admin-key':keyInput.value.trim()},body:body?JSON.stringify(body):undefined});
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok) throw new Error(result.message||'Google reviews request failed.');
+  return result;
+}
+function renderGoogleReviewCard(review,pending){
+  const images=(review.images||[]).map(url=>'<img src="'+escapeHtml(url)+'" alt="Photo shared with this review" loading="lazy">').join('');
+  const avatar=review.photo?'<img src="'+escapeHtml(review.photo)+'" alt="" width="36" height="36" style="float:right;border-radius:50%">':'';
+  const actions=pending
+    ?'<p class="hint" style="margin:12px 0 0">Add to site?</p><div class="review-manager-actions"><button type="button" data-review-action="approve" data-review-id="'+escapeHtml(review.id)+'">Yes</button><button class="secondary" type="button" data-review-action="dismiss" data-review-id="'+escapeHtml(review.id)+'">No</button></div>'
+    :'<p class="hint" style="margin:12px 0 0">Published on the website</p>';
+  return '<article class="review-manager-card">'+avatar+'<strong>'+escapeHtml(review.name)+'</strong><p class="hint">'+escapeHtml(review.date)+' · '+escapeHtml(review.rating)+'/5 stars</p><p style="white-space:pre-wrap">'+escapeHtml(review.quote)+'</p>'+(images?'<div class="review-manager-images">'+images+'</div>':'')+actions+'</article>';
+}
+function renderGoogleReviewQueue(queue){
+  const pending=Array.isArray(queue.pending)?queue.pending:[];
+  const approved=Array.isArray(queue.approved)?queue.approved:[];
+  googleReviewsPending.innerHTML=pending.length?pending.map(review=>renderGoogleReviewCard(review,true)).join(''):'<p class="empty-state">No reviews are waiting for approval.</p>';
+  googleReviewsApproved.innerHTML=approved.length?approved.map(review=>renderGoogleReviewCard(review,false)).join(''):'<p class="empty-state">No reviews have been added to the website yet.</p>';
+  googleReviewsFetchedAt.textContent=queue.fetchedAt?'Last fetched '+new Date(queue.fetchedAt).toLocaleString('en-ZA'):'';
+}
+async function loadGoogleReviewQueue(){
+  googleReviewsStatus.hidden=true;
+  try{
+    const queue=await googleReviewsRequest();
+    renderGoogleReviewQueue(queue);
+    googleReviewsLoaded=true;
+  }catch(error){showNotice(googleReviewsStatus,error.message,'error');}
+}
+googleReviewsFetchButton.addEventListener('click',async()=>{
+  googleReviewsFetchButton.disabled=true;
+  showNotice(googleReviewsStatus,'Fetching reviews from Google…');
+  try{
+    const queue=await googleReviewsRequest({action:'fetch'});
+    renderGoogleReviewQueue(queue);
+    googleReviewsLoaded=true;
+    showNotice(googleReviewsStatus,'Google reviews refreshed. '+queue.pending.length+' awaiting approval.','ok');
+  }catch(error){showNotice(googleReviewsStatus,error.message,'error');}
+  finally{googleReviewsFetchButton.disabled=false;}
+});
+googleReviewsPending.addEventListener('click',async event=>{
+  const button=event.target.closest('button[data-review-action]');
+  if(!button||button.disabled)return;
+  button.disabled=true;
+  const action=button.dataset.reviewAction;
+  try{
+    const queue=await googleReviewsRequest({action,reviewId:button.dataset.reviewId});
+    renderGoogleReviewQueue(queue);
+    showNotice(googleReviewsStatus,action==='approve'?'Review added to the website.':'Review dismissed from the manager. It remains on Google.','ok');
+  }catch(error){button.disabled=false;showNotice(googleReviewsStatus,error.message,'error');}
+});
 async function bookingRequestsApi(body){
   const response=await fetch('/api/admin/booking-requests',{method:body?'POST':'GET',headers:{'Accept':'application/json','Content-Type':'application/json','x-admin-key':keyInput.value.trim()},body:body?JSON.stringify(body):undefined});
   const result=await response.json().catch(()=>({}));
@@ -1337,7 +1418,7 @@ async function authenticateManager(){
     setConn(true);
     await Promise.all([loadBookingRequests(),loadMonthlyEntitlements()]);
     const initialTab=new URLSearchParams(location.search).get('tab');
-    if(['clients','archived','expired','activity','promo','calendar','requests'].includes(initialTab))activateTab(initialTab);
+    if(['clients','archived','expired','activity','promo','calendar','requests','reviews'].includes(initialTab))activateTab(initialTab);
     else activateTab('requests');
     return true;
   }catch(error){

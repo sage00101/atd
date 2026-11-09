@@ -9,7 +9,6 @@ import {
     ArrowLeft,
     ArrowRight,
     ArrowUpRight,
-    CheckCircle2,
     MessageSquareText,
     Quote,
     Star,
@@ -111,6 +110,7 @@ function normaliseReview(review, index) {
         quote,
         rating: Math.max(1, Math.min(5, rating)),
         photo,
+        images: Array.isArray(review?.images) ? review.images.filter((image) => typeof image === 'string') : [],
     };
 }
 
@@ -208,6 +208,13 @@ function ReviewCard({ review }) {
                     </p>
                 </div>
             </div>
+            {review.images?.length > 0 && (
+                <div className='flex gap-2 px-3 pb-2.5 sm:hidden'>
+                    {review.images.slice(0, 2).map((image, index) => (
+                        <img key={image} src={image} alt={`Photo shared by ${review.name} with their Google review${index ? ` (${index + 1})` : ''}`} loading='lazy' decoding='async' referrerPolicy='no-referrer' className='max-h-28 min-w-0 rounded-[8px] object-cover' />
+                    ))}
+                </div>
+            )}
 
 
             <div className='hidden sm:block'>
@@ -224,6 +231,13 @@ function ReviewCard({ review }) {
                 >
                     “{review.quote}”
                 </p>
+                {review.images?.length > 0 && (
+                    <div className='relative mt-2.5 flex gap-2'>
+                        {review.images.slice(0, 2).map((image, index) => (
+                            <img key={image} src={image} alt={`Photo shared by ${review.name} with their Google review${index ? ` (${index + 1})` : ''}`} loading='lazy' decoding='async' referrerPolicy='no-referrer' className='h-24 max-w-full rounded-[8px] object-cover' />
+                        ))}
+                    </div>
+                )}
 
                 <div className='relative mt-3 flex min-w-0 items-center gap-2.5 border-t border-[#dbe5dd] pt-2.5'>
                     <ReviewerAvatar review={review} />
@@ -268,7 +282,6 @@ export default function ReviewsSection() {
     const [reviewSummary, setReviewSummary] = useState({
         averageRating: 0,
         totalReviewCount: 0,
-        isLive: false,
     });
 
 
@@ -284,7 +297,6 @@ export default function ReviewsSection() {
                 const response = await fetch(
                     GOOGLE_REVIEWS_ENDPOINT,
                     {
-                        cache: 'no-store',
                         headers: {
                             Accept: 'application/json',
                         },
@@ -327,7 +339,6 @@ export default function ReviewsSection() {
                     totalReviewCount:
                         Number(result?.totalReviewCount) ||
                         liveReviews.length,
-                    isLive: true,
                 });
             } catch (error) {
                 if (error?.name !== 'AbortError' && active) {
@@ -603,12 +614,6 @@ export default function ReviewsSection() {
                                 {reviewSummary.totalReviewCount} Google reviews
                             </span>
 
-                            {reviewSummary.isLive && (
-                                <CheckCircle2
-                                    className='h-3 w-3 text-sage'
-                                    aria-label='Live Google review data'
-                                />
-                            )}
                         </div>
                     )}
                 </div>
@@ -624,7 +629,7 @@ export default function ReviewsSection() {
 
                 {reviewsStatus === 'loading' && (
                     <p className='mt-6 text-center text-[10px] text-body sm:text-[11px]'>
-                        Loading reviews from Google…
+                        Loading approved Google reviews…
                     </p>
                 )}
 
