@@ -18,7 +18,7 @@ const faqGroups = [
         icon: CarFront,
         questions: [
             {
-                question: 'Who are you?',
+                question: 'Who are we?',
                 answer:
                     'A10TION TO DETAIL (PTY) LTD - Reg No: 2026/348875/07. 100% Black Owned EME, Level 1 B-BBEE with 135% Procurement Recognition. Based in Cape Town, Southern Suburbs. Tel: 0733069217',
             },

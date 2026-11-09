@@ -16,6 +16,7 @@ const SUPPORT_EMAIL = 'info@a10tion.co.za';
 const SUPPORT_PHONE = '073 306 9217';
 const BUSINESS_ADDRESS = 'Cape Town, Southern Suburbs';
 const TERMS_URL = `${import.meta.env.BASE_URL}terms.html`;
+const TERMS_BOOKLET_URL = `${import.meta.env.BASE_URL}assets/${encodeURIComponent('A10tion To Detail - Client Terms and Conditions Booklet.pdf')}`;
 
 const navLinks = [
     { label: 'Home', href: '#home' },
@@ -32,6 +33,7 @@ const navLinks = [
 const policyLinks = [
     { label: 'Privacy', href: `${TERMS_URL}#confidentiality` },
     { label: 'Terms', href: TERMS_URL },
+    { label: 'Download T&C booklet', href: TERMS_BOOKLET_URL, download: true },
     { label: 'Cancellation', href: `${TERMS_URL}#cancellation` },
     { label: 'No-show', href: `${TERMS_URL}#cancellation` },
 ];
@@ -190,6 +192,7 @@ export default function Footer({ onOpenVacancies }) {
                             <a
                                 key={link.href}
                                 href={link.href}
+                                download={link.download ? 'A10tion To Detail - Client Terms and Conditions Booklet.pdf' : undefined}
                                 className='text-[8.5px] font-medium text-[#29332c]/70 transition hover:text-[#1d3426] sm:text-[9.5px]'
                             >
                                 {link.label}

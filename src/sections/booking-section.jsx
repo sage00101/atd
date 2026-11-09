@@ -31,6 +31,7 @@ import { loadReturningCustomer, saveReturningCustomer } from '../utils/returning
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const TERMS_BOOKLET_URL = `${import.meta.env.BASE_URL}assets/${encodeURIComponent('A10tion To Detail - Client Terms and Conditions Booklet.pdf')}`;
 const CANCEL_BOOKING_ENDPOINT = `${API_BASE_URL}/api/bookings/cancel`;
 const BOOKING_REQUEST_ENDPOINT = `${API_BASE_URL}/api/bookings/request`;
 const MONTHLY_VALIDATION_ENDPOINT = `${API_BASE_URL}/api/monthly/validate`;
@@ -1203,6 +1204,7 @@ export default function BookingSection() {
                                             <input type='checkbox' checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className='mt-0.5 accent-[#365943]' required />
                                             <span className='text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>I agree to the <a href={`${import.meta.env.BASE_URL}terms.html`} target='_blank' rel='noreferrer' className='font-semibold text-sagedeep underline underline-offset-2'>Terms &amp; Conditions</a> and acknowledge the booking/cancellation rules.</span>
                                         </label>
+                                        <a href={TERMS_BOOKLET_URL} download='A10tion To Detail - Client Terms and Conditions Booklet.pdf' className='ml-6 w-fit text-[8.5px] font-semibold text-sagedeep underline underline-offset-2 sm:text-[9.5px]'>Download the Terms &amp; Conditions booklet (PDF)</a>
                                     </div>
 
                                     <div className='mt-4 flex items-start gap-2 rounded-xl bg-sagelight/65 px-3 py-2.5'>

@@ -15,8 +15,8 @@ const publicAssetUrl = (filename) => `${import.meta.env.BASE_URL}assets/${encode
 
 const CONTRACT_DOWNLOAD_KEY = 'a10tion-client-contract-downloaded';
 const MONTHLY_PACKAGE_DOCUMENTS = [
-    { name: 'Supplier_Client Contract Agreement.docx', href: publicAssetUrl('Supplier_Client Contract Agreement.docx') },
-    { name: 'ATD Terms and Conditions.pdf', href: publicAssetUrl('ATD Terms and Conditions.pdf') },
+    { name: 'Supplier_Client Contract Agreement.pdf', href: publicAssetUrl('Supplier_Client Contract Agreement.pdf') },
+    { name: 'A10tion To Detail - Client Terms and Conditions Booklet.pdf', href: publicAssetUrl('A10tion To Detail - Client Terms and Conditions Booklet.pdf') },
 ];
 
 function downloadContractDocuments(documents) {
