@@ -2,18 +2,17 @@ import { Building2, CarFront } from 'lucide-react';
 import privateTwoWashesImage from '../assets/images/private-2-washes.png';
 import privateFourWashesImage from '../assets/images/private-4-washes.png';
 import businessTwoWashesImage from '../assets/images/business-2-washes.png';
-import businessFourWashesImage from '../assets/images/business-4-washes.png';
 
 export const singleWashPrices = [
-    ['Sedan / Hatchback', 'R650,00'],
-    ['SUV / Bakkie', 'R850,00'],
-    ['Minibus / Van', 'R1 100,00'],
+    ['Sedan / Hatchback', 'R250,00'],
+    ['SUV / Bakkie', 'R350,00'],
+    ['Minibus / Van', 'R450,00'],
 ];
 
 export const threeMonthPrepayPrices = [
-    ['Sedan / Hatchback', 'R3 300,00', 'R7 200,00'],
-    ['SUV / Bakkie', 'R4 500,00', 'R9 600,00'],
-    ['Minibus / Van', 'R6 000,00', 'R12 600,00'],
+    ['Sedan / Hatchback', 'R1 160,00', 'R2 420,00'],
+    ['SUV / Bakkie', 'R1 760,00', 'R3 620,00'],
+    ['Minibus / Van', 'R2 360,00', 'R4 820,00'],
 ];
 
 export const packageGroups = {
@@ -30,20 +29,16 @@ export const packageGroups = {
                 image: privateTwoWashesImage,
                 imageAlt: 'Private client two-wash monthly package',
                 monthlyPrices: [
-                    ['Sedan / Hatchback', 'R1 150,00'],
-                    ['SUV / Bakkie', 'R1 550,00'],
-                    ['Minibus / Van', 'R2 050,00'],
+                    ['Sedan / Hatchback', 'R420,00'],
+                    ['SUV / Bakkie', 'R620,00'],
+                    ['Minibus / Van', 'R820,00'],
                 ],
-                threeMonthPrices: ['R3 300,00', 'R4 500,00', 'R6 000,00'],
-                threeMonthNote: 'Save R600 per month',
-                sixMonthPrices: ['R6 600,00', 'R9 000,00', 'R12 000,00'],
-                sixMonthNote: 'Save R1200 per month',
-                twelveMonthPrices: ['R13 200,00', 'R18 000,00', 'R24 000,00'],
-                twelveMonthNote: 'Save R2400 per month',
-                monthlyNote: 'Save R150 per month',
+                threeMonthPrices: ['R1 160,00', 'R1 760,00', 'R2 360,00'],
+                threeMonthNote: 'Save R340 on a 3-month contract',
+                monthlyNote: 'Save R80 per month',
                 details: [
                     'Up to 2 bookings per billing period',
-                    'Save R150 per month',
+                    'Save R80 per month',
                     'Includes the standard wash services',
                 ],
             },
@@ -55,20 +50,16 @@ export const packageGroups = {
                 image: privateFourWashesImage,
                 imageAlt: 'Private client four-wash monthly package',
                 monthlyPrices: [
-                    ['Sedan / Hatchback', 'R2 300,00'],
-                    ['SUV / Bakkie', 'R3 100,00'],
-                    ['Minibus / Van', 'R4 100,00'],
+                    ['Sedan / Hatchback', 'R840,00'],
+                    ['SUV / Bakkie', 'R1 240,00'],
+                    ['Minibus / Van', 'R1 640,00'],
                 ],
-                threeMonthPrices: ['R7 200,00', 'R9 600,00', 'R12 600,00'],
-                threeMonthNote: 'Save R600 per month',
-                sixMonthPrices: ['R14 400,00', 'R19 200,00', 'R25 200,00'],
-                sixMonthNote: 'Save R1200 per month',
-                twelveMonthPrices: ['R28 800,00', 'R38 400,00', 'R50 400,00'],
-                twelveMonthNote: 'Save R2400 per month',
-                monthlyNote: 'Save R300 per month',
+                threeMonthPrices: ['R2 420,00', 'R3 620,00', 'R4 820,00'],
+                threeMonthNote: 'Save R580 on a 3-month contract',
+                monthlyNote: 'Save R160 per month',
                 details: [
                     'Up to 4 bookings per billing period',
-                    'Save R300 per month',
+                    'Save R160 per month',
                     'Includes the standard wash services',
                 ],
             },
@@ -83,7 +74,7 @@ export const packageGroups = {
             {
                 id: 'business-standard',
                 title: 'Standard Package',
-                washes: '2 Washes Per Billing Period',
+                washes: '1 Wash Per Month',
                 badge: 'Discounted Rates',
                 image: businessTwoWashesImage,
                 imageAlt: 'Business, fleet or family two-wash monthly package',
@@ -97,30 +88,7 @@ export const packageGroups = {
                 packageNote:
                     'Business, fleet and family vehicles must have a minimum of three vehicles at the same premises.',
                 details: [
-                    'Up to 2 bookings per billing period',
-                    'Discounted fleet rates',
-                    'Suitable for business, fleet and family vehicles',
-                    'Includes the standard wash services',
-                ],
-            },
-            {
-                id: 'business-premium',
-                title: 'Premium Package',
-                washes: '4 Washes Per Billing Period',
-                badge: 'Best Value',
-                image: businessFourWashesImage,
-                imageAlt: 'Business, fleet or family four-wash monthly package',
-                monthlyPrices: [
-                    ['Sedan / Hatchback', 'R6 600,00'],
-                    ['SUV / Bakkie', 'R9 000,00'],
-                    ['Minibus / Van', 'R11 400,00'],
-                ],
-                threeMonthPrices: ['R19 800,00', 'R27 000,00', 'R34 200,00'],
-                monthlyNote: 'Minimum 3 vehicles at the same premises',
-                packageNote:
-                    'Business, fleet and family vehicles must have a minimum of three vehicles at the same premises.',
-                details: [
-                    'Up to 4 bookings per billing period',
+                    'Up to 1 booking per month',
                     'Discounted fleet rates',
                     'Suitable for business, fleet and family vehicles',
                     'Includes the standard wash services',

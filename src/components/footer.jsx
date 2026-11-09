@@ -14,7 +14,7 @@ import footerLogo from '../assets/logos/footer-logo.svg';
 
 const SUPPORT_EMAIL = 'info@a10tion.co.za';
 const SUPPORT_PHONE = '073 306 9217';
-const BUSINESS_ADDRESS = '2 Pinnacle Crescent, Strandfontein, Cape Town, 7798';
+const BUSINESS_ADDRESS = 'Cape Town, Southern Suburbs';
 const TERMS_URL = `${import.meta.env.BASE_URL}terms.html`;
 
 const navLinks = [

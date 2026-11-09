@@ -160,7 +160,7 @@ export default function ServiceAreaPicker({ address, onAddressChange, location, 
             weight: 2,
             fillColor: '#c74d35',
             fillOpacity: 1,
-        }).addTo(map).bindTooltip('2 Pinnacle Crescent, Strandfontein');
+        }).addTo(map).bindTooltip('Cape Town, Southern Suburbs');
 
         map.on('click', (event) => resolvePinnedAddress(event.latlng.lat, event.latlng.lng));
         mapRef.current = map;

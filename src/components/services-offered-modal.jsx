@@ -30,7 +30,7 @@ const serviceGroups = [
             'Door panels and cup holders',
             'Floor mats cleaning process',
             'Interior glass cleaning',
-            'Boot and engine bay clean out',
+            'Boot cleaning',
         ],
     },
     {

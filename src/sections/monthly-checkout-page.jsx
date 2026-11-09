@@ -24,9 +24,9 @@ const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000;
 const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 7);
 const MONTHLY_SELECTION_KEY = 'a10tion-monthly-checkout-selection';
 const WASH_PRICES = {
-    'Sedan / Hatchback': 65000,
-    'SUV / Bakkie': 85000,
-    'Minibus / Van': 110000,
+    'Sedan / Hatchback': 25000,
+    'SUV / Bakkie': 35000,
+    'Minibus / Van': 45000,
 };
 const BOOKING_SLOTS = ['08:00', '10:30', '13:00', '15:30', '18:00'];
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -42,11 +42,13 @@ function readSelection() {
         packageTier: params.get('packageTier'),
     };
     if (['private', 'business'].includes(fromLink.customerType)
-        && ['standard', 'premium'].includes(fromLink.packageTier)) return fromLink;
+        && ['standard', 'premium'].includes(fromLink.packageTier)
+        && !(fromLink.customerType === 'business' && fromLink.packageTier === 'premium')) return fromLink;
     try {
         const selection = JSON.parse(sessionStorage.getItem(MONTHLY_SELECTION_KEY) || 'null');
         if (['private', 'business'].includes(selection?.customerType)
-            && ['standard', 'premium'].includes(selection?.packageTier)) return selection;
+            && ['standard', 'premium'].includes(selection?.packageTier)
+            && !(selection?.customerType === 'business' && selection?.packageTier === 'premium')) return selection;
     } catch {
         return null;
     }
@@ -127,7 +129,8 @@ export default function MonthlyCheckoutPage() {
     const [serviceAreaStatus, setServiceAreaStatus] = useState(null);
     const [confirmation, setConfirmation] = useState(null);
 
-    const allowance = selection?.packageTier === 'premium' ? 4 : 2;
+    const allowance = selection?.customerType === 'business' ? 1 : selection?.packageTier === 'premium' ? 4 : 2;
+    const allowanceLabel = selection?.customerType === 'business' ? '1 wash per month' : `${allowance} bookings per billing period`;
     const customerTypeLabel = selection ? CUSTOMER_TYPES[selection.customerType] : '';
     const packageLabel = selection ? `${selection.packageTier[0].toUpperCase()}${selection.packageTier.slice(1)}` : '';
     const days = useMemo(() => makeCalendarDays(month), [month]);
@@ -413,7 +416,7 @@ export default function MonthlyCheckoutPage() {
                                     <p className='mt-1 text-xs leading-5 text-[#52635a]'>The promo code validates your assigned entitlement and covers one eligible wash at 100%, subject to your available prepaid credits and the booking cap for this billing period.</p>
                                     <div className='mt-3 flex flex-wrap gap-2'>
                                         <span className='rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-[#31553c]'>{customerTypeLabel}</span>
-                                        <span className='rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-[#31553c]'>{packageLabel} · {allowance} bookings per billing period</span>
+                                        <span className='rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-[#31553c]'>{packageLabel} · {allowanceLabel}</span>
                                     </div>
                                 </div>
                             </div>

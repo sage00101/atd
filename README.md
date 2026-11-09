@@ -42,7 +42,8 @@ former request process expire automatically within three days.
 The **Monthly Clients** manager tracks a customer's package, random access code,
 payment history, prepaid wash-credit balance, reservations, and confirmed
 bookings. A confirmed first monthly-package payment automatically creates the
-entitlement, grants its 2 (Standard) or 4 (Premium) wash credits, and emails the
+entitlement, grants 1 wash credit to Business Standard, 2 to Private Standard,
+or 4 to Private Premium, and emails the
 code. Each booking reserves one credit and confirmation consumes it. Cancelled or
 expired reservations restore the credit. Unused credits roll over while the
 entitlement remains active and paid through. The booking cap is still 2 or

@@ -28,7 +28,7 @@ const includedServices = [
         icon: Sparkles,
         title: 'Pristine Interior Cleaning',
         description:
-            'Full vacuum, compressed air blowout, deep cleaning of plastics and trim, door panels and cup holders, floor mats cleaning process, interior glass cleaning, boot and engine bay clean out.',
+            'Full vacuum, compressed air blowout, deep cleaning of plastics and trim, door panels and cup holders, floor mats cleaning process, interior glass cleaning and boot cleaning.',
     },
     {
         number: '03',

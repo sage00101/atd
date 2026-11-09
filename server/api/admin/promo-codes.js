@@ -398,7 +398,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 </section>
 </section>
 <section id="monthlyWashPanel" class="promo-panel" role="tabpanel" aria-labelledby="clientsTab" hidden>
-  <p class="note">A confirmed first package payment automatically creates and emails a random access code. Standard permits up to 2 bookings per billing period and Premium up to 4. Unused prepaid washes roll over, but the per-period booking cap remains. Each recorded payment creates a fresh access code, and emails the customer.</p>
+  <p class="note">A confirmed first package payment automatically creates and emails a random access code. Business Standard permits 1 wash per month, Private Standard permits up to 2 bookings per billing period, and Private Premium permits up to 4. Unused prepaid washes roll over, but the per-period booking cap remains. Each recorded payment creates a fresh access code, and emails the customer.</p>
   <div id="monthlyStats" class="stat-row" hidden></div>
   <h2 id="monthlyFormTitle" class="section-title">Create monthly entitlement</h2>
   <form id="monthlyForm" class="manager-form">
@@ -1038,12 +1038,21 @@ async function loadMonthlyEntitlements(){
 }
 function resetMonthlyForm(){
   monthlyForm.reset();
+  syncMonthlyPackageTierOptions();
   document.getElementById('monthlyId').value='';
   const now=new Date();
   monthlyForm.elements.validFrom.value=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');
   document.getElementById('monthlyFormTitle').textContent='Create monthly entitlement';
   monthlySubmit.textContent='Save client';
   monthlyCancel.hidden=false;
+}
+function syncMonthlyPackageTierOptions(){
+  const isBusiness=monthlyForm.elements.clientType.value==='business';
+  const standard=monthlyForm.elements.packageTier.querySelector('option[value="standard"]');
+  const premium=monthlyForm.elements.packageTier.querySelector('option[value="premium"]');
+  standard.textContent=isBusiness?'Standard · 1 wash per month':'Standard · 2 washes per billing period';
+  premium.hidden=isBusiness;
+  premium.disabled=isBusiness;
 }
 function editMonthlyEntitlement(record){
   document.getElementById('monthlyId').value=record.id;
@@ -1053,6 +1062,7 @@ function editMonthlyEntitlement(record){
   monthlyForm.elements.email.value=record.email;
   monthlyForm.elements.customerPhone.value=record.customerPhone||'';
   monthlyForm.elements.clientType.value=record.clientType;
+  syncMonthlyPackageTierOptions();
   monthlyForm.elements.packageTier.value=record.packageTier;
   monthlyForm.elements.vehicleType.value=record.vehicleType||'';
   monthlyForm.elements.validFrom.value=record.validFrom;
@@ -1079,6 +1089,10 @@ monthlyForm.addEventListener('submit',async event=>{
   finally{monthlySubmit.disabled=false;}
 });
 monthlyCancel.addEventListener('click',resetMonthlyForm);
+monthlyForm.elements.clientType.addEventListener('change',()=>{
+  syncMonthlyPackageTierOptions();
+  if(monthlyForm.elements.clientType.value==='business'&&monthlyForm.elements.packageTier.value==='premium')monthlyForm.elements.packageTier.value='standard';
+});
 document.getElementById('monthlyReload').addEventListener('click',loadMonthlyEntitlements);
 monthlySearch.addEventListener('input',renderMonthlyEntitlements);
 archiveSearch.addEventListener('input',renderArchivedEntitlements);

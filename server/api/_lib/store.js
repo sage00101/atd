@@ -70,32 +70,27 @@ export async function claimUniqueReferenceNumber() {
 }
 
 export const SINGLE_WASH_CENTS = {
-    'Sedan / Hatchback': 65000,
-    'SUV / Bakkie': 85000,
-    'Minibus / Van': 110000,
+    'Sedan / Hatchback': 25000,
+    'SUV / Bakkie': 35000,
+    'Minibus / Van': 45000,
 };
 
 // Mirrors the monthly rate cards in src/data/pricing.js — first-installment amount charged at booking.
 export const MONTHLY_PACKAGE_CENTS = {
     'private-standard': {
-        'Sedan / Hatchback': 115000,
-        'SUV / Bakkie': 155000,
-        'Minibus / Van': 205000,
+        'Sedan / Hatchback': 42000,
+        'SUV / Bakkie': 62000,
+        'Minibus / Van': 82000,
     },
     'private-premium': {
-        'Sedan / Hatchback': 230000,
-        'SUV / Bakkie': 310000,
-        'Minibus / Van': 410000,
+        'Sedan / Hatchback': 84000,
+        'SUV / Bakkie': 124000,
+        'Minibus / Van': 164000,
     },
     'business-standard': {
         'Sedan / Hatchback': 330000,
         'SUV / Bakkie': 450000,
         'Minibus / Van': 570000,
-    },
-    'business-premium': {
-        'Sedan / Hatchback': 660000,
-        'SUV / Bakkie': 900000,
-        'Minibus / Van': 1140000,
     },
 };
 

@@ -168,6 +168,11 @@ function PackageDetailsModal({ pkg, open, onClose }) {
     if (!open || !pkg) return null;
 
     const hasPackagePricing = Array.isArray(pkg.monthlyPrices);
+    const contractTotalRows = [
+        ['3-month contract totals', pkg.threeMonthPrices, pkg.threeMonthNote],
+        ['6-month contract totals', pkg.sixMonthPrices, pkg.sixMonthNote ?? null],
+        ['12-month contract totals', pkg.twelveMonthPrices, pkg.twelveMonthNote ?? null],
+    ].filter(([, totals]) => Array.isArray(totals));
 
     return (
         <div className='fixed inset-0 z-[120] grid h-[100dvh] w-full place-items-center overflow-y-auto bg-[#0c1710]/70 p-3 backdrop-blur-[4px] sm:p-5' role='dialog' aria-modal='true' aria-labelledby='package-details-title'>
@@ -213,11 +218,7 @@ function PackageDetailsModal({ pkg, open, onClose }) {
 
                     {hasPackagePricing && Array.isArray(pkg.threeMonthPrices) && (
                         <div className='mt-3 space-y-3'>
-                            {[
-                                ['3-month contract totals', pkg.threeMonthPrices, pkg.threeMonthNote],
-                                ['6-month contract totals', pkg.sixMonthPrices, pkg.sixMonthNote ?? null],
-                                ['12-month contract totals', pkg.twelveMonthPrices, pkg.twelveMonthNote ?? null],
-                            ].map(([label, totals, note]) => (
+                            {contractTotalRows.map(([label, totals, note]) => (
                                 <div key={label} className='rounded-[11px] border border-[#dce8de] bg-white p-3'>
                                     <div className='flex flex-wrap items-center justify-between gap-2'>
                                         <p className='text-[8px] font-semibold uppercase tracking-[0.1em] text-sage sm:text-[9px]'>{label}</p>
@@ -380,7 +381,7 @@ export default function PricingSection() {
     const openContractModal = (pkg, button) => {
         lastButtonRef.current = button;
         setPendingPackage(pkg);
-        setContractMonths(readContractDuration());
+        setContractMonths(pkg.id.startsWith('private-') ? '3' : readContractDuration());
         setContractPrompted(false);
         setContractDownloaded(readContractDownloadState());
         setSelectedPackageVehicle(readSingleWashVehicle());
@@ -422,6 +423,7 @@ export default function PricingSection() {
     }, [pendingPackage]);
 
     const activeData = packageGroups[activeGroup];
+    const pendingContractOptions = pendingPackage?.id.startsWith('private-') ? [3] : [3, 6, 12];
 
     return (
         <section id='pricing' className='px-3 pt-10 sm:px-4 sm:pt-12 md:px-8 lg:px-10 lg:pt-14'>
@@ -501,9 +503,9 @@ export default function PricingSection() {
                                 );
                             })}
                         </div>
-                        <p className='mx-auto mt-2 max-w-[540px] text-center text-[10px] font-medium text-body sm:text-[11.5px]'>Contract options: 3, 6, or 12 months.</p>
+                        <p className='mx-auto mt-2 max-w-[540px] text-center text-[10px] font-medium text-body sm:text-[11.5px]'>Contract options: {activeGroup === 'private' ? '3 months only' : '3, 6, or 12 months'}.</p>
 
-                        <div className='mt-3 grid items-start gap-3 sm:grid-cols-2 sm:gap-4'>
+                        <div className={`mt-3 grid items-start gap-3 sm:gap-4 ${activeData.packages.length === 1 ? 'sm:mx-auto sm:max-w-xl sm:grid-cols-1' : 'sm:grid-cols-2'}`}>
                             {activeData.packages.map((pkg) => (
                                 <MonthlyPackageCard
                                     key={pkg.id}
@@ -555,8 +557,8 @@ export default function PricingSection() {
                             <div className={`mt-3 space-y-2 rounded-[12px] border border-line bg-[#fafcfb] p-3 ${contractPrompted ? 'ring-2 ring-sage/30 ring-offset-2' : ''}`}>
                                 <div className='block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>
                                     Contract duration in months
-                                    <div className='mt-1 grid grid-cols-3 gap-2'>
-                                        {[3, 6, 12].map((months) => {
+                                    <div className={`mt-1 grid ${pendingContractOptions.length === 1 ? 'grid-cols-1' : 'grid-cols-3'} gap-2`}>
+                                        {pendingContractOptions.map((months) => {
                                             const selected = String(contractMonths) === String(months);
                                             return (
                                                 <button

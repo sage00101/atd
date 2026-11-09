@@ -21,12 +21,15 @@ function QuoteLink({ children = 'Email info@a10tion for a quote', className = ''
 }
 
 function MonthlyPackageCard({ groupLabel, pkg }) {
-    const savingsBadges = [
-        pkg.sixMonthNote ? { label: '6 month', value: pkg.sixMonthNote } : null,
-        pkg.twelveMonthNote ? { label: '12 month', value: pkg.twelveMonthNote } : null,
-    ].filter(Boolean);
-    const hasMissingContractRates = pkg.monthlyPrices.some((_, index) =>
-        !pkg.sixMonthPrices?.[index] || !pkg.twelveMonthPrices?.[index]);
+    const isPrivatePackage = pkg.id.startsWith('private-');
+    const contractRates = isPrivatePackage
+        ? [['3-month total', pkg.threeMonthPrices]]
+        : [['6-month total', pkg.sixMonthPrices], ['12-month total', pkg.twelveMonthPrices]];
+    const gridColumns = isPrivatePackage
+        ? 'grid-cols-[minmax(0,1.25fr)_repeat(2,minmax(0,0.85fr))]'
+        : 'grid-cols-[minmax(0,1.25fr)_repeat(3,minmax(0,0.85fr))]';
+    const hasMissingContractRates = contractRates.some(([, prices]) =>
+        pkg.monthlyPrices.some((_, index) => !prices?.[index]));
 
     return (
         <article className='overflow-hidden rounded-[18px] border border-[#dce7de] bg-white shadow-[0_22px_55px_-38px_rgba(15,28,20,0.7)] transition-shadow hover:shadow-[0_24px_60px_-36px_rgba(15,28,20,0.75)]'>
@@ -39,30 +42,23 @@ function MonthlyPackageCard({ groupLabel, pkg }) {
                     <span className='max-w-[48%] rounded-full border border-[#d8e6da] bg-[#edf5ee] px-2.5 py-1.5 text-[8px] font-semibold leading-snug text-[#31553c] sm:text-[9px]'>{pkg.monthlyNote}</span>
                 </div>
 
-                {savingsBadges.length > 0 && (
-                    <div className='mt-2.5 flex flex-wrap gap-1.5'>
-                        {savingsBadges.map(({ label, value }) => (
-                            <span key={label} className='rounded-full border border-[#d5e5d8] bg-[#f4faf4] px-2 py-1 text-[7.5px] font-semibold text-[#31553c] sm:text-[8px]'>
-                                {label}: {value}
-                            </span>
-                        ))}
-                    </div>
-                )}
             </div>
 
             <div className='hidden sm:block'>
-                <div className='grid grid-cols-[minmax(0,1.25fr)_repeat(3,minmax(0,0.85fr))] gap-2 border-b border-[#e7ede8] bg-[#f5f8f5] px-4 py-3 text-[8px] font-semibold uppercase tracking-[0.08em] text-[#64756a] sm:px-5'>
+                <div className={`grid ${gridColumns} gap-2 border-b border-[#e7ede8] bg-[#f5f8f5] px-4 py-3 text-[8px] font-semibold uppercase tracking-[0.08em] text-[#64756a] sm:px-5`}>
                     <span>Vehicle</span>
                     <span className='text-center'>Per month</span>
-                    <span className='text-center'>6-month</span>
-                    <span className='text-center'>12-month</span>
+                    {contractRates.map(([label]) => <span key={label} className='text-center'>{label}</span>)}
                 </div>
                 {pkg.monthlyPrices.map(([vehicle, monthlyPrice], index) => (
-                    <div key={vehicle} className='grid grid-cols-[minmax(0,1.25fr)_repeat(3,minmax(0,0.85fr))] items-center gap-2 border-b border-[#edf1ed] px-4 py-3.5 text-[11px] last:border-0 even:bg-[#fcfdfc] sm:px-5 sm:text-[12px]'>
+                    <div key={vehicle} className={`grid ${gridColumns} items-center gap-2 border-b border-[#edf1ed] px-4 py-3.5 text-[11px] last:border-0 even:bg-[#fcfdfc] sm:px-5 sm:text-[12px]`}>
                         <span className='text-[#59655d]'>{vehicle}</span>
                         <span className='text-center font-semibold tabular-nums text-[#18231c]'>{monthlyPrice}</span>
-                        <span className='text-center font-semibold tabular-nums text-[#18231c]'>{pkg.sixMonthPrices?.[index] || <QuoteLink className='text-[9px]'>Request quote</QuoteLink>}</span>
-                        <span className='text-center font-semibold tabular-nums text-[#18231c]'>{pkg.twelveMonthPrices?.[index] || <QuoteLink className='text-[9px]'>Request quote</QuoteLink>}</span>
+                        {contractRates.map(([label, prices]) => (
+                            <span key={label} className='text-center font-semibold tabular-nums text-[#18231c]'>
+                                {prices?.[index] || <QuoteLink className='text-[9px]'>Request quote</QuoteLink>}
+                            </span>
+                        ))}
                     </div>
                 ))}
             </div>
@@ -74,11 +70,10 @@ function MonthlyPackageCard({ groupLabel, pkg }) {
                             <h5 className='text-[12px] font-semibold text-[#18231c]'>{vehicle}</h5>
                             <span className='rounded-full bg-[#eef4ef] px-2.5 py-1 text-[9px] font-semibold text-[#31553c]'>{monthlyPrice}</span>
                         </div>
-                        <div className='mt-2.5 grid grid-cols-3 gap-2'>
+                        <div className={`mt-2.5 grid ${isPrivatePackage ? 'grid-cols-2' : 'grid-cols-3'} gap-2`}>
                             {[
                                 ['Per month', monthlyPrice],
-                                ['6 month', pkg.sixMonthPrices?.[index] || null],
-                                ['12 month', pkg.twelveMonthPrices?.[index] || null],
+                                ...contractRates.map(([label, prices]) => [label, prices?.[index] || null]),
                             ].map(([label, price]) => (
                                 <div key={label} className='min-w-0 rounded-[9px] border border-[#e7eee8] bg-[#f7faf7] px-2 py-2'>
                                     <p className='text-[7px] font-semibold uppercase tracking-[0.08em] text-[#718076]'>{label}</p>
@@ -173,7 +168,6 @@ export default function PriceListModal({ open, onClose }) {
                             <div className='mt-3 rounded-[10px] border border-[#dce6de] bg-white p-3 sm:mt-4 sm:rounded-[12px] sm:p-4'>
                                 <p className='text-[11px] font-semibold text-[#1e3128] sm:text-[12px]'>Every wash includes</p>
                                 <p className='mt-1 text-[11px] leading-[1.45] text-[#59655d] sm:text-[12px] sm:leading-[1.55]'>Full exterior hand wash, interior clean, wheel and tyre care, glass cleaning, vacuum, and the standard vehicle checks.</p>
-                                <p className='mt-2 text-[11px] leading-[1.45] text-[#31553c] sm:text-[12px] sm:leading-[1.55]'>Enjoy a promo code on your first wash! Simply follow us on Instagram to receive yours.</p>
                             </div>
                         </div>
                     )}

@@ -73,7 +73,6 @@ const packageNames = {
     'private-standard': 'Private Client - Standard Package',
     'private-premium': 'Private Client - Premium Package',
     'business-standard': 'Business / Fleet / Family - Standard Package',
-    'business-premium': 'Business / Fleet / Family - Premium Package',
 };
 
 const bookingSlots = [
@@ -103,9 +102,9 @@ function looksLikeVehicleRegistration(value) {
 
 /** Client-side reference prices in cents (server recalculates securely). */
 const SINGLE_WASH_BASE_PRICES = {
-    'Sedan / Hatchback': 65000,
-    'SUV / Bakkie': 85000,
-    'Minibus / Van': 110000,
+    'Sedan / Hatchback': 25000,
+    'SUV / Bakkie': 35000,
+    'Minibus / Van': 45000,
 };
 
 function formatZarFromCents(cents) {

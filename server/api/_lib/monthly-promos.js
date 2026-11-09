@@ -602,6 +602,9 @@ function validateEntitlementInput(input) {
     if (!['standard', 'premium'].includes(packageTier)) {
         throw new Error('Choose the Standard or Premium package.');
     }
+    if (clientType === 'business' && packageTier === 'premium') {
+        throw new Error('Business / Fleet / Family accounts only have the Standard package.');
+    }
     if (vehicleType && !MONTHLY_VEHICLE_TYPES.includes(vehicleType)) {
         throw new Error('Choose Sedan / Hatchback, SUV / Bakkie or Minibus / Van.');
     }
@@ -625,7 +628,7 @@ function validateEntitlementInput(input) {
         clientType,
         packageTier,
         vehicleType,
-        monthlyAllowance: packageTier === 'premium' ? 4 : 2,
+        monthlyAllowance: clientType === 'business' ? 1 : packageTier === 'premium' ? 4 : 2,
         validFrom,
         validUntil: validUntil || null,
     };
@@ -808,7 +811,9 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
     const customer = booking.customer || {};
     const packageId = String(booking.packageId || '');
     const [, clientType, packageTier] = packageId.match(/^(private|business)-(standard|premium)$/) || [];
-    if (!clientType || !packageTier) throw new Error('The paid monthly package is not recognized.');
+    if (!clientType || !packageTier || (clientType === 'business' && packageTier === 'premium')) {
+        throw new Error('The paid monthly package is not recognized.');
+    }
     const amountCents = Number(booking.amountCents);
     if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
         throw new Error('The paid monthly package amount is invalid.');
@@ -816,7 +821,6 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
 
     const paidAt = String(booking.paidAt || new Date().toISOString());
     const paidDate = getSouthAfricanDate(new Date(paidAt));
-    const monthlyAllowance = packageTier === 'premium' ? 4 : 2;
     const customerName = `${customer.firstName || ''} ${customer.surname || ''}`.trim();
     const details = validateEntitlementInput({
         customerName,
@@ -827,6 +831,7 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
         packageTier,
         validFrom: paidDate,
     });
+    const monthlyAllowance = details.monthlyAllowance;
     const validUntil = addDays(addMonthsClamped(paidDate, 1), -1);
     const now = new Date().toISOString();
     const initialPayment = {

@@ -20,7 +20,7 @@ const faqGroups = [
             {
                 question: 'Who are you?',
                 answer:
-                    'A10TION TO DETAIL (PTY) LTD - Reg No: 2020/348075/07. 100% Black Owned EME, Level 1 B-BBEE with 135% Procurement Recognition. Based at 2 Pinnacle Crescent, Strandfontein, 7798. Tel: 083 445 3888',
+                    'A10TION TO DETAIL (PTY) LTD - Reg No: 2026/348875/07. 100% Black Owned EME, Level 1 B-BBEE with 135% Procurement Recognition. Based in Cape Town, Southern Suburbs. Tel: 0733069217',
             },
             {
                 question: 'Are you mobile?',
@@ -37,7 +37,7 @@ const faqGroups = [
             {
                 question: 'What is included in every wash?',
                 answer:
-                    'Full Exterior: High pressure rinse, super foam handwash, door cleaning, wheel &amp; tyre cleaning, tyre dressing, exterior glass, drying. Pristine Interior: Full vacuum, compressed air blowout, deep cleaning of plastics/trim, door panels &amp; cup holders, floor mats cleaning, interior glass, boot &amp; engine bay clean out. Air freshener included.',
+                    'Full Exterior: High pressure rinse, super foam handwash, door cleaning, wheel &amp; tyre cleaning, tyre dressing, exterior glass, drying. Pristine Interior: Full vacuum, compressed air blowout, deep cleaning of plastics/trim, door panels &amp; cup holders, floor mats cleaning, interior glass and boot cleaning. Air freshener included.',
             },
             {
                 question: 'Do you use my sponge/rag?',
@@ -50,14 +50,9 @@ const faqGroups = [
                     'Fluids (oil, coolant, washer), Tyres (pressure, tread, nuts), Lights (head, brake, indicators, hazards), Wipers, Mirrors &amp; Glass, Brakes, Fuel &amp; mileage log, Exterior dents/scratches, under vehicle leaks, Battery terminals, Interior warning lights &amp; seatbelts.',
             },
             {
-                question: 'Do you clean engines?',
+                question: 'Do you do ceramic coating and detailing?',
                 answer:
-                    'Yes, engine bay clean out is included in full service. No high-pressure on engine electrics.'
-            },
-            {
-                question: 'Do you do ceramic coating, car wash, buff &amp; polish?',
-                answer:
-                    'Yes - on request for dealerships and private clients. Quote based on vehicle.'
+                    'No, we only offer onsite mobile car washing.'
             },
         ],
     },
@@ -69,7 +64,7 @@ const faqGroups = [
             {
                 question: 'What are your 2026 rates?',
                 answer:
-                    'Pay As You Go: Sedan/Hatch R650 | SUV/Bakkie R850 | Minibus/Van R1,100. Standard (up to 2 bookings per billing period): Sedan R1,150 | SUV R1,550 | Minibus R2,050 - Save R150. Premium (up to 4 bookings per billing period): Sedan R2,300 | SUV R3,100 | Minibus R4,100 - Save R300. Unused prepaid washes roll over while the subscription is active and paid. 3 Month Prepay: Sedan Std R3,300 Prem R7,200 | SUV Std R4,500 Prem R9,600 | Minibus Std R6,000 Prem R12,600.',
+                    'Single wash: Sedan/Hatchback - R250 | SUV/Bakkie - R350 | Minibus/Van - R450.',
             },
             {
                 question: 'Do you offer monthly accounts for businesses?',
