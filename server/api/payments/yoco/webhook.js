@@ -10,12 +10,12 @@ import {
     markSharedPromoCodeUsed,
     markVehiclePromoUsed,
     markWebhookProcessed,
-    releaseBookingSlot,
-    releaseSharedPromoCode,
+    cancelPendingBookingById,
 } from '../../_lib/store.js';
+import { finishPendingBookingCancellation } from '../../_lib/booking-cancellation.js';
 import { provisionMonthlyEntitlementFromPaidPurchase } from '../../_lib/monthly-promos.js';
 import {
-    markBookingRequestCancelled,
+    findBookingRequestBySlot,
     markBookingRequestConfirmed,
 } from '../../_lib/booking-approval.js';
 
@@ -96,13 +96,16 @@ export default async function handler(req, res) {
     const meta = event.payload?.metadata || pending || {};
 
     if (event.type === 'payment.failed') {
-        const promo = meta.promoCode || pending?.appliedPromo;
-        const reservationId = meta.promoReservationId || pending?.promoReservationId;
-        if (meta.promoCodeType === 'shared-code' && promo && reservationId) {
-            await releaseSharedPromoCode(promo, reservationId);
+        let failedCheckoutId = checkoutId;
+        if (!failedCheckoutId && meta.bookingDate && meta.bookingTime && meta.reference) {
+            const { owner, request } = await findBookingRequestBySlot(meta.bookingDate, meta.bookingTime);
+            if (owner === meta.reference) failedCheckoutId = request?.checkoutId;
         }
-        await releaseBookingSlot(meta.bookingDate || pending?.bookingDate, meta.bookingTime || pending?.bookingTime);
-        await markBookingRequestCancelled(meta.reference || pending?.reference || '');
+        if (failedCheckoutId) {
+            await finishPendingBookingCancellation(await cancelPendingBookingById(failedCheckoutId));
+        } else {
+            console.error('[failed payment could not be matched to a checkout]', webhookId);
+        }
         await markWebhookProcessed(webhookId);
         res.status(200).send('ignored');
         return;
@@ -134,24 +137,24 @@ export default async function handler(req, res) {
         return;
     }
 
-    // Redeem a shared code or vehicle promo only after payment is confirmed.
-    const promo = meta.promoCode || pending?.appliedPromo;
-    const promoCodeType = meta.promoCodeType || pending?.appliedPromoType;
+    const confirmedBooking = checkoutId ? await markBookingConfirmed(checkoutId) : null;
+    if (checkoutId && !confirmedBooking) pending = await getBooking(checkoutId);
+    if (checkoutId && !confirmedBooking && pending?.status !== 'paid') {
+        console.error('[payment received for an unconfirmed booking; manual review required]', checkoutId, pending?.status);
+        await markWebhookProcessed(webhookId);
+        res.status(200).send('manual review required');
+        return;
+    }
+    const paidBooking = confirmedBooking || pending;
+    // Redeem only after the pending booking has actually been confirmed.
+    const promo = meta.promoCode || paidBooking?.appliedPromo;
+    const promoCodeType = meta.promoCodeType || paidBooking?.appliedPromoType;
     if (promo && promoCodeType === 'shared-code') {
-        const reservationId = meta.promoReservationId || pending?.promoReservationId;
+        const reservationId = meta.promoReservationId || paidBooking?.promoReservationId;
         if (reservationId) await markSharedPromoCodeUsed(promo, reservationId);
     } else if (promo && await getVehiclePromo(promo)) {
         await markVehiclePromoUsed(promo);
     }
-
-    const confirmedBooking = checkoutId ? await markBookingConfirmed(checkoutId) : null;
-    if (checkoutId && !confirmedBooking) pending = await getBooking(checkoutId);
-    if (checkoutId && !confirmedBooking && pending?.status !== 'paid') {
-        await markWebhookProcessed(webhookId);
-        res.status(200).send('already confirmed');
-        return;
-    }
-    const paidBooking = confirmedBooking || pending;
     await markBookingRequestConfirmed(meta.reference || paidBooking?.reference || '');
     if (pending?.purchaseType === 'monthly') {
         const provisioning = await provisionMonthlyEntitlementFromPaidPurchase(paidBooking);

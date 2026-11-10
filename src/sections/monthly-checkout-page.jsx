@@ -14,13 +14,13 @@ import {
 import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
 import { trackSubmittedRequest } from '../utils/booking-request-tracker';
 import { loadReturningCustomer, saveReturningCustomer } from '../utils/returning-customer';
+import { MIN_LEAD_TIME_MS, slotDateTime as getSlotDateTime } from '../utils/booking-time';
 
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const BOOKING_REQUEST_ENDPOINT = `${API_BASE_URL}/api/bookings/request`;
 const AVAILABILITY_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const MONTHLY_VALIDATION_ENDPOINT = `${API_BASE_URL}/api/monthly/validate`;
-const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000;
 const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 7);
 const MONTHLY_SELECTION_KEY = 'a10tion-monthly-checkout-selection';
 const WASH_PRICES = {
@@ -239,7 +239,7 @@ export default function MonthlyCheckoutPage() {
         if (!selectedDate || !selectedTime) return;
         const isPast = selectedDate < today;
         const isWeekend = selectedDate.getDay() === 0 || selectedDate.getDay() === 6;
-        const slotDateTime = new Date(`${selectedDateKey}T${selectedTime}:00+02:00`);
+        const slotDateTime = getSlotDateTime(selectedDateKey, selectedTime);
         if (isPast || isWeekend || (bookedSlots[selectedDateKey] || []).includes(selectedTime)
             || slotDateTime.getTime() - now.getTime() < MIN_LEAD_TIME_MS) {
             setSelectedTime('');
@@ -440,10 +440,10 @@ export default function MonthlyCheckoutPage() {
                                         return <button key={key} type='button' disabled={disabled} onClick={() => { setSelectedDate(date); setSelectedTime(''); }} className={`h-8 rounded-md text-xs font-semibold transition ${active ? 'bg-[#1e4931] text-white' : disabled ? 'cursor-not-allowed text-[#b3bbb5]' : 'text-[#35483b] hover:bg-[#edf4ee]'}`}>{date.getDate()}</button>;
                                     })}
                                 </div>
-                                <p className='mt-2 text-[10px] text-[#68776e]' role='status'>{availabilityError || 'Weekday appointments require at least 3 hours notice.'}</p>
+                                <p className='mt-2 text-[10px] text-[#68776e]' role='status'>{availabilityError || 'Weekday appointments require at least 1 hour notice.'}</p>
                                 <div className='mx-auto mt-3 grid max-w-md grid-cols-3 gap-1.5 sm:grid-cols-5'>
                                     {BOOKING_SLOTS.map((time) => {
-                                        const slotDateTime = selectedDate ? new Date(`${selectedDateKey}T${time}:00+02:00`) : null;
+                                        const slotDateTime = selectedDate ? getSlotDateTime(selectedDateKey, time) : null;
                                         const unavailable = !selectedDate || (bookedSlots[selectedDateKey] || []).includes(time)
                                             || (slotDateTime && slotDateTime.getTime() - now.getTime() < MIN_LEAD_TIME_MS);
                                         const active = selectedTime === time;

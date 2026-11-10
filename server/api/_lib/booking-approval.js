@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { getServiceAreaError } from './service-area.js';
+import { hasMinimumBookingNotice } from './booking-time.js';
 import { redis } from './redis.js';
 import {
     BOOKING_SLOT_TIMES,
@@ -91,6 +92,7 @@ local request = cjson.decode(raw)
 if request.status ~= ARGV[1] then return {request.status} end
 request.status = ARGV[2]
 request.updatedAt = ARGV[3]
+if ARGV[2] == 'cancelled' then request.hiddenFromAdmin = false end
 if ARGV[4] ~= '' then request.checkoutId = ARGV[4] end
 if ARGV[5] ~= '' then request.checkoutUrl = ARGV[5] end
 if ARGV[6] ~= '' then request.completedAt = ARGV[6] end
@@ -243,8 +245,8 @@ export async function validateBookingRequest(booking) {
     }
     const day = new Date(`${bookingDate}T00:00:00.000Z`).getUTCDay();
     if (day === 0 || day === 6) throw new BookingRequestError('Bookings are available on weekdays only.');
-    if (new Date(`${bookingDate}T${bookingTime}:00+02:00`).getTime() - Date.now() < 3 * 60 * 60 * 1000) {
-        throw new BookingRequestError('Bookings require at least 3 hours notice. Please choose a later time.');
+    if (!hasMinimumBookingNotice(bookingDate, bookingTime)) {
+        throw new BookingRequestError('Bookings require at least 1 hour notice. Please choose a later time.');
     }
     if (!SINGLE_WASH_CENTS[booking.vehicleType]) throw new BookingRequestError('Choose a valid vehicle category.');
     if (!looksLikeEmail(customer.email)
@@ -628,7 +630,7 @@ export function getPublicBookingRequest(request, includeBooking = true) {
     return publicRequest(request, includeBooking);
 }
 
-const CANCELLABLE_BOOKED_STATUSES = ['approved', 'processing', 'awaiting_completion', 'confirmed'];
+const CANCELLABLE_BOOKED_STATUSES = ['pending_approval', 'approved', 'processing', 'awaiting_completion', 'confirmed'];
 
 /** Finds the customer request that currently owns a booked date/time slot. */
 export async function findBookingRequestBySlot(bookingDate, bookingTime) {

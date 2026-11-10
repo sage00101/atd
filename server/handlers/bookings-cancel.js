@@ -1,7 +1,6 @@
 import { applyCors } from '../api/_lib/cors.js';
-import { releaseMonthlyWashReservation } from '../api/_lib/monthly-promos.js';
-import { cancelPendingBookingByToken, releaseSharedPromoCode } from '../api/_lib/store.js';
-import { markBookingRequestCancelled } from '../api/_lib/booking-approval.js';
+import { cancelPendingBookingByToken } from '../api/_lib/store.js';
+import { finishPendingBookingCancellation } from '../api/_lib/booking-cancellation.js';
 
 export default async function handler(req, res) {
     if (applyCors(req, res)) return;
@@ -18,21 +17,7 @@ export default async function handler(req, res) {
 
     try {
         const result = await cancelPendingBookingByToken(cancellationToken);
-        const booking = result?.booking;
-        const cancelled = result?.status === 'CANCELLED' || result?.status === 'cancelled';
-        if (cancelled && booking?.reference) await markBookingRequestCancelled(booking.reference);
-
-        if (cancelled && booking?.appliedPromoType === 'shared-code' && booking.appliedPromo && booking.promoReservationId) {
-            await releaseSharedPromoCode(booking.appliedPromo, booking.promoReservationId);
-        }
-        if (cancelled && booking?.bookingType === 'monthly-entitlement'
-            && booking.monthlyEntitlementId && booking.monthlyUsagePeriod && booking.promoReservationId) {
-            await releaseMonthlyWashReservation({
-                entitlementId: booking.monthlyEntitlementId,
-                period: booking.monthlyUsagePeriod,
-                reservationId: booking.promoReservationId,
-            });
-        }
+        const cancelled = await finishPendingBookingCancellation(result);
 
         res.status(200).json({ cancelled });
     } catch (error) {

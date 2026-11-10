@@ -10,6 +10,12 @@ npm install
 npm run dev
 ```
 
+Booking lifecycle regression tests use Node's experimental module mocking:
+
+```bash
+node --experimental-test-module-mocks --test server/test/booking-lifecycle.test.js
+```
+
 ## Monthly client management email
 
 The Business Manager's **Monthly Clients** tab stores a customer's contact
@@ -26,18 +32,20 @@ webhook signing secret as `RESEND_WEBHOOK_SECRET` in the deployment environment.
 
 ## Booking workflow
 
-Customers book directly from the website and choose secure Yoco checkout or
-payment on arrival. On-site bookings are confirmed immediately; online bookings
-are confirmed by the Yoco payment webhook. A valid Monthly Clients entitlement
-confirms a covered wash immediately without collecting payment. Booking receipts
-are sent to the customer and business after confirmation. Returning from a
-cancelled or failed online checkout releases its pending time slot immediately.
+Customers submit a booking request and choose secure Yoco checkout or payment on
+arrival. Requests reserve their chosen slot while awaiting review. Once approved,
+on-site bookings and covered Monthly Clients washes are confirmed when the customer
+continues; online bookings are confirmed by the Yoco payment webhook. Booking
+receipts are sent after confirmation. Returning from a cancelled or failed online
+checkout releases its pending slot and updates the request in the Business Manager.
+Failed-payment webhooks also release pending slots. If a customer abandons checkout
+without returning or a payment event, the hold expires automatically. Appointments
+require at least one hour's notice in South African time.
 
 Single-wash promo codes are reserved when checkout starts and redeemed only
 after Yoco confirms payment. The Business Manager continues to manage promo
-batches, Monthly Clients and calendar availability; it does not review or
-approve individual bookings. Any appointment holds created by the retired
-former request process expire automatically within three days.
+batches, Monthly Clients, booking requests and calendar availability. Pending
+request and checkout holds expire automatically within three days.
 
 The **Monthly Clients** manager tracks a customer's package, random access code,
 payment history, prepaid wash-credit balance, reservations, and confirmed
@@ -67,11 +75,6 @@ Hobby plan's 12-function deployment limit. Keep the Vercel project root
 directory set to `server` so `server/vercel.json` rewrites are applied. Continue
 using the configured `SITE_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`,
 `YOCO_SECRET_KEY`, `YOCO_WEBHOOK_SECRET`, and Upstash Redis credentials.
-
-The booking availability, cancellation, request, on-site, on-site payment confirmation, and
-Yoco checkout endpoints are routed through one Vercel function to stay within
-the Hobby plan's 12-function deployment limit. Keep the Vercel project root
-directory set to `server` so `server/vercel.json` rewrites are applied.
 
 ## Vacancy applications with Formspree
 

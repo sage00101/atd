@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import { IncomingForm } from 'formidable';
 import '../api/_lib/load-env.js';
+import { hasMinimumBookingNotice } from '../api/_lib/booking-time.js';
 import { applyCors } from '../api/_lib/cors.js';
 import { sendReceiptEmail } from '../api/_lib/email.js';
 import { getServiceAreaError } from '../api/_lib/service-area.js';
@@ -33,11 +34,6 @@ import {
     PROMO_DISCOUNT_RATE,
     SINGLE_WASH_CENTS,
 } from '../api/_lib/store.js';
-
-// Business operates in South Africa (UTC+2, no DST) — anchor the quoted
-// booking date/time to that fixed offset regardless of the server's own TZ.
-const SA_UTC_OFFSET = '+02:00';
-const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000; // customers must book at least 3 hours ahead
 
 // Do not pre-parse the multipart body — formidable needs the raw stream.
 export const config = { api: { bodyParser: false } };
@@ -166,9 +162,8 @@ export default async function handler(req, res) {
             res.status(400).json({ message: 'Choose a date and time.' });
             return;
         }
-        const slotDateTime = new Date(`${bookingDate}T${bookingTime}:00${SA_UTC_OFFSET}`);
-        if (Number.isNaN(slotDateTime.getTime()) || slotDateTime.getTime() - Date.now() < MIN_LEAD_TIME_MS) {
-            res.status(400).json({ message: 'Bookings require at least 3 hours notice. Please choose a later time.' });
+        if (!hasMinimumBookingNotice(bookingDate, bookingTime)) {
+            res.status(400).json({ message: 'Bookings require at least 1 hour notice. Please choose a later time.' });
             return;
         }
         if (!looksLikeVehicleRegistration(customer?.registration)) {

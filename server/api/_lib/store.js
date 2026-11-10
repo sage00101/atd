@@ -56,7 +56,13 @@ const RESERVE_BOOKING_SLOT_SCRIPT = `
 local owner = redis.call('GET', KEYS[1])
 if owner and owner ~= ARGV[1] then return 0 end
 redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+redis.call('SADD', KEYS[2], ARGV[3])
+redis.call('EXPIRE', KEYS[2], ARGV[4])
 return 1
+`;
+const REMOVE_STALE_SLOT_INDEX_SCRIPT = `
+if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
+return redis.call('SREM', KEYS[2], ARGV[1])
 `;
 
 /** Generates a reference number and atomically claims it, retrying on the astronomically rare collision. */
@@ -296,12 +302,9 @@ export async function reserveBookingSlot(bookingDate, bookingTime, token, ttlSec
     if (!bookingDate || !bookingTime) return true;
     const claimed = await redis.eval(RESERVE_BOOKING_SLOT_SCRIPT, [
         slotKey(bookingDate, bookingTime),
-    ], [token, String(ttlSeconds)]);
-    if (!claimed) return false;
-    const key = dateIndexKey(bookingDate);
-    await redis.sadd(key, bookingTime);
-    await redis.expire(key, DATE_INDEX_TTL_SECONDS);
-    return true;
+        dateIndexKey(bookingDate),
+    ], [token, String(ttlSeconds), bookingTime, String(DATE_INDEX_TTL_SECONDS)]);
+    return Boolean(claimed);
 }
 
 /** Stores the booking record once the slot is already claimed via reserveBookingSlot. */
@@ -351,6 +354,11 @@ export async function cancelPendingBookingByToken(token) {
     const checkoutId = await redis.get(cancellationTokenKey(token));
     if (!checkoutId) return null;
 
+    return cancelPendingBookingById(checkoutId);
+}
+
+export async function cancelPendingBookingById(checkoutId) {
+    if (!checkoutId) return null;
     const booking = await getBooking(checkoutId);
     if (!booking) return null;
     const result = await redis.eval(CANCEL_PENDING_BOOKING_SCRIPT, [
@@ -425,7 +433,10 @@ export async function getBookedSlotsInRange(fromDate, toDate) {
         const stillHeld = await Promise.all(candidates.map((time) => redis.exists(slotKey(date, time))));
         const times = candidates.filter((_, index) => stillHeld[index]);
         const stale = candidates.filter((_, index) => !stillHeld[index]);
-        if (stale.length) await redis.srem(dateIndexKey(date), ...stale); // opportunistic cleanup
+        await Promise.all(stale.map((time) => redis.eval(REMOVE_STALE_SLOT_INDEX_SCRIPT, [
+            slotKey(date, time),
+            dateIndexKey(date),
+        ], [time])));
         if (times.length) bookedSlots[date] = times;
     }));
 

@@ -27,6 +27,7 @@ import { packageGroups } from '../data/pricing';
 import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
 import { trackSubmittedRequest } from '../utils/booking-request-tracker';
 import { loadReturningCustomer, saveReturningCustomer } from '../utils/returning-customer';
+import { MIN_LEAD_TIME_MS, slotDateTime } from '../utils/booking-time';
 
 const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 
@@ -38,7 +39,6 @@ const MONTHLY_VALIDATION_ENDPOINT = `${API_BASE_URL}/api/monthly/validate`;
 const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
 const BOOKING_CLOCK_REFRESH_MS = 10_000;
-const MIN_LEAD_TIME_MS = 3 * 60 * 60 * 1000; // bookings require at least 3 hours notice
 const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 7);
 const SINGLE_WASH_VEHICLE_KEY = 'a10tion-single-wash-vehicle-type';
 const MAX_CONTRACT_FILE_BYTES = 10 * 1024 * 1024;
@@ -59,6 +59,8 @@ const PAYMENT_STATUS_MESSAGES = {
     onsiteEmailIssue: { tone: 'error', text: 'Booking confirmed, but the receipt email could not be sent. Please contact us with your booking reference.' },
     cancelled: { tone: 'info', text: 'Checkout was cancelled. No payment was taken - you can restart whenever you\u2019re ready.' },
     failed: { tone: 'error', text: 'The payment did not go through. Please try again or use a different card.' },
+    cancellationError: { tone: 'error', text: 'We could not confirm that your slot was released. Please reload this page to retry, or contact us with your booking reference.' },
+    cancellationPending: { tone: 'info', text: 'Checking your cancelled checkout and releasing its time slot...' },
 };
 
 function readSingleWashVehicle() {
@@ -157,11 +159,6 @@ function isSameDate(a, b) {
 
 function isSameMonth(a, b) {
     return a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
-}
-
-function slotDateTime(date, time) {
-    const [hours, minutes] = time.split(':').map(Number);
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), hours, minutes);
 }
 
 function normaliseBookedSlots(payload) {
@@ -311,19 +308,29 @@ export default function BookingSection() {
         if (status && PAYMENT_STATUS_MESSAGES[status]) {
             const reference = params.get('ref');
             const cancellationToken = params.get('cancelToken');
-            setPaymentStatus(status);
+            setPaymentStatus(cancellationToken && (status === 'cancelled' || status === 'failed') ? 'cancellationPending' : status);
             setPaymentReference(reference);
             if (cancellationToken && (status === 'cancelled' || status === 'failed')) {
                 fetch(CANCEL_BOOKING_ENDPOINT, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ cancellationToken }),
-                }).then((response) => {
+                }).then(async (response) => {
                     if (!response.ok) throw new Error(`Booking cancellation returned ${response.status}.`);
+                    const result = await response.json();
+                    if (!result.cancelled) throw new Error('Booking was not cancelled; it may already be confirmed or expired.');
+                    setPaymentStatus(status);
                     window.dispatchEvent(new Event('a10tion-booking-availability-refresh'));
+                    params.delete('payment');
+                    params.delete('ref');
+                    params.delete('cancelToken');
+                    const cleanedSearch = params.toString();
+                    window.history.replaceState(null, '', `${window.location.pathname}${cleanedSearch ? `?${cleanedSearch}` : ''}${window.location.hash}`);
                 }).catch((error) => {
                     console.error('[booking cancellation request failed]', error);
+                    setPaymentStatus('cancellationError');
                 });
+                return;
             }
             params.delete('payment');
             params.delete('ref');
@@ -505,7 +512,7 @@ export default function BookingSection() {
             setSelectedTime(null);
             return;
         }
-        if (selectedDate && selectedTime && (blockedTimes.includes(selectedTime) || slotDateTime(selectedDate, selectedTime).getTime() - now.getTime() < MIN_LEAD_TIME_MS)) {
+        if (selectedDate && selectedTime && (blockedTimes.includes(selectedTime) || slotDateTime(selectedDateKey, selectedTime).getTime() - now.getTime() < MIN_LEAD_TIME_MS)) {
             setSelectedTime(null);
         }
     }, [selectedDateKey, selectedTime, bookedSlots, now, todayKey]);
@@ -681,7 +688,7 @@ export default function BookingSection() {
                     >
                         <span className='flex-1'>
                             {PAYMENT_STATUS_MESSAGES[paymentStatus].text}
-                            {(paymentStatus === 'success' || paymentStatus === 'onsite') && paymentReference && (
+                            {['success', 'onsite', 'cancellationError'].includes(paymentStatus) && paymentReference && (
                                 <span className='mt-1 block font-semibold'>Reference: {paymentReference}</span>
                             )}
                         </span>
@@ -790,7 +797,7 @@ export default function BookingSection() {
 
                         <div className='mt-1.5 grid grid-cols-3 gap-1 sm:grid-cols-4 sm:gap-2'>
                             {bookingSlots.map((slot) => {
-                                const unavailable = blockedTimes.includes(slot.time) || Boolean(selectedDate && slotDateTime(selectedDate, slot.time).getTime() - now.getTime() < MIN_LEAD_TIME_MS);
+                                const unavailable = blockedTimes.includes(slot.time) || Boolean(selectedDate && slotDateTime(selectedDateKey, slot.time).getTime() - now.getTime() < MIN_LEAD_TIME_MS);
                                 const selected = selectedTime === slot.time;
                                 return (
                                     <button key={slot.time} type='button' disabled={!selectedDate || unavailable} onClick={() => setSelectedTime(slot.time)} className={`min-h-[31px] rounded-[7px] border px-0 text-[8.5px] font-semibold transition sm:min-h-[40px] sm:text-[10.5px] ${selected ? 'border-[#274633] bg-[#1d3426] text-white' : unavailable ? 'cursor-not-allowed border-line bg-canvasoft text-body/25 line-through' : !selectedDate ? 'cursor-not-allowed border-line bg-canvasoft text-body/30' : 'border-line bg-white text-ink hover:border-sage/45 hover:bg-sagelight'}`} title={slot.window}>
@@ -799,6 +806,7 @@ export default function BookingSection() {
                                 );
                             })}
                         </div>
+                        <p className='mt-1 text-[9px] text-body/70'>Appointments require at least 1 hour notice.</p>
                         <div className='mt-2 flex items-start gap-2 rounded-[10px] border border-amber-200/80 bg-amber-50 px-2.5 py-2 text-left sm:px-3 sm:py-2.5' role='note'>
                             <Clock3 className='mt-0.5 size-3.5 shrink-0 text-amber-700' aria-hidden='true' />
                             <p className='text-left text-[10px] leading-[1.45] text-amber-950 sm:text-[11px]'>

@@ -174,7 +174,7 @@ const adminPage = `<!doctype html>
   <header class="topbar">
     <div class="brand-line"><p class="eyebrow">A10tion To Detail / Operations</p><span class="live-mark">Live schedule</span></div>
     <h1 class="heading">Availability calendar</h1>
-    <p class="sub">Manage appointment availability and customer bookings.</p>
+    <p class="sub">Manage appointment availability and customer bookings. Customers need at least one hour's notice; earlier slots are not shown as bookings here.</p>
   </header>
   <main class="panel">
     <div class="toolbar">
@@ -228,7 +228,7 @@ const adminPage = `<!doctype html>
   const summaryNode = document.getElementById('summary');
   const historyNode = document.getElementById('history');
   const loginOverlay = document.getElementById('loginOverlay');
-  const state = { blockedSlots: {}, bookedSlots: {}, history: [], viewMode: '30', isDragging: false, dragCache: new Set(), openDates: new Set(), initializedOpenDate: false };
+  const state = { blockedSlots: {}, bookedSlots: {}, history: [], viewMode: '30', isDragging: false, dragCache: new Set(), openDates: new Set(), initializedOpenDate: false, loaded: false };
   if (new URLSearchParams(location.search).get('embedded') === '1') {
     document.body.classList.add('embedded');
     keyInput.hidden = true;
@@ -538,6 +538,7 @@ const adminPage = `<!doctype html>
       state.blockedSlots = result.blockedSlots || {};
       state.bookedSlots = result.bookedSlots || {};
       state.history = Array.isArray(result.history) ? result.history : [];
+      state.loaded = true;
       renderHistory();
       renderCalendar();
       const blockedCount = Object.values(state.blockedSlots).reduce((sum, times) => sum + times.length, 0);
@@ -551,6 +552,20 @@ const adminPage = `<!doctype html>
       button.textContent = 'Load live calendar';
     }
   }
+
+  async function refreshBookedSlots() {
+    if (!state.loaded || document.visibilityState !== 'visible' || state.isDragging) return;
+    try {
+      const result = await callApi('GET');
+      state.bookedSlots = result.bookedSlots || {};
+      renderCalendar();
+    } catch (error) {
+      setStatus('Could not refresh customer bookings: ' + error.message, 'error');
+    }
+  }
+
+  window.setInterval(refreshBookedSlots, 30000);
+  window.addEventListener('focus', refreshBookedSlots);
 
   async function saveCalendar() {
     const button = document.getElementById('save');
