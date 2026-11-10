@@ -46,7 +46,9 @@ function safeImageUrl(value) {
 
 function mapReview(review) {
     const name = String(review.user?.name || 'Google customer').slice(0, 120);
-    const quote = String(review.snippet || review.extracted_snippet?.original || '').slice(0, 5000);
+    const rating = Math.max(1, Math.min(5, Math.round(Number(review.rating) || 5)));
+    const reviewText = String(review.snippet || review.extracted_snippet?.original || '').slice(0, 5000);
+    const quote = reviewText || `Rated ${rating} stars on Google.`;
     const date = String(review.date || '').slice(0, 120);
     const id = String(review.review_id || crypto.createHash('sha256').update(`${name}|${date}|${quote}`).digest('hex')).slice(0, 200);
     const images = (Array.isArray(review.images) ? review.images : [])
@@ -57,7 +59,7 @@ function mapReview(review) {
     return {
         id,
         name,
-        rating: Math.max(1, Math.min(5, Math.round(Number(review.rating) || 5))),
+        rating,
         quote,
         date,
         photo: safeImageUrl(review.user?.thumbnail),
@@ -78,6 +80,8 @@ async function fetchGoogleReviews() {
     endpoint.searchParams.set('engine', 'google_maps_reviews');
     endpoint.searchParams.set('place_id', placeId);
     endpoint.searchParams.set('sort_by', 'newestFirst');
+    endpoint.searchParams.set('num', '60');
+    endpoint.searchParams.set('no_cache', 'true');
     endpoint.searchParams.set('api_key', apiKey);
 
     const response = await fetch(endpoint);
@@ -85,7 +89,7 @@ async function fetchGoogleReviews() {
     if (!response.ok) throw new Error(body?.error || 'Google reviews could not be fetched.');
 
     return {
-        reviews: (body.reviews || []).map(mapReview).filter((review) => review.quote.trim()),
+        reviews: (body.reviews || []).map(mapReview),
         averageRating: Number(body.place_info?.rating) || 0,
         totalReviewCount: Number(body.place_info?.reviews) || (body.reviews || []).length,
     };
