@@ -1,6 +1,7 @@
 import {
     ArrowUpRight,
     BadgeCheck,
+    Cookie,
     Facebook,
     Instagram,
     Mail,
@@ -34,7 +35,6 @@ const navLinks = [
 const policyLinks = [
     { label: 'Privacy', href: `${TERMS_URL}#confidentiality` },
     { label: 'Terms', href: TERMS_URL },
-    { label: "Download T's & C's", href: TERMS_BOOKLET_URL, download: true },
     { label: 'Cancellation', href: `${TERMS_URL}#cancellation` },
     { label: 'No-show', href: `${TERMS_URL}#cancellation` },
 ];
@@ -192,36 +192,42 @@ export default function Footer({ onOpenVacancies }) {
 
 
             <div className='relative border-t border-[#dbe4dd] bg-[#eef3ef]/72'>
-                <div className='mx-auto flex max-w-7xl flex-col gap-2.5 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 md:px-8 lg:px-10'>
-                    <div className='flex flex-wrap items-center justify-center gap-x-3 gap-y-1 sm:justify-start'>
+                <div className='mx-auto grid max-w-7xl grid-cols-1 gap-3 px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-x-5 sm:gap-y-3 sm:px-6 md:px-8 lg:px-10'>
+                    <nav className='flex flex-wrap items-center gap-x-4 gap-y-1' aria-label='Legal links'>
                         {policyLinks.map((link) => (
                             <a
                                 key={link.href}
                                 href={link.href}
-                                download={link.download ? 'A10tion To Detail - Client Terms and Conditions Booklet.pdf' : undefined}
-                                className={link.download
-                                    ? 'inline-flex min-h-[32px] items-center gap-1.5 rounded-full bg-[#1d3426] px-3 text-[8.5px] font-semibold text-white transition hover:bg-[#294532] sm:min-h-[34px] sm:text-[9.5px]'
-                                    : 'text-[8.5px] font-medium text-[#29332c]/70 transition hover:text-[#1d3426] sm:text-[9.5px]'}
+                                className='inline-flex min-h-7 items-center text-[9px] font-medium text-[#29332c]/70 transition hover:text-[#1d3426] sm:text-[9.5px]'
                             >
-                                {link.download && <Download className='size-3.5' aria-hidden='true' />}
                                 {link.label}
                             </a>
                         ))}
+                    </nav>
+
+                    <div className='flex w-fit items-center gap-2 justify-self-start sm:justify-self-end'>
                         <button
                             type='button'
                             onClick={() => window.dispatchEvent(new Event('a10tion-open-cookie-settings'))}
-                            className='text-[8.5px] font-medium text-[#29332c]/70 transition hover:text-[#1d3426] sm:text-[9.5px]'
+                            className='hidden min-h-9 items-center justify-center gap-1.5 rounded-[8px] border border-[#d1ddd4] bg-white/75 px-3 text-[9px] font-semibold text-[#314638] transition hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#31553c] lg:inline-flex lg:text-[9.5px]'
                         >
+                            <Cookie className='size-3.5' aria-hidden='true' />
                             Cookie settings
                         </button>
+                        <a
+                            href={TERMS_BOOKLET_URL}
+                            download='A10tion To Detail - Client Terms and Conditions Booklet.pdf'
+                            className='inline-flex min-h-9 w-fit items-center justify-center gap-1.5 rounded-[8px] bg-[#1d3426] px-3 text-[9px] font-semibold text-white shadow-sm transition hover:bg-[#294532] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#31553c] sm:text-[9.5px]'
+                        >
+                            <Download className='size-3' aria-hidden='true' />
+                            Download T&apos;s &amp; C&apos;s
+                        </a>
                     </div>
 
-                    <div className='flex items-center justify-between gap-3 sm:justify-end'>
-                        <div className='min-w-0 text-left sm:text-right'>
-                            <p className='text-[8.5px] font-medium text-[#29332c]/70 sm:text-[9.5px]'>
-                                Copyright © A10tion To Detail. All Rights Reserved.
-                            </p>
-                        </div>
+                    <div className='flex flex-wrap items-center justify-between gap-3 border-t border-[#d9e3dc] pt-3 sm:col-span-2'>
+                        <p className='text-[8.5px] font-medium text-[#29332c]/70 sm:text-[9.5px]'>
+                            Copyright © A10tion To Detail. All Rights Reserved.
+                        </p>
 
                         <div className='flex items-center gap-1.5'>
                             {socialLinks.map(({ label, href, icon: Icon }) => (

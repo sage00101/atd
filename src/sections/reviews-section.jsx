@@ -25,7 +25,7 @@ const SWIPE_THRESHOLD_MOUSE = 28;
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 const GOOGLE_REVIEWS_ENDPOINT =
-    `${API_BASE_URL}/api/google-reviews?limit=${MAX_REVIEWS}`;
+    `${API_BASE_URL}/api/google-reviews?limit=${MAX_REVIEWS}&v=2`;
 
 const GOOGLE_REVIEW_URL =
     import.meta.env.VITE_GOOGLE_REVIEW_URL || '';

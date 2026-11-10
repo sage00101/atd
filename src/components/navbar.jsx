@@ -648,6 +648,17 @@ export default function Navbar({ onOpenVacancies }) {
                         ================================================= */}
                         <div className='mt-auto'>
 
+                            <button
+                                type='button'
+                                onClick={() => {
+                                    closeMenu();
+                                    window.dispatchEvent(new Event('a10tion-open-cookie-settings'));
+                                }}
+                                className='mb-2 inline-flex min-h-9 items-center justify-center gap-2 rounded-[9px] border border-[#d9e3dc] bg-white/80 px-3 text-[10px] font-semibold text-[#405348] transition hover:bg-white'
+                            >
+                                Cookie settings
+                            </button>
+
                             <a
                                 href='#booking'
                                 onClick={closeMenu}
