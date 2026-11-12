@@ -62,6 +62,8 @@ function bookingEntries(request) {
         ['Email address', customer.email],
         ['Service / package', booking.packageName || booking.packageId],
         ['Vehicle category', booking.vehicleType],
+        ['Fleet size tier', booking.fleetSizeTier],
+        ['Fleet vehicle count', booking.fleetVehicleCount],
         ['Vehicle registration', customer.registration],
         ['Requested date', booking.bookingDate],
         ['Requested time', booking.bookingTime],
@@ -81,7 +83,7 @@ function bookingEntries(request) {
         'customer', 'serviceLocation', 'contractFileBase64', 'approvalToken', 'requestedPaymentMethod',
         'bookingDate', 'bookingTime', 'packageName', 'packageId', 'vehicleType', 'monthlyClientType',
         'monthlyPackageTier', 'bookingType', 'purchaseType', 'promoCode', 'contractAccepted',
-        'serviceAreaAccepted', 'termsAccepted',
+        'serviceAreaAccepted', 'termsAccepted', 'fleetSizeTier', 'fleetVehicleCount',
     ]);
     for (const [key, value] of Object.entries(booking)) {
         if (!excluded.has(key)) fields.push([key, value]);

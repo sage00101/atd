@@ -30,7 +30,7 @@ import {
     reserveBookingSlot,
     reserveSharedPromoCode,
     savePendingBooking,
-    MONTHLY_PACKAGE_CENTS,
+    getMonthlyPackageTotalCents,
     PROMO_DISCOUNT_RATE,
     SINGLE_WASH_CENTS,
 } from '../api/_lib/store.js';
@@ -136,6 +136,8 @@ export default async function handler(req, res) {
             packageId,
             packageName,
             vehicleType,
+            fleetSizeTier,
+            fleetVehicleCount,
             bookingDate,
             bookingTime,
             promoCode,
@@ -398,8 +400,7 @@ export default async function handler(req, res) {
             return;
         } else {
             // First monthly installment, charged according to the package + vehicle rate card.
-            const vehicleRates = MONTHLY_PACKAGE_CENTS[packageId];
-            originalAmountCents = vehicleRates?.[vehicleType];
+            originalAmountCents = getMonthlyPackageTotalCents(packageId, vehicleType, fleetSizeTier, fleetVehicleCount);
             if (!originalAmountCents) {
                 await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
                 reservedSlotDate = null;

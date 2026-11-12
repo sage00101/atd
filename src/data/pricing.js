@@ -2,6 +2,7 @@ import { Building2, CarFront } from 'lucide-react';
 import privateTwoWashesImage from '../assets/images/private-2-washes.png';
 import privateFourWashesImage from '../assets/images/private-4-washes.png';
 import businessTwoWashesImage from '../assets/images/business-2-washes.png';
+import { businessFleetRates, businessVehicleTypes } from '../../shared/business-pricing.js';
 
 export const singleWashPrices = [
     ['Sedan / Hatchback', 'R250,00'],
@@ -78,15 +79,11 @@ export const packageGroups = {
                 badge: 'Discounted Rates',
                 image: businessTwoWashesImage,
                 imageAlt: 'Business, fleet or family two-wash monthly package',
-                monthlyPrices: [
-                    ['Sedan / Hatchback', 'R3 300,00'],
-                    ['SUV / Bakkie', 'R4 500,00'],
-                    ['Minibus / Van', 'R5 700,00'],
-                ],
-                threeMonthPrices: ['R9 900,00', 'R13 500,00', 'R17 100,00'],
-                monthlyNote: 'Minimum 3 vehicles at the same premises',
-                packageNote:
-                    'Business, fleet and family vehicles must have a minimum of three vehicles at the same premises.',
+                fleetRates: businessFleetRates,
+                monthlyPrices: businessVehicleTypes.map((vehicle) => [vehicle, '']),
+                monthlyNote: 'Rates per car, per wash',
+                fleetNote: 'Do you have different types of vehicles on the same premises?',
+                fleetExample: 'Eg 1x Hatch, 2x Bakkies and 1x Minivan',
                 details: [
                     'Up to 1 booking per month',
                     'Discounted fleet rates',

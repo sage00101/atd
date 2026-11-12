@@ -4,12 +4,15 @@ import {
     CarFront,
     Check,
     ChevronDown,
+    ChevronLeft,
+    ChevronRight,
     FileText,
     X,
 } from 'lucide-react';
 import useReveal from '../hooks/use-reveal';
 import ServicesOfferedModal from '../components/services-offered-modal';
 import { packageGroups, singleWashPrices } from '../data/pricing';
+import { getBusinessFleetRateCents, getBusinessFleetTierForCount, isValidFleetVehicleCount } from '../../shared/business-pricing.js';
 
 const publicAssetUrl = (filename) => `${import.meta.env.BASE_URL}assets/${encodeURIComponent(filename)}`;
 
@@ -20,16 +23,13 @@ const MONTHLY_PACKAGE_DOCUMENTS = [
 ];
 
 function downloadContractDocuments(documents) {
-    documents.forEach((document, index) => {
-        window.setTimeout(() => {
-            const link = window.document.createElement('a');
-            link.href = document.href;
-            link.download = document.name;
-            link.rel = 'noopener';
-            window.document.body.appendChild(link);
-            link.click();
-            link.remove();
-        }, index * 180);
+    documents.forEach((document) => {
+        const link = window.document.createElement('a');
+        link.href = document.href;
+        link.download = document.name;
+        window.document.body.appendChild(link);
+        link.click();
+        link.remove();
     });
 }
 
@@ -49,6 +49,33 @@ function readContractDuration() {
     } catch {
         return '';
     }
+}
+
+function readFleetVehicleCount() {
+    try {
+        const storedCount = sessionStorage.getItem('a10tion-fleet-vehicle-count');
+        const stored = Number(storedCount);
+        if (storedCount && isValidFleetVehicleCount(stored)) return stored;
+        const storedTier = sessionStorage.getItem('a10tion-fleet-size-tier');
+        return storedTier === '6-8' ? 6 : storedTier === '9+' ? 9 : 3;
+    } catch {
+        return 3;
+    }
+}
+
+function persistFleetSelection(count) {
+    const tier = getBusinessFleetTierForCount(count);
+    if (!tier) return;
+    try {
+        sessionStorage.setItem('a10tion-fleet-vehicle-count', String(count));
+        sessionStorage.setItem('a10tion-fleet-size-tier', tier);
+    } catch {
+        // The current selection remains usable if storage is unavailable.
+    }
+}
+
+function formatZarFromCents(cents) {
+    return `R${(cents / 100).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function rememberContractDownload() {
@@ -199,7 +226,38 @@ function PackageDetailsModal({ pkg, open, onClose }) {
                         <span className='rounded-full bg-[#fbe9e9] px-2.5 py-1 text-[8px] font-bold text-[#c32828] sm:text-[9px]'>{pkg.monthlyNote}</span>
                     </div>
 
-                    {hasPackagePricing ? (
+                    {Array.isArray(pkg.fleetRates) ? (
+                        <div className='mt-3 overflow-hidden rounded-[11px] border border-[#dce8de] bg-white'>
+                            <p className='border-b border-[#dce8de] bg-[#f3f8f4] px-2.5 py-2 text-center text-[8px] font-bold uppercase text-sage sm:text-[9px]'>Rate per car</p>
+                            <table className='w-full table-fixed text-center text-[7px] sm:text-[8px]'>
+                                <thead className='bg-[#f3f8f4] text-[6.5px] font-bold text-sage sm:text-[7.5px]'>
+                                    <tr>
+                                        <th className='w-[24%] px-1 py-1.5'>No. of washes p/m</th>
+                                        <th className='w-[15%] px-0.5 py-1.5'>No. of cars</th>
+                                        <th className='px-0.5 py-1.5'>Sedan / Hatch</th>
+                                        <th className='px-0.5 py-1.5'>SUV / Bakkie</th>
+                                        <th className='px-0.5 py-1.5'>Minibus / Van</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {pkg.fleetRates.map((rate, index) => (
+                                        <tr key={rate.tier} className='border-t border-[#e6eee7] text-body'>
+                                            {index === 0 && <th rowSpan={pkg.fleetRates.length} className='px-1 py-2 font-medium'>Single wash</th>}
+                                            <th className='px-0.5 py-2 font-medium'>{rate.label}</th>
+                                            {['Sedan / Hatchback', 'SUV / Bakkie', 'Minibus / Van'].map((vehicle) => (
+                                                <td key={vehicle} className='px-0.5 py-2'>{formatZarFromCents(rate.prices[vehicle])}</td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div className='border-t border-[#dce8de] px-2.5 py-2.5 text-[8px] leading-[1.45] text-body sm:text-[9px]'>
+                                <p className='font-semibold text-ink'>{pkg.fleetNote}</p>
+                                <p className='mt-0.5'>{pkg.fleetExample}</p>
+                                <p className='mt-1.5'>Email us at <a href='mailto:info@a10tion.co.za?subject=Business%20fleet%20quotation' className='font-semibold text-[#24543a] underline decoration-[#9db9a3] underline-offset-2 hover:text-[#142b1e]'>info@a10tion.co.za</a> for a customized quotation.</p>
+                            </div>
+                        </div>
+                    ) : hasPackagePricing ? (
                         <div className='mt-3 overflow-hidden rounded-[11px] border border-[#dce8de] bg-white'>
                             <div className='grid grid-cols-[1fr_auto] border-b border-[#dce8de] bg-[#f3f8f4] px-2.5 py-2 text-[7.5px] font-bold uppercase tracking-[0.08em] text-sage sm:text-[8px]'>
                                 <span>Car type</span>
@@ -272,12 +330,19 @@ function PackageDetailsModal({ pkg, open, onClose }) {
     );
 }
 
-function saveSelection({ purchaseType, packageId, contract }) {
+function saveSelection({ purchaseType, packageId, contract, fleetSizeTier, fleetVehicleCount }) {
     try {
         sessionStorage.setItem('a10tion-purchase-type', purchaseType);
         sessionStorage.setItem('a10tion-selected-package', packageId);
         if (contract) sessionStorage.setItem('a10tion-selected-contract', contract);
         else sessionStorage.removeItem('a10tion-selected-contract');
+        if (fleetSizeTier) sessionStorage.setItem('a10tion-fleet-size-tier', fleetSizeTier);
+        else sessionStorage.removeItem('a10tion-fleet-size-tier');
+        if (Number.isFinite(fleetVehicleCount) && fleetVehicleCount >= 3) {
+            sessionStorage.setItem('a10tion-fleet-vehicle-count', String(fleetVehicleCount));
+        } else {
+            sessionStorage.removeItem('a10tion-fleet-vehicle-count');
+        }
         window.dispatchEvent(new Event('a10tion-package-selected'));
     } catch {
         // Booking still works if storage is unavailable.
@@ -349,6 +414,9 @@ export default function PricingSection() {
     const [servicesOpen, setServicesOpen] = useState(false);
     const [singleWashPricingOpen, setSingleWashPricingOpen] = useState(false);
     const [selectedPackageVehicle, setSelectedPackageVehicle] = useState(readSingleWashVehicle);
+    const [selectedFleetVehicleCount, setSelectedFleetVehicleCount] = useState(readFleetVehicleCount);
+    const [fleetVehicleCountInput, setFleetVehicleCountInput] = useState(() => String(readFleetVehicleCount()));
+    const selectedFleetSizeTier = getBusinessFleetTierForCount(selectedFleetVehicleCount);
 
     useEffect(() => {
         const syncTarget = () => {
@@ -385,6 +453,16 @@ export default function PricingSection() {
         setContractPrompted(false);
         setContractDownloaded(readContractDownloadState());
         setSelectedPackageVehicle(readSingleWashVehicle());
+        const savedFleetCount = readFleetVehicleCount();
+        setSelectedFleetVehicleCount(savedFleetCount);
+        setFleetVehicleCountInput(String(savedFleetCount));
+    };
+
+    const updateFleetVehicleCount = (count) => {
+        if (!isValidFleetVehicleCount(count)) return;
+        setSelectedFleetVehicleCount(count);
+        setFleetVehicleCountInput(String(count));
+        persistFleetSelection(count);
     };
 
     const closeContractModal = () => {
@@ -395,7 +473,12 @@ export default function PricingSection() {
     };
 
     const continueToBooking = () => {
+        if (selectedPackageVehicle === 'mixed') return;
         if (!pendingPackage || !contractMonths || !contractDownloaded || !selectedPackageVehicle) {
+            setContractPrompted(true);
+            return;
+        }
+        if (pendingPackage.fleetRates && !selectedFleetSizeTier) {
             setContractPrompted(true);
             return;
         }
@@ -405,6 +488,8 @@ export default function PricingSection() {
             purchaseType: 'monthly',
             packageId: pendingPackage.id,
             contract: `${contractMonths}-months`,
+            fleetSizeTier: pendingPackage.fleetRates ? selectedFleetSizeTier : null,
+            fleetVehicleCount: pendingPackage.fleetRates ? selectedFleetVehicleCount : null,
         });
         closeContractModal();
         scrollToBooking();
@@ -536,21 +621,89 @@ export default function PricingSection() {
                         <div className='p-3.5 sm:p-5'>
                             <p className='text-[9.5px] leading-[1.5] text-body sm:text-[10.5px]'>Choose your contract length and vehicle. Review the terms, then upload your completed, signed contract during checkout.</p>
 
+                            {Array.isArray(pendingPackage.fleetRates) && (
+                                <div className={`mt-3 rounded-[12px] border border-line bg-[#fafcfb] p-3 ${contractPrompted && !selectedFleetSizeTier ? 'ring-2 ring-sage/30 ring-offset-2' : ''}`}>
+                                    <div className='flex items-center justify-between gap-3'>
+                                        <p className='text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Number of vehicles at the same premises</p>
+                                        <span className='rounded-full bg-[#eaf2eb] px-2.5 py-1 text-[8px] font-bold text-[#294633] sm:text-[9px]'>
+                                            {selectedFleetSizeTier} vehicles · {selectedFleetSizeTier === '3-5' ? 'Tier 1' : selectedFleetSizeTier === '6-8' ? 'Tier 2' : 'Tier 3'}
+                                        </span>
+                                    </div>
+                                    <div className='mt-2 flex items-center justify-between gap-3 rounded-[11px] border border-[#dce8de] bg-white p-2.5 sm:p-3'>
+                                        <button
+                                            type='button'
+                                            onClick={() => {
+                                                updateFleetVehicleCount(Math.max(3, selectedFleetVehicleCount - 1));
+                                            }}
+                                            disabled={selectedFleetVehicleCount <= 3}
+                                            className='grid size-9 shrink-0 place-items-center rounded-[9px] border border-line bg-white text-ink transition hover:border-sage hover:bg-sagelight disabled:cursor-not-allowed disabled:opacity-35'
+                                            aria-label='Decrease vehicle quantity'
+                                        >
+                                            <ChevronLeft className='size-4' />
+                                        </button>
+                                        <div className='min-w-0 flex-1 text-center'>
+                                            <input
+                                                type='number'
+                                                min='3'
+                                                step='1'
+                                                value={fleetVehicleCountInput}
+                                                onChange={(event) => {
+                                                    const value = event.target.value;
+                                                    setFleetVehicleCountInput(value);
+                                                    const count = Number(value);
+                                                    if (/^\d+$/.test(value) && isValidFleetVehicleCount(count)) updateFleetVehicleCount(count);
+                                                }}
+                                                onBlur={() => setFleetVehicleCountInput(String(selectedFleetVehicleCount))}
+                                                className='w-full border-0 bg-transparent text-center font-display text-[27px] font-semibold leading-none text-ink tabular-nums outline-none sm:text-[32px]'
+                                                aria-label='Number of vehicles on the premises'
+                                            />
+                                            <p className='mt-1 text-[8px] text-body sm:text-[9px]'>vehicles on the premises</p>
+                                        </div>
+                                        <button
+                                            type='button'
+                                            onClick={() => updateFleetVehicleCount(selectedFleetVehicleCount + 1)}
+                                            className='grid size-9 shrink-0 place-items-center rounded-[9px] border border-line bg-white text-ink transition hover:border-sage hover:bg-sagelight disabled:cursor-not-allowed disabled:opacity-35'
+                                            aria-label='Increase vehicle quantity'
+                                        >
+                                            <ChevronRight className='size-4' />
+                                        </button>
+                                    </div>
+                                    <div className='mt-2 grid grid-cols-3 gap-1.5 text-center text-[7.5px] sm:text-[8px]'>
+                                        {pendingPackage.fleetRates.map((rate) => (
+                                            <span key={rate.tier} className={`rounded-[7px] px-1.5 py-1.5 ${selectedFleetSizeTier === rate.tier ? 'bg-[#eaf2eb] font-bold text-[#294633]' : 'bg-[#f5f7f5] text-body'}`}>
+                                                {rate.label} · {Object.values(rate.prices).map((price) => formatZarFromCents(price).replace(/,00$/, '')).join(' / ')}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {Array.isArray(pendingPackage.monthlyPrices) && (
                                 <div className={`mt-3 rounded-[12px] border border-line bg-[#fafcfb] p-3 ${contractPrompted && !selectedPackageVehicle ? 'ring-2 ring-sage/30 ring-offset-2' : ''}`}>
                                     <p className='text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Vehicle type</p>
                                     <div className='mt-1.5 space-y-1.5'>
                                         {pendingPackage.monthlyPrices.map(([vehicle, price]) => {
                                             const selected = selectedPackageVehicle === vehicle;
+                                            const fleetRate = pendingPackage.fleetRates ? getBusinessFleetRateCents(selectedFleetSizeTier, vehicle) : undefined;
+                                            const displayedPrice = fleetRate ? formatZarFromCents(fleetRate) : price;
                                             return (
                                                 <button key={vehicle} type='button' onClick={() => setSelectedPackageVehicle(vehicle)} className={`grid min-h-[40px] w-full grid-cols-[auto_1fr_auto] items-center gap-2 rounded-[9px] border px-2.5 text-left text-[9px] transition sm:text-[10px] ${selected ? 'border-[#294633] bg-[#eaf2eb] text-ink' : 'border-[#e6eee7] bg-white text-body hover:border-[#9ab6a0]'}`} aria-pressed={selected}>
                                                     <span className={`grid size-4 place-items-center rounded-full border ${selected ? 'border-[#294633] bg-[#294633]' : 'border-[#b9cdbd]'}`}><span className={selected ? 'size-1.5 rounded-full bg-white' : ''} /></span>
                                                     <span>{vehicle}</span>
-                                                    <span className='font-semibold text-ink'>{price}/mo</span>
+                                                    <span className='font-semibold text-ink'>{displayedPrice}/mo</span>
                                                 </button>
                                             );
                                         })}
+                                        {pendingPackage.fleetRates && (
+                                            <button type='button' onClick={() => setSelectedPackageVehicle('mixed')} className={`grid min-h-[40px] w-full grid-cols-[auto_1fr] items-center gap-2 rounded-[9px] border px-2.5 text-left text-[9px] transition sm:text-[10px] ${selectedPackageVehicle === 'mixed' ? 'border-[#294633] bg-[#eaf2eb] text-ink' : 'border-[#e6eee7] bg-white text-body hover:border-[#9ab6a0]'}`} aria-pressed={selectedPackageVehicle === 'mixed'}>
+                                                <span className={`grid size-4 place-items-center rounded-full border ${selectedPackageVehicle === 'mixed' ? 'border-[#294633] bg-[#294633]' : 'border-[#b9cdbd]'}`}><span className={selectedPackageVehicle === 'mixed' ? 'size-1.5 rounded-full bg-white' : ''} /></span>
+                                                <span>Different vehicle types in my fleet</span>
+                                            </button>
+                                        )}
                                     </div>
+                                    {selectedPackageVehicle === 'mixed' && (
+                                        <p className='mt-2 rounded-[9px] bg-[#f3f8f4] px-2.5 py-2 text-[8.5px] leading-[1.45] text-body sm:text-[9.5px]'>Mixed vehicle fleets need a customized quotation. Use the quotation link below to contact <a href='mailto:info@a10tion.co.za?subject=Customized%20mixed%20fleet%20quotation' className='font-semibold text-[#24543a] underline underline-offset-2'>info@a10tion.co.za</a>.</p>
+                                    )}
                                 </div>
                             )}
 
@@ -574,20 +727,31 @@ export default function PricingSection() {
                                         })}
                                     </div>
                                 </div>
-                                {selectedPackageVehicle && contractMonths && Array.isArray(pendingPackage.monthlyPrices) && (() => {
+                                {selectedPackageVehicle && selectedPackageVehicle !== 'mixed' && contractMonths && Array.isArray(pendingPackage.monthlyPrices) && (() => {
                                     const vehicleIndex = pendingPackage.monthlyPrices.findIndex(([vehicle]) => vehicle === selectedPackageVehicle);
-                                    const monthlyPrice = vehicleIndex >= 0 ? pendingPackage.monthlyPrices[vehicleIndex][1] : '';
+                                    const fleetRate = pendingPackage.fleetRates ? getBusinessFleetRateCents(selectedFleetSizeTier, selectedPackageVehicle) : undefined;
+                                    const monthlyPrice = fleetRate
+                                        ? formatZarFromCents(fleetRate)
+                                        : vehicleIndex >= 0 ? pendingPackage.monthlyPrices[vehicleIndex][1] : '';
                                     const totalsByMonths = {
                                         3: pendingPackage.threeMonthPrices,
                                         6: pendingPackage.sixMonthPrices,
                                         12: pendingPackage.twelveMonthPrices,
                                     };
-                                    const contractTotal = totalsByMonths[contractMonths]?.[vehicleIndex];
+                                    const fleetMonthlyTotalCents = fleetRate * selectedFleetVehicleCount;
+                                    const contractTotal = fleetRate
+                                        ? formatZarFromCents(fleetMonthlyTotalCents * Number(contractMonths))
+                                        : totalsByMonths[contractMonths]?.[vehicleIndex];
                                     return (
                                         <div className='rounded-[9px] border border-[#dce8de] bg-white px-3 py-2 text-[9px] sm:text-[10px]'>
-                                            <div className='flex justify-between gap-3'><span className='text-body'>Monthly rate</span><strong className='text-ink'>{monthlyPrice}</strong></div>
-                                            {contractTotal ? (
-                                                <div className='mt-1 flex justify-between gap-3 border-t border-[#edf1ed] pt-1'><span className='text-body'>{contractMonths}-month contract total</span><strong className='text-ink'>{contractTotal}</strong></div>
+                                            {fleetRate ? (
+                                                <>
+                                                    <div className='flex justify-between gap-3'><span className='text-body'>Per vehicle / month</span><strong className='text-ink'>{monthlyPrice}</strong></div>
+                                                    <div className='mt-1 flex justify-between gap-3'><span className='text-body'>Fleet total / month ({selectedFleetVehicleCount})</span><strong className='text-ink'>{formatZarFromCents(fleetMonthlyTotalCents)}</strong></div>
+                                                    <div className='mt-1 flex justify-between gap-3 border-t border-[#edf1ed] pt-1'><span className='text-body'>{contractMonths}-month contract total</span><strong className='text-ink'>{contractTotal}</strong></div>
+                                                </>
+                                            ) : contractTotal ? (
+                                                <div className='flex justify-between gap-3'><span className='text-body'>{contractMonths}-month contract total</span><strong className='text-ink'>{contractTotal}</strong></div>
                                             ) : (
                                                 <p className='mt-1 border-t border-[#edf1ed] pt-1 leading-[1.45] text-body'>Total for {contractMonths} months: to be confirmed.</p>
                                             )}
@@ -596,26 +760,30 @@ export default function PricingSection() {
                                 })()}
                                 <button type='button' onClick={() => { downloadContractDocuments(MONTHLY_PACKAGE_DOCUMENTS); rememberContractDownload(); setContractDownloaded(true); }} className='flex min-h-[38px] w-full items-center justify-center gap-2 rounded-[9px] bg-[#1a2a20] px-3 text-[9px] font-semibold text-white transition hover:bg-[#24362a] sm:text-[10px]'>
                                     <FileText className='size-3.5' />
-                                    {contractDownloaded ? 'Download documents' : 'Download required documents'}
+                                    {contractDownloaded ? 'Download both PDFs again' : 'Download contract and terms PDFs'}
                                 </button>
                                 <ul className='space-y-1 rounded-[9px] border border-[#e1e9e2] bg-white px-2.5 py-2 text-[8px] leading-[1.4] text-body sm:text-[9px]'>
                                     {MONTHLY_PACKAGE_DOCUMENTS.map((document) => <li key={document.name}>{document.name}</li>)}
                                 </ul>
                                 <label className='flex items-start gap-2 text-[8.5px] leading-[1.45] text-body sm:text-[9.5px]'>
                                     <input type='checkbox' checked={contractDownloaded} readOnly disabled className='mt-0.5 accent-[#365943] disabled:opacity-100' />
-                                    <span>I have downloaded the contract template and reviewed the Terms and Conditions. I will upload one completed, signed contract during checkout.</span>
+                                    <span>I have downloaded both PDF files and reviewed the Terms and Conditions. I will upload one completed, signed contract during checkout.</span>
                                 </label>
                             </div>
 
                             <p className={`mt-2 min-h-[14px] text-center text-[8.5px] font-medium ${contractPrompted ? 'text-[#466b50]' : 'text-body/60'}`} role={contractPrompted ? 'alert' : undefined}>
-                                {contractPrompted ? 'Choose a vehicle type, duration, download the contract and confirm before continuing.' : contractMonths ? `${contractMonths}-month contract selected.` : 'A contract is required for monthly packages.'}
+                                {contractPrompted ? 'Choose a vehicle type and fleet size, select a duration, download the contract and confirm before continuing.' : contractMonths ? `${contractMonths}-month contract selected.` : 'A contract is required for monthly packages.'}
                             </p>
 
                             <div className='mt-2 grid gap-2 sm:grid-cols-[auto_1fr]'>
                                 <button type='button' onClick={closeContractModal} className='order-2 min-h-[40px] rounded-[10px] border border-line bg-white px-5 text-[9.5px] font-semibold text-body sm:order-1'>Cancel</button>
-                                <button type='button' onClick={continueToBooking} className='group order-1 flex min-h-[41px] items-center justify-center gap-2 rounded-[10px] bg-[#18241d] px-5 text-[10px] font-semibold text-white sm:order-2 sm:text-[11px]'>
-                                    Continue to booking <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' />
-                                </button>
+                                {selectedPackageVehicle === 'mixed' ? (
+                                    <a href={`mailto:info@a10tion.co.za?subject=Customized%20mixed%20fleet%20quotation&body=${encodeURIComponent(`Please provide a customized quotation for my mixed fleet of ${selectedFleetVehicleCount} vehicles.`)}`} className='order-1 flex min-h-[41px] items-center justify-center gap-2 rounded-[10px] bg-[#18241d] px-5 text-[10px] font-semibold text-white sm:order-2 sm:text-[11px]'>Request customized quotation</a>
+                                ) : (
+                                    <button type='button' onClick={continueToBooking} className='group order-1 flex min-h-[41px] items-center justify-center gap-2 rounded-[10px] bg-[#18241d] px-5 text-[10px] font-semibold text-white sm:order-2 sm:text-[11px]'>
+                                        Continue to booking <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' />
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>

@@ -9,7 +9,7 @@ import {
     getPublicBookingRequest,
 } from '../api/_lib/booking-approval.js';
 import { sendBookingRequestReceivedEmails } from '../api/_lib/email.js';
-import { sendBookingRequestSms } from '../api/_lib/sms.js';
+import { sendBookingRequestSms, sendCustomerBookingRequestSms } from '../api/_lib/sms.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -121,10 +121,14 @@ export default async function handler(req, res) {
         const booking = await parseRequest(req);
         const { request, statusToken } = await createBookingRequest(booking);
         const statusUrl = getStatusUrl(statusToken);
-        const [emailStatus, smsResult] = await Promise.all([
+        const [emailStatus, businessSmsResult, customerSmsResult] = await Promise.all([
             sendBookingRequestReceivedEmails(request, statusUrl),
             sendBookingRequestSms(request).catch((error) => {
                 console.error('[booking request sms failed]', request.reference, error);
+                return { failed: true, reason: error instanceof Error ? error.message : String(error) };
+            }),
+            sendCustomerBookingRequestSms(request, statusUrl).catch((error) => {
+                console.error('[customer booking request sms failed]', request.reference, error);
                 return { failed: true, reason: error instanceof Error ? error.message : String(error) };
             }),
         ]);
@@ -134,7 +138,12 @@ export default async function handler(req, res) {
             status: 'Pending Approval',
             statusUrl,
             emailStatus,
-            smsStatus: { businessSent: Boolean(smsResult?.sent), skipped: Boolean(smsResult?.skipped), failed: Boolean(smsResult?.failed) },
+            smsStatus: {
+                businessSent: Boolean(businessSmsResult?.sent),
+                customerSent: Boolean(customerSmsResult?.sent),
+                skipped: Boolean(businessSmsResult?.skipped || customerSmsResult?.skipped),
+                failed: Boolean(businessSmsResult?.failed || customerSmsResult?.failed),
+            },
             message: emailStatus.customerSent
                 ? 'Your request was received. We will email you after it has been reviewed.'
                 : 'Your request was received, but we could not confirm email delivery. Please save your status link.',

@@ -24,6 +24,7 @@ import {
 import useReveal from '../hooks/use-reveal';
 import VehiclePromoModal from '../components/vehicle-promo-modal';
 import { packageGroups } from '../data/pricing';
+import { getBusinessFleetRateCents, getBusinessFleetTierForCount, isValidFleetVehicleCount } from '../../shared/business-pricing.js';
 import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
 import { trackSubmittedRequest } from '../utils/booking-request-tracker';
 import { loadReturningCustomer, saveReturningCustomer } from '../utils/returning-customer';
@@ -179,9 +180,16 @@ function readStoredSelection() {
         const purchaseType = sessionStorage.getItem('a10tion-purchase-type') || 'single';
         const packageId = sessionStorage.getItem('a10tion-selected-package') || 'single-wash';
         const contract = sessionStorage.getItem('a10tion-selected-contract');
-        return { purchaseType, packageId, contract };
+        const storedFleetCount = sessionStorage.getItem('a10tion-fleet-vehicle-count');
+        const storedFleetTier = sessionStorage.getItem('a10tion-fleet-size-tier') || '';
+        const parsedFleetCount = Number(storedFleetCount);
+        const fleetVehicleCount = storedFleetCount && isValidFleetVehicleCount(parsedFleetCount)
+            ? parsedFleetCount
+            : storedFleetTier === '6-8' ? 6 : storedFleetTier === '9+' ? 9 : 3;
+        const fleetSizeTier = getBusinessFleetTierForCount(fleetVehicleCount);
+        return { purchaseType, packageId, contract, fleetSizeTier, fleetVehicleCount };
     } catch {
-        return { purchaseType: 'single', packageId: 'single-wash', contract: null };
+        return { purchaseType: 'single', packageId: 'single-wash', contract: null, fleetSizeTier: '', fleetVehicleCount: 3 };
     }
 }
 
@@ -203,6 +211,8 @@ export default function BookingSection() {
     const [purchaseType, setPurchaseType] = useState(initialSelection.purchaseType);
     const [selectedPackage, setSelectedPackage] = useState(initialSelection.packageId);
     const [selectedContract, setSelectedContract] = useState(initialSelection.contract);
+    const [selectedFleetSizeTier, setSelectedFleetSizeTier] = useState(initialSelection.fleetSizeTier);
+    const [selectedFleetVehicleCount, setSelectedFleetVehicleCount] = useState(initialSelection.fleetVehicleCount);
     const [selectedVehicleType, setSelectedVehicleType] = useState(readSingleWashVehicle);
     const [requirementsOpen, setRequirementsOpen] = useState(false);
     const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -434,6 +444,8 @@ export default function BookingSection() {
             setPurchaseType(next.purchaseType);
             setSelectedPackage(next.packageId);
             setSelectedContract(next.contract);
+            setSelectedFleetSizeTier(next.fleetSizeTier);
+            setSelectedFleetVehicleCount(next.fleetVehicleCount);
             setSelectedVehicleType(readSingleWashVehicle());
             if (next.purchaseType !== 'single') {
                 setPromoCode('');
@@ -447,6 +459,16 @@ export default function BookingSection() {
             window.removeEventListener('hashchange', syncSelection);
         };
     }, []);
+
+    useEffect(() => {
+        if (purchaseType !== 'monthly' || selectedPackage !== 'business-standard' || !selectedFleetSizeTier) return;
+        try {
+            sessionStorage.setItem('a10tion-fleet-vehicle-count', String(selectedFleetVehicleCount));
+            sessionStorage.setItem('a10tion-fleet-size-tier', selectedFleetSizeTier);
+        } catch {
+            // Checkout still uses the in-memory selection if storage is unavailable.
+        }
+    }, [purchaseType, selectedPackage, selectedFleetSizeTier, selectedFleetVehicleCount]);
 
     useEffect(() => {
         if (!checkoutOpen) return undefined;
@@ -519,11 +541,21 @@ export default function BookingSection() {
 
     const selectedPackageName = packageNames[selectedPackage] || 'Single Wash';
     const isMonthly = purchaseType === 'monthly';
+    const selectedPackageData = Object.values(packageGroups).flatMap((group) => group.packages).find((item) => item.id === selectedPackage);
+    const selectedBusinessRateCents = selectedPackageData?.fleetRates
+        ? getBusinessFleetRateCents(selectedFleetSizeTier, selectedVehicleType)
+        : undefined;
+    const selectedFleetMonthlyTotalCents = selectedBusinessRateCents && isValidFleetVehicleCount(selectedFleetVehicleCount)
+        ? selectedBusinessRateCents * selectedFleetVehicleCount
+        : undefined;
     const selectedMonthlyTotal = (() => {
         if (!isMonthly || !selectedContract || !selectedVehicleType) return '';
-        const pkg = Object.values(packageGroups).flatMap((group) => group.packages).find((item) => item.id === selectedPackage);
+        const pkg = selectedPackageData;
         const vehicleIndex = pkg?.monthlyPrices?.findIndex(([vehicle]) => vehicle === selectedVehicleType) ?? -1;
         const term = selectedContract.match(/^(3|6|12)-months$/)?.[1];
+        if (selectedBusinessRateCents && selectedFleetMonthlyTotalCents && term) {
+            return formatZarFromCents(selectedFleetMonthlyTotalCents * Number(term));
+        }
         const priceList = term === '3' ? pkg?.threeMonthPrices : term === '6' ? pkg?.sixMonthPrices : term === '12' ? pkg?.twelveMonthPrices : null;
         return vehicleIndex >= 0 ? priceList?.[vehicleIndex] || '' : '';
     })();
@@ -533,6 +565,8 @@ export default function BookingSection() {
           ? 'Choose a time to continue'
                     : !selectedVehicleType
                         ? 'Select your package to purchase'
+                    : isMonthly && selectedPackage === 'business-standard' && !selectedFleetSizeTier
+                        ? 'Choose the number of cars at the premises'
           : isMonthly && !selectedContract
             ? 'Choose a monthly package first'
             : null;
@@ -618,6 +652,8 @@ export default function BookingSection() {
                     packageId: selectedPackage,
                     packageName: selectedPackageName,
                     vehicleType: selectedVehicleType,
+                    fleetSizeTier: isMonthly && selectedPackage === 'business-standard' ? selectedFleetSizeTier : null,
+                    fleetVehicleCount: isMonthly && selectedPackage === 'business-standard' ? selectedFleetVehicleCount : null,
                     contractOption: isMonthly ? selectedContract : null,
                     bookingDate: selectedDateKey,
                     bookingTime: selectedTime,
@@ -703,7 +739,8 @@ export default function BookingSection() {
                         <div className='grid size-7 shrink-0 place-items-center rounded-full bg-sagelight text-sagedeep'><Package className='size-3.5' /></div>
                         <div className='min-w-0 text-left'>
                             <p className='text-[7.5px] font-semibold uppercase tracking-[0.11em] text-sage'>{isMonthly ? 'Monthly package' : 'Once-off booking'}</p>
-                            <p className='truncate text-[9.5px] font-semibold text-ink sm:text-[10.5px]'>{selectedPackageName}{selectedVehicleType ? ` · ${selectedVehicleType}` : ''}{isMonthly && selectedContract ? ` · ${selectedContract.replace('-', ' ')}` : ''}</p>
+                            <p className='truncate text-[9.5px] font-semibold text-ink sm:text-[10.5px]'>{selectedPackageName}{selectedVehicleType ? ` · ${selectedVehicleType}` : ''}{isMonthly && selectedPackage === 'business-standard' ? ` · ${selectedFleetVehicleCount} vehicles (${selectedFleetSizeTier})` : ''}{isMonthly && selectedContract ? ` · ${selectedContract.replace('-', ' ')}` : ''}</p>
+                            {isMonthly && selectedPackage === 'business-standard' && selectedBusinessRateCents && <p className='mt-0.5 truncate text-[8px] text-body sm:text-[9px]'>{formatZarFromCents(selectedBusinessRateCents)} per vehicle / month · Fleet total {formatZarFromCents(selectedFleetMonthlyTotalCents)} / month</p>}
                         </div>
                     </div>
                     <a href='#pricing' className='shrink-0 rounded-full border border-sage/25 bg-canvasoft px-2.5 py-1.5 text-[8px] font-semibold text-sagedeep transition hover:border-sage/45'>Change</a>
@@ -988,6 +1025,7 @@ export default function BookingSection() {
                             <div className='relative z-10 rounded-2xl border border-white/10 bg-white/[0.06] p-4'>
                                 <p className='text-[8px] font-semibold uppercase tracking-[0.14em] text-[#c4d8c9]'>Selected package</p>
                                 <p className='mt-1 text-[12px] font-semibold text-white'>{selectedPackageName}</p>
+                                {selectedPackage === 'business-standard' && selectedFleetSizeTier && <p className='mt-0.5 text-[9px] text-white/55'>Fleet size: {selectedFleetVehicleCount} vehicles · {selectedFleetSizeTier} tier</p>}
                                 {selectedContract && (
                                     <p className='mt-0.5 text-[9px] capitalize text-white/55'>{selectedContract.replace('-', ' ')} duration</p>
                                 )}
@@ -1024,7 +1062,13 @@ export default function BookingSection() {
                                     <div className='min-w-0'>
                                         <p className='text-[8px] font-semibold uppercase tracking-[0.11em] text-sage'>Monthly package selected</p>
                                         <p className='mt-1 truncate text-[11px] font-semibold text-ink sm:text-[12px]'>{selectedPackageName}</p>
-                                        {selectedMonthlyTotal && <p className='mt-1 text-[10px] font-semibold text-sagedeep'>{selectedContract?.replace('-', ' ').replace('months', 'month')} total: {selectedMonthlyTotal}</p>}
+                                        {selectedPackage === 'business-standard' && selectedFleetSizeTier && (
+                                            <>
+                                                <p className='mt-0.5 text-[9px] text-body'>{selectedFleetVehicleCount} vehicles · {selectedFleetSizeTier} tier · {selectedVehicleType}</p>
+                                                {selectedBusinessRateCents && <p className='mt-1 text-[9px] text-body'>{formatZarFromCents(selectedBusinessRateCents)} per vehicle / month · Fleet monthly total: {formatZarFromCents(selectedFleetMonthlyTotalCents)}</p>}
+                                            </>
+                                        )}
+                                        {selectedMonthlyTotal && <p className='mt-1 text-[10px] font-semibold text-sagedeep'>{selectedContract?.replace('-', ' ').replace('months', 'month')} contract total: {selectedMonthlyTotal}</p>}
                                     </div>
                                     <div className='rounded-xl border border-sage/15 bg-white/65 px-3 py-2 text-left sm:text-right'>
                                         <p className='text-[8px] font-medium text-body'>Appointment</p>

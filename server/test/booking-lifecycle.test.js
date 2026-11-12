@@ -3,13 +3,20 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
 import { hasMinimumBookingNotice } from '../api/_lib/booking-time.js';
+import {
+    buildCustomerBookingConfirmationSmsText,
+    buildCustomerBookingRequestSmsText,
+    isSmsConfigured,
+    sendCustomerBookingConfirmationSms,
+    sendCustomerBookingRequestSms,
+} from '../api/_lib/sms.js';
 import { MIN_LEAD_TIME_MS, slotDateTime } from '../../src/utils/booking-time.js';
 
 const redis = Object.fromEntries(['get', 'set', 'del', 'lrange', 'smembers', 'exists', 'eval'].map((name) => [name, () => {
     throw new Error(`Unexpected Redis call: ${name}`);
 }]));
 mock.module('../api/_lib/redis.js', { exports: { redis } });
-const [{ validateBookingRequest, listBookingRequests, cancelBookedSlotRecords }, { getBookedSlotsInRange, reserveBookingSlot },
+const [{ validateBookingRequest, listBookingRequests, cancelBookedSlotRecords }, { getBookedSlotsInRange, reserveBookingSlot, getMonthlyPackagePriceCents, getMonthlyPackageTotalCents },
     { default: cancelHandler }, { default: webhookHandler }] = await Promise.all([
     import('../api/_lib/booking-approval.js'),
     import('../api/_lib/store.js'),
@@ -111,6 +118,86 @@ test('one-hour threshold is identical on client and server in South African time
     await assert.doesNotReject(validateBookingRequest(booking));
     Date.now.mock.mockImplementation(() => slot - 3599999);
     await assert.rejects(validateBookingRequest(booking), /at least 1 hour/);
+});
+
+test('business package uses the selected fleet tier and requires that tier', async (t) => {
+    assert.equal(getMonthlyPackagePriceCents('business-standard', 'Sedan / Hatchback', '3-5', 5), 25000);
+    assert.equal(getMonthlyPackagePriceCents('business-standard', 'Sedan / Hatchback', '6-8', 6), 22000);
+    assert.equal(getMonthlyPackagePriceCents('business-standard', 'SUV / Bakkie', '6-8', 8), 32000);
+    assert.equal(getMonthlyPackagePriceCents('business-standard', 'Minibus / Van', '9+', 9), 39000);
+    assert.equal(getMonthlyPackagePriceCents('business-standard', 'Sedan / Hatchback', '9+', 25), 19000);
+    assert.equal(getMonthlyPackagePriceCents('business-standard', 'Sedan / Hatchback', '3-5', 7), undefined);
+    assert.equal(getMonthlyPackageTotalCents('business-standard', 'Sedan / Hatchback', '6-8', 7), 154000);
+    assert.equal(getMonthlyPackagePriceCents('private-standard', 'Sedan / Hatchback'), 42000);
+
+    const slot = slotDateTime('2026-11-10', '15:30').getTime();
+    t.mock.method(Date, 'now', () => slot - 3600000);
+    const booking = {
+        purchaseType: 'monthly', packageId: 'business-standard', vehicleType: 'Sedan / Hatchback',
+        fleetSizeTier: '6-8', fleetVehicleCount: 7,
+        bookingDate: '2026-11-10', bookingTime: '15:30', contractAccepted: true, contractFileBase64: 'ZmlsZQ==',
+        customer: { firstName: 'Test', surname: 'Customer', mobile: '123', email: 'test@example.com', registration: 'ABC123', address: 'Test address' },
+        serviceLocation: { latitude: -33.978, longitude: 18.444 },
+        serviceAreaAccepted: true, termsAccepted: true, requestedPaymentMethod: 'online',
+    };
+    await assert.doesNotReject(validateBookingRequest(booking));
+    await assert.rejects(validateBookingRequest({ ...booking, fleetSizeTier: '3-5' }), /valid monthly package and vehicle category/);
+    await assert.rejects(validateBookingRequest({ ...booking, fleetVehicleCount: 9 }), /valid monthly package and vehicle category/);
+});
+
+test('customer booking SMS targets the supplied mobile and includes request tracking details', async (t) => {
+    const envKeys = ['SMSMESSENGER_EMAIL', 'SMSMESSENGER_API_KEY'];
+    const previousEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+    t.after(() => envKeys.forEach((key) => {
+        if (previousEnv[key] === undefined) delete process.env[key];
+        else process.env[key] = previousEnv[key];
+    }));
+    process.env.SMSMESSENGER_EMAIL = 'sms-test@example.com';
+    process.env.SMSMESSENGER_API_KEY = 'test-token';
+
+    const calls = [];
+    t.mock.method(globalThis, 'fetch', async (url, options) => {
+        calls.push({ url, options });
+        return new Response(JSON.stringify({ messageId: 'test-message' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+        });
+    });
+
+    const request = {
+        reference: 'REQ123',
+        booking: {
+            bookingDate: '2026-11-20',
+            bookingTime: '10:30',
+            customer: { firstName: 'Test', mobile: '082 123 4567' },
+        },
+    };
+    const statusUrl = 'https://example.com/booking-request?token=private-test-token';
+    assert.equal(isSmsConfigured(), true);
+    assert.match(buildCustomerBookingRequestSmsText(request, statusUrl), /REQ123/);
+    assert.match(buildCustomerBookingRequestSmsText(request, statusUrl), new RegExp(statusUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    const result = await sendCustomerBookingRequestSms(request, statusUrl);
+
+    assert.equal(result.sent, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].options.headers.email, 'sms-test@example.com');
+    assert.equal(JSON.parse(calls[0].options.body).recipientNumber, '27821234567');
+    assert.match(JSON.parse(calls[0].options.body).message, /Your request is pending review/);
+
+    const receipt = {
+        customerMobile: '+27 82 123 4567',
+        customerName: 'Test Customer',
+        reference: 'CONF456',
+        bookingDate: '2026-11-20',
+        bookingTime: '10:30',
+        registration: 'ABC123',
+        amountZar: 'R220,00',
+    };
+    assert.match(buildCustomerBookingConfirmationSmsText(receipt), /Your booking is confirmed/);
+    assert.equal((await sendCustomerBookingConfirmationSms(receipt)).sent, true);
+    assert.equal(calls.length, 2);
+    assert.equal(JSON.parse(calls[1].options.body).recipientNumber, '27821234567');
+    assert.match(JSON.parse(calls[1].options.body).message, /CONF456/);
 });
 
 test('cancelled checkout releases the slot and appears in manager records, including on retry', async (t) => {

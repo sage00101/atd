@@ -4,10 +4,10 @@ import { hasMinimumBookingNotice } from './booking-time.js';
 import { redis } from './redis.js';
 import {
     BOOKING_SLOT_TIMES,
-    MONTHLY_PACKAGE_CENTS,
     SINGLE_WASH_CENTS,
     claimUniqueReferenceNumber,
     getBookingSlotOwner,
+    getMonthlyPackageTotalCents,
     markStoredBookingCancelled,
     looksLikeEmail,
     looksLikeVehicleRegistration,
@@ -260,7 +260,7 @@ export async function validateBookingRequest(booking) {
     const serviceAreaError = getServiceAreaError(booking.serviceLocation, customer.address);
     if (serviceAreaError) throw new BookingRequestError(serviceAreaError);
 
-    if (booking.purchaseType === 'monthly' && !MONTHLY_PACKAGE_CENTS[booking.packageId]?.[booking.vehicleType]) {
+    if (booking.purchaseType === 'monthly' && !getMonthlyPackageTotalCents(booking.packageId, booking.vehicleType, booking.fleetSizeTier, booking.fleetVehicleCount)) {
         throw new BookingRequestError('Choose a valid monthly package and vehicle category.');
     }
     if (booking.purchaseType === 'monthly' && (!booking.contractAccepted || !booking.contractFileBase64)) {

@@ -4,7 +4,7 @@ import { buildSupportEmailHtml } from './support-email-template.js';
 import { buildMonthlyCodeEmailHtml } from './monthly-code-email-template.js';
 import { buildPassphraseEmailHtml } from './passphrase-email-template.js';
 import { buildDistributionReportHtml } from './distribution-report-template.js';
-import { buildMapsLink, getBusinessSmsNumber, sendSms } from './sms.js';
+import { buildCustomerBookingConfirmationSmsText, buildMapsLink, getBusinessSmsNumber, sendSms } from './sms.js';
 import {
     buildBookingApprovedEmail,
     buildBookingCancelledEmail,
@@ -31,6 +31,15 @@ async function sendBusinessBookingSms(receipt) {
         to: getBusinessSmsNumber(),
         message: body,
         campaign: 'Confirmed bookings',
+        dataField: receipt.reference,
+    });
+}
+
+async function sendCustomerBookingSms(receipt) {
+    return sendSms({
+        to: receipt.customerMobile,
+        message: buildCustomerBookingConfirmationSmsText(receipt),
+        campaign: 'Customer booking updates',
         dataField: receipt.reference,
     });
 }
@@ -274,19 +283,21 @@ export async function sendReceiptEmail(receipt, contractAttachment = null) {
         console.warn('[email] no customer email on receipt, sending business copy only', receipt.reference);
     }
 
+    const emailJobCount = jobs.length;
+    jobs.push(sendCustomerBookingSms(receipt));
     jobs.push(sendBusinessBookingSms(receipt));
 
     const results = await Promise.allSettled(jobs);
-    const failed = results.find((r) => r.status === 'rejected');
-    if (failed) {
-        results.filter((r) => r.status === 'rejected').forEach((r) => console.error('[receipt email failed]', receipt.reference, r.reason));
-        if (results.every((r) => r.status === 'rejected')) throw failed.reason;
+    const emailResults = results.slice(0, emailJobCount);
+    const emailFailures = emailResults.filter((result) => result.status === 'rejected');
+    if (emailFailures.length) {
+        emailFailures.forEach((result) => console.error('[receipt email failed]', receipt.reference, result.reason));
+        if (results.every((result) => result.status === 'rejected')) throw emailFailures[0].reason;
     }
 
-    const smsResult = results.at(-1);
-    if (smsResult?.status === 'rejected') {
-        console.error('[receipt sms failed]', receipt.reference, smsResult.reason);
-    }
+    const smsResults = results.slice(emailJobCount);
+    if (smsResults[0]?.status === 'rejected') console.error('[customer receipt sms failed]', receipt.reference, smsResults[0].reason);
+    if (smsResults[1]?.status === 'rejected') console.error('[business receipt sms failed]', receipt.reference, smsResults[1].reason);
 
     return results.find((r) => r.status === 'fulfilled' && r.value && !r.value?.skipped)?.value;
 }

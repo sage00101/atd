@@ -16,7 +16,11 @@ export function getBusinessSmsNumber() {
 }
 
 export function isSmsConfigured() {
-    return Boolean(process.env.SMSMESSENGER_EMAIL && process.env.SMSMESSENGER_API_KEY);
+    const email = String(process.env.SMSMESSENGER_EMAIL || '').trim();
+    const apiKey = String(process.env.SMSMESSENGER_API_KEY || '').trim();
+    return Boolean(email && apiKey
+        && !/^REPLACE_WITH_/i.test(email)
+        && !/^REPLACE_WITH_/i.test(apiKey));
 }
 
 /**
@@ -77,6 +81,47 @@ export function buildBookingRequestSmsText(request) {
         `Contact: ${customer.mobile || customer.email || '—'}`,
         ...buildAddressSmsLines(customer.address),
     ].join('\n');
+}
+
+export function buildCustomerBookingRequestSmsText(request, statusUrl = '') {
+    const booking = request.booking || {};
+    const customer = booking.customer || {};
+    const firstName = String(customer.firstName || '').trim() || 'there';
+    return [
+        `A10tion: Hi ${firstName}, we received your booking request.`,
+        `Ref: ${request.reference || 'Pending'}`,
+        `Requested: ${`${booking.bookingDate || ''} ${booking.bookingTime || ''}`.trim() || 'To be confirmed'}`,
+        'Your request is pending review. We will update you after it has been reviewed.',
+        statusUrl ? `Track your request: ${statusUrl}` : '',
+    ].filter(Boolean).join('\n');
+}
+
+export function buildCustomerBookingConfirmationSmsText(receipt) {
+    return [
+        `A10tion: Your booking is confirmed, ${String(receipt.customerName || 'thank you').trim()}.`,
+        `Ref: ${receipt.reference || '—'}`,
+        `Date: ${`${receipt.bookingDate || ''} ${receipt.bookingTime || ''}`.trim() || '—'}`,
+        `Vehicle: ${receipt.registration || '—'}`,
+        `Amount: ${receipt.amountZar || '—'}`,
+    ].join('\n');
+}
+
+export async function sendCustomerBookingRequestSms(request, statusUrl = '') {
+    return sendSms({
+        to: request.booking?.customer?.mobile,
+        message: buildCustomerBookingRequestSmsText(request, statusUrl),
+        campaign: 'Customer booking updates',
+        dataField: request.reference,
+    });
+}
+
+export async function sendCustomerBookingConfirmationSms(receipt) {
+    return sendSms({
+        to: receipt.customerMobile,
+        message: buildCustomerBookingConfirmationSmsText(receipt),
+        campaign: 'Customer booking updates',
+        dataField: receipt.reference,
+    });
 }
 
 export async function sendBookingRequestSms(request) {

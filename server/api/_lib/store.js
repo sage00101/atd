@@ -2,6 +2,7 @@
 import crypto from 'node:crypto';
 import { redis } from './redis.js';
 import { generateReferenceNumber } from './reference.js';
+import { businessFleetRates, getBusinessFleetRateCents, getBusinessFleetTierForCount } from '../../../shared/business-pricing.js';
 
 const PENDING_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 3; // 3 days — abandoned checkouts expire
 const CONFIRMED_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year — keep the slot blocked long-term
@@ -94,11 +95,27 @@ export const MONTHLY_PACKAGE_CENTS = {
         'Minibus / Van': 164000,
     },
     'business-standard': {
-        'Sedan / Hatchback': 330000,
-        'SUV / Bakkie': 450000,
-        'Minibus / Van': 570000,
+        ...Object.fromEntries(businessFleetRates.map(({ tier, prices }) => [tier, prices])),
     },
 };
+
+export function getMonthlyPackagePriceCents(packageId, vehicleType, fleetSizeTier, fleetVehicleCount) {
+    const packageRates = MONTHLY_PACKAGE_CENTS[packageId];
+    if (packageId === 'business-standard') {
+        const derivedTier = getBusinessFleetTierForCount(fleetVehicleCount);
+        if (!derivedTier || derivedTier !== fleetSizeTier) return undefined;
+        return getBusinessFleetRateCents(derivedTier, vehicleType);
+    }
+    return packageRates?.[vehicleType];
+}
+
+export function getMonthlyPackageTotalCents(packageId, vehicleType, fleetSizeTier, fleetVehicleCount) {
+    const pricePerVehicle = getMonthlyPackagePriceCents(packageId, vehicleType, fleetSizeTier, fleetVehicleCount);
+    if (!pricePerVehicle) return undefined;
+    const vehicleCount = packageId === 'business-standard' ? fleetVehicleCount : 1;
+    const total = pricePerVehicle * vehicleCount;
+    return Number.isSafeInteger(total) ? total : undefined;
+}
 
 export const PROMO_DISCOUNT_RATE = 0.5; // 50%
 
