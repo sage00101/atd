@@ -76,6 +76,8 @@ credits.
 
 The protected Business Manager calendar shows the customer's email on booked
 slots when available. Public availability calendars never receive these emails.
+Existing bookings can be cancelled there even if their time is no longer offered;
+the customer cancellation email must be sent before the slot is released.
 
 The booking availability, cancellation, on-site, on-site payment confirmation, and Yoco
 checkout endpoints are routed through one Vercel function to stay within the

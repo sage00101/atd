@@ -389,6 +389,71 @@ test('manager can cancel a pending request and release its slot', async (t) => {
     assert.deepEqual(await getBookedSlotsInRange('2026-11-10', '2026-11-10'), {});
 });
 
+test('calendar cancels booked legacy times only after the customer email succeeds', async (t) => {
+    const db = installRedisStub(t);
+    const keys = ['CALENDAR_API_KEY', 'RESEND_API_KEY', 'RESEND_FROM_EMAIL'];
+    const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    t.after(() => keys.forEach((key) => {
+        if (previous[key] === undefined) delete process.env[key];
+        else process.env[key] = previous[key];
+    }));
+    process.env.CALENDAR_API_KEY = 'calendar-test-key';
+    process.env.RESEND_API_KEY = 'resend-test-key';
+    process.env.RESEND_FROM_EMAIL = 'Test <test@example.com>';
+    const date = '2026-11-13';
+    const times = ['08:00', '13:00', '09:30'];
+    const ids = [];
+    for (const [index, time] of times.entries()) {
+        const id = `request-${index}`;
+        const reference = `REF${index}`;
+        ids.push(id);
+        db.values.set(`booking:request:${id}`, {
+            id, reference, status: 'confirmed',
+            booking: { bookingDate: date, bookingTime: time, customer: { firstName: 'Test', email: 'customer@example.com' } },
+        });
+        await reserveBookingSlot(date, time, reference);
+    }
+    db.lists.set('booking:requests:index', ids);
+    let emailFails = false;
+    const emails = [];
+    t.mock.method(globalThis, 'fetch', async (_url, options) => {
+        emails.push(JSON.parse(options.body));
+        return new Response(JSON.stringify(emailFails ? { message: 'Rejected' } : { id: 'email-1' }), {
+            status: emailFails ? 400 : 200,
+        });
+    });
+    async function cancel(bookingDate, time, key = 'calendar-test-key') {
+        const res = response();
+        await calendarHandler({
+            method: 'POST', headers: { 'x-calendar-key': key },
+            body: { date: bookingDate, time, reason: 'Test cancellation' },
+        }, res);
+        return res;
+    }
+
+    assert.equal((await cancel(date, '08:00', 'wrong-key')).statusCode, 401);
+    for (const [badDate, badTime] of [['2026-02-30', '08:00'], [date, '24:00'], [date, '13:60'], [date, '8:00']]) {
+        assert.equal((await cancel(badDate, badTime)).statusCode, 400);
+    }
+    assert.equal((await cancel(date, '16:45')).statusCode, 404);
+    assert.equal(emails.length, 0);
+
+    emailFails = true;
+    assert.equal((await cancel(date, '08:00')).statusCode, 502);
+    assert.equal(db.values.get(`booking-slot:${date}:08:00`), 'REF0');
+    assert.equal(db.values.get('booking:request:request-0').status, 'confirmed');
+    emailFails = false;
+    for (const [index, time] of times.entries()) {
+        const result = await cancel(date, time);
+        assert.equal(result.statusCode, 200);
+        assert.equal(result.body.emailSent, true);
+        assert.equal(db.values.has(`booking-slot:${date}:${time}`), false);
+        assert.equal(db.values.get(`booking:request:request-${index}`).status, 'cancelled');
+    }
+    assert.deepEqual(emails.at(-1).to, ['customer@example.com']);
+    assert.deepEqual(await getBookedSlotsInRange(date, date), {});
+});
+
 test('failed payment webhook cancels the pending booking and manager record', async (t) => {
     const db = installRedisStub(t);
     seedBooking(db);

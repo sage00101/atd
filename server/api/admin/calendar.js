@@ -3,7 +3,6 @@ import { applyCors } from '../_lib/cors.js';
 import { cancelBookedSlotRecords, findBookingRequestBySlot, getBookedSlotCustomerEmails } from '../_lib/booking-approval.js';
 import { sendBookingCancelledEmail } from '../_lib/email.js';
 import {
-    BOOKING_SLOT_TIMES,
     appendCalendarHistory,
     clearCalendarBlock,
   getBookedSlotsInRange,
@@ -736,7 +735,9 @@ export default async function handler(req, res) {
             const date = String(body.date || '');
             const time = String(body.time || '');
             const reason = String(body.reason || '').trim().slice(0, 500);
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !BOOKING_SLOT_TIMES.includes(time)) {
+            const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00.000Z`) : null;
+            if (!parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date
+                || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) {
                 res.status(400).json({ message: 'A valid date and time are required.' });
                 return;
             }
