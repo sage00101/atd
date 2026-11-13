@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { applyCors } from '../_lib/cors.js';
-import { cancelBookedSlotRecords, findBookingRequestBySlot } from '../_lib/booking-approval.js';
+import { cancelBookedSlotRecords, findBookingRequestBySlot, getBookedSlotCustomerEmails } from '../_lib/booking-approval.js';
 import { sendBookingCancelledEmail } from '../_lib/email.js';
 import {
     BOOKING_SLOT_TIMES,
@@ -132,6 +132,8 @@ const adminPage = `<!doctype html>
   .slot.blocked:hover { background:rgba(255,120,108,.22); border-color:rgba(255,143,134,.55); }
   .slot.booked { background:repeating-linear-gradient(135deg,rgba(52,123,148,.12) 0 8px,rgba(52,123,148,.06) 8px 16px); border-color:rgba(52,123,148,.28); color:#285f75; }
   .slot.booked:hover { transform:none; background:repeating-linear-gradient(135deg,rgba(52,123,148,.12) 0 8px,rgba(52,123,148,.06) 8px 16px); }
+  .slot.booked { flex-wrap:wrap; }
+  .slot-email { flex-basis:100%; min-width:0; overflow-wrap:anywhere; text-align:left; font-size:11px; font-weight:600; }
   .slot[aria-disabled="true"] { cursor:not-allowed; }
   .slot-status { font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--sage); }
   .slot.blocked .slot-status { color:var(--danger); }
@@ -230,7 +232,7 @@ const adminPage = `<!doctype html>
   const summaryNode = document.getElementById('summary');
   const historyNode = document.getElementById('history');
   const loginOverlay = document.getElementById('loginOverlay');
-  const state = { blockedSlots: {}, bookedSlots: {}, history: [], viewMode: '30', isDragging: false, dragCache: new Set(), openDates: new Set(), initializedOpenDate: false, loaded: false };
+  const state = { blockedSlots: {}, bookedSlots: {}, bookedSlotEmails: {}, history: [], viewMode: '30', isDragging: false, dragCache: new Set(), openDates: new Set(), initializedOpenDate: false, loaded: false };
   if (new URLSearchParams(location.search).get('embedded') === '1') {
     document.body.classList.add('embedded');
     keyInput.hidden = true;
@@ -240,6 +242,10 @@ const adminPage = `<!doctype html>
   function setStatus(message, tone = '') {
     statusNode.textContent = message;
     statusNode.className = 'status' + (tone ? ' ' + tone : '');
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
   }
 
   function formatDate(date) {
@@ -395,8 +401,10 @@ const adminPage = `<!doctype html>
         const booked = bookedSet.has(time);
         const slotClass = booked ? 'booked' : blocked ? 'blocked' : '';
         const slotStatus = booked ? 'Booked' : blocked ? 'Blocked' : 'Open';
-        const label = booked ? 'Booked by a customer; click to cancel' : blocked ? 'Manually blocked' : 'Available';
-        return '<button class="slot ' + slotClass + '" type="button" data-date="' + date + '" data-time="' + time + '" data-booked="' + booked + '" aria-disabled="' + booked + '" aria-label="' + date + ' ' + time + ', ' + label + '" title="' + label + '"><span>' + time + '</span><span class="slot-status">' + slotStatus + '</span></button>';
+        const email = booked ? (state.bookedSlotEmails[date]?.[time] || '') : '';
+        const label = booked ? 'Booked' + (email ? ' by ' + email : '; customer email unavailable') + '; click to cancel' : blocked ? 'Manually blocked' : 'Available';
+        const emailMarkup = booked ? '<span class="slot-email">' + escapeHtml(email || 'Email unavailable') + '</span>' : '';
+        return '<button class="slot ' + slotClass + '" type="button" data-date="' + date + '" data-time="' + time + '" data-booked="' + booked + '" aria-disabled="' + booked + '" aria-label="' + escapeHtml(date + ' ' + time + ', ' + label) + '" title="' + escapeHtml(label) + '"><span>' + time + '</span><span class="slot-status">' + slotStatus + '</span>' + emailMarkup + '</button>';
       }).join('');
 
       const blockedCountForDate = slots.filter((time) => blockedSet.has(time)).length;
@@ -550,6 +558,7 @@ const adminPage = `<!doctype html>
       const result = await callApi('GET');
       state.blockedSlots = result.blockedSlots || {};
       state.bookedSlots = result.bookedSlots || {};
+      state.bookedSlotEmails = result.bookedSlotEmails || {};
       state.history = Array.isArray(result.history) ? result.history : [];
       state.loaded = true;
       renderHistory();
@@ -571,6 +580,7 @@ const adminPage = `<!doctype html>
     try {
       const result = await callApi('GET');
       state.bookedSlots = result.bookedSlots || {};
+      state.bookedSlotEmails = result.bookedSlotEmails || {};
       renderCalendar();
     } catch (error) {
       setStatus('Could not refresh customer bookings: ' + error.message, 'error');
@@ -591,6 +601,7 @@ const adminPage = `<!doctype html>
       const result = await callApi('PUT', payload);
       state.blockedSlots = result.blockedSlots || state.blockedSlots;
       state.bookedSlots = result.bookedSlots || state.bookedSlots;
+      state.bookedSlotEmails = result.bookedSlotEmails || {};
       state.history = Array.isArray(result.history) ? result.history : state.history;
       renderHistory();
       renderCalendar();
@@ -717,6 +728,8 @@ export default async function handler(req, res) {
         return;
     }
 
+    res.setHeader('Cache-Control', 'no-store');
+
     if (req.method === 'POST') {
         try {
             const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
@@ -771,6 +784,7 @@ export default async function handler(req, res) {
             res.status(200).json({
                 blockedSlots,
             bookedSlots,
+                bookedSlotEmails: await getBookedSlotCustomerEmails(bookedSlots),
                 history,
                 totalBlocked: Object.values(blockedSlots).reduce((sum, times) => sum + (Array.isArray(times) ? times.length : 0), 0),
             });
@@ -819,6 +833,7 @@ export default async function handler(req, res) {
             res.status(200).json({
                 blockedSlots,
               bookedSlots,
+                bookedSlotEmails: await getBookedSlotCustomerEmails(bookedSlots),
                 history: nextHistory,
                 totalBlocked: Object.values(blockedSlots).reduce((sum, times) => sum + times.length, 0),
             });

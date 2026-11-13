@@ -1,5 +1,6 @@
 import { applyCors } from './_lib/cors.js';
 import { getGoogleReviewQueue } from './_lib/store.js';
+import { formatReviewAge } from './_lib/review-date.js';
 
 // GET /api/google-reviews?limit=12
 // Serves only reviews explicitly approved in the business manager.
@@ -16,9 +17,12 @@ export default async function handler(req, res) {
         const reviews = Array.isArray(queue?.approved) ? queue.approved : [];
         const averageRating = Number(queue?.averageRating)
             || (reviews.length ? reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviews.length : 0);
-        res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=60, must-revalidate');
+        res.setHeader('Cache-Control', 'no-store');
         res.status(200).json({
-            reviews: reviews.slice(0, limit),
+            reviews: reviews.slice(0, limit).map((review) => ({
+                ...review,
+                date: formatReviewAge(review.publishedAt),
+            })),
             averageRating,
             totalReviewCount: Number(queue?.totalReviewCount) || reviews.length,
         });

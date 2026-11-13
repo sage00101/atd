@@ -107,6 +107,7 @@ function normaliseReview(review, index) {
             readableDate(
                 review?.updateTime || review?.createTime
             ),
+        publishedAt: review?.publishedAt || '',
         quote,
         rating: Math.max(1, Math.min(5, rating)),
         photo,
@@ -168,6 +169,12 @@ function ReviewerAvatar({ review }) {
 
 
 function ReviewCard({ review }) {
+    const publishedAt = review.publishedAt ? new Date(review.publishedAt) : null;
+    const dateTitle = publishedAt && !Number.isNaN(publishedAt.getTime())
+        ? new Intl.DateTimeFormat('en-ZA', {
+            dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Johannesburg',
+        }).format(publishedAt)
+        : undefined;
     return (
         <article
             className='
@@ -206,6 +213,9 @@ function ReviewCard({ review }) {
                     <p className='mt-1 truncate text-[8.5px] font-semibold leading-none text-[#18221c]'>
                         {review.name}
                     </p>
+                    <time dateTime={review.publishedAt || undefined} title={dateTitle} className='mt-1 block text-[8.5px] text-body/65'>
+                        {review.date}
+                    </time>
                 </div>
             </div>
             {review.images?.length > 0 && (
@@ -246,9 +256,9 @@ function ReviewCard({ review }) {
                         <p className='truncate text-[10px] font-semibold text-ink'>
                             {review.name}
                         </p>
-                        <p className='mt-px truncate text-[8.5px] text-body/65'>
+                        <time dateTime={review.publishedAt || undefined} title={dateTitle} className='mt-px block truncate text-[8.5px] text-body/65'>
                             {review.date}
-                        </p>
+                        </time>
                     </div>
                 </div>
             </div>

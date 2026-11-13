@@ -6,6 +6,7 @@ import { redis } from './redis.js';
 import {
     SINGLE_WASH_CENTS,
     claimUniqueReferenceNumber,
+    getBooking,
     getBookingSlotOwner,
     getMonthlyPackageTotalCents,
     markStoredBookingCancelled,
@@ -629,6 +630,45 @@ export function getPublicBookingRequest(request, includeBooking = true) {
 }
 
 const CANCELLABLE_BOOKED_STATUSES = ['pending_approval', 'approved', 'processing', 'awaiting_completion', 'confirmed'];
+
+/** Returns customer emails only for the current owners of the supplied booked slots. */
+export async function getBookedSlotCustomerEmails(bookedSlots) {
+    const slots = Object.entries(bookedSlots).flatMap(([date, times]) =>
+        times.map((time) => ({ date, time })));
+    if (!slots.length) return {};
+
+    const [owners, ids] = await Promise.all([
+        Promise.all(slots.map(({ date, time }) => getBookingSlotOwner(date, time))),
+        redis.lrange(REQUEST_INDEX_KEY, 0, 999),
+    ]);
+    const requests = ids.length ? await redis.mget(...ids.map(requestKey)) : [];
+    const bySlot = new Map();
+    for (const request of requests) {
+        const booking = request?.booking;
+        const email = booking?.customer?.email;
+        if (request?.reference && booking?.bookingDate && booking?.bookingTime && email) {
+            bySlot.set(JSON.stringify([booking.bookingDate, booking.bookingTime, request.reference]), email);
+        }
+    }
+
+    const emails = {};
+    await Promise.all(slots.map(async ({ date, time }, index) => {
+        const owner = owners[index];
+        if (!owner) return;
+        let email = bySlot.get(JSON.stringify([date, time, owner]));
+        if (!email) {
+            const booking = await getBooking(owner);
+            if (booking?.bookingDate === date && booking?.bookingTime === time && booking?.reference === owner) {
+                email = booking.customer?.email;
+            }
+        }
+        if (typeof email === 'string' && email.trim()) {
+            if (!emails[date]) emails[date] = {};
+            emails[date][time] = email.trim();
+        }
+    }));
+    return emails;
+}
 
 /** Finds the customer request that currently owns a booked date/time slot. */
 export async function findBookingRequestBySlot(bookingDate, bookingTime) {

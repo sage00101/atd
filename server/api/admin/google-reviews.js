@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import '../_lib/load-env.js';
 import { applyCors } from '../_lib/cors.js';
 import { getGoogleReviewQueue, setGoogleReviewQueue } from '../_lib/store.js';
+import { normaliseReviewPublicationDate } from '../_lib/review-date.js';
 
 const SERPAPI_ENDPOINT = 'https://serpapi.com/search';
 const DEFAULT_QUEUE = {
@@ -62,6 +63,7 @@ function mapReview(review) {
         rating,
         quote,
         date,
+        publishedAt: normaliseReviewPublicationDate(review.iso_date),
         photo: safeImageUrl(review.user?.thumbnail),
         images,
     };
@@ -118,10 +120,24 @@ export default async function handler(req, res) {
             const result = await fetchGoogleReviews();
             const approvedIds = new Set(queue.approved.map((review) => review.id));
             const dismissedIds = new Set(queue.dismissedIds);
+            const fetchedById = new Map(result.reviews.map((review) => [review.id, review]));
+            queue.approved = queue.approved.map((review) => {
+                const fetched = fetchedById.get(review.id);
+                if (!fetched) return review;
+                return {
+                    ...review,
+                    date: fetched.date || review.date,
+                    publishedAt: fetched.publishedAt || review.publishedAt || '',
+                };
+            });
             const currentPending = new Map(queue.pending.map((review) => [review.id, review]));
             const refreshedPending = result.reviews
                 .filter((review) => !approvedIds.has(review.id) && !dismissedIds.has(review.id))
-                .map((review) => ({ ...currentPending.get(review.id), ...review }));
+                .map((review) => ({
+                    ...currentPending.get(review.id),
+                    ...review,
+                    publishedAt: review.publishedAt || currentPending.get(review.id)?.publishedAt || '',
+                }));
             const refreshedIds = new Set(refreshedPending.map((review) => review.id));
             queue.pending = [
                 ...refreshedPending,

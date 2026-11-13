@@ -18,16 +18,18 @@ import {
     isBookableBookingTime,
 } from '../../shared/booking-schedule.js';
 
-const redis = Object.fromEntries(['get', 'set', 'del', 'lrange', 'smembers', 'exists', 'eval'].map((name) => [name, () => {
+const redis = Object.fromEntries(['get', 'mget', 'set', 'del', 'lrange', 'smembers', 'exists', 'eval'].map((name) => [name, () => {
     throw new Error(`Unexpected Redis call: ${name}`);
 }]));
 mock.module('../api/_lib/redis.js', { exports: { redis } });
 const [{ validateBookingRequest, listBookingRequests, cancelBookedSlotRecords }, { getBookedSlotsInRange, reserveBookingSlot, getMonthlyPackagePriceCents, getMonthlyPackageTotalCents },
-    { default: cancelHandler }, { default: webhookHandler }] = await Promise.all([
+    { default: cancelHandler }, { default: webhookHandler }, { default: calendarHandler }, { default: availabilityHandler }] = await Promise.all([
     import('../api/_lib/booking-approval.js'),
     import('../api/_lib/store.js'),
     import('../handlers/bookings-cancel.js'),
     import('../api/payments/yoco/webhook.js'),
+    import('../api/admin/calendar.js'),
+    import('../handlers/bookings-availability.js'),
 ]);
 
 function installRedisStub(t) {
@@ -36,6 +38,7 @@ function installRedisStub(t) {
     const lists = new Map();
     const replace = (name, fn) => t.mock.method(redis, name, fn);
     replace('get', async (key) => values.get(key) ?? null);
+    replace('mget', async (...keys) => keys.map((key) => values.get(key) ?? null));
     replace('set', async (key, value) => { values.set(key, structuredClone(value)); return 'OK'; });
     replace('del', async (...keys) => { keys.forEach((key) => values.delete(key)); return 1; });
     replace('lrange', async (key) => lists.get(key) || []);
@@ -89,12 +92,69 @@ function installRedisStub(t) {
 function response() {
     return {
         statusCode: 200,
-        setHeader() { return this; },
+        headers: {},
+        setHeader(name, value) { this.headers[name] = value; return this; },
         status(code) { this.statusCode = code; return this; },
         json(body) { this.body = body; return this; },
         send(body) { this.body = body; return this; },
     };
 }
+
+test('calendar emails follow the current slot owner and stay out of public availability', async (t) => {
+    const db = installRedisStub(t);
+    const previousKey = process.env.CALENDAR_API_KEY;
+    process.env.CALENDAR_API_KEY = 'calendar-test-key';
+    t.after(() => {
+        if (previousKey === undefined) delete process.env.CALENDAR_API_KEY;
+        else process.env.CALENDAR_API_KEY = previousKey;
+    });
+    const date = '2026-11-20';
+    db.sets.set(`booking-index:${date}`, new Set(['09:00', '10:00', '11:00', '12:00']));
+    db.values.set(`booking-slot:${date}:09:00`, 'REF1');
+    db.values.set(`booking-slot:${date}:10:00`, 'REF2');
+    db.values.set(`booking-slot:${date}:11:00`, 'REF3');
+    db.values.set(`booking-slot:${date}:12:00`, 'REF4');
+    db.lists.set('booking:requests:index', ['old', 'hidden', 'wrong-date']);
+    db.values.set('booking:request:old', {
+        reference: 'OLD', booking: { bookingDate: date, bookingTime: '09:00', customer: { email: 'old@example.com' } },
+    });
+    db.values.set('booking:request:hidden', {
+        reference: 'REF1', hiddenFromAdmin: true,
+        booking: { bookingDate: date, bookingTime: '09:00', customer: { email: 'customer@example.com' } },
+    });
+    db.values.set('booking:request:wrong-date', {
+        reference: 'REF3', booking: { bookingDate: '2026-11-21', bookingTime: '11:00', customer: { email: 'wrong@example.com' } },
+    });
+    db.values.set('booking:REF2', {
+        reference: 'REF2', bookingDate: date, bookingTime: '10:00', customer: { email: 'onsite@example.com' },
+    });
+    db.values.set('booking:REF4', {
+        reference: 'REF4', bookingDate: '2026-11-21', bookingTime: '12:00', customer: { email: 'wrong-fallback@example.com' },
+    });
+    const query = { from: date, to: date };
+
+    const denied = response();
+    await calendarHandler({ method: 'GET', headers: { 'x-calendar-key': 'wrong-key' }, query }, denied);
+    assert.equal(denied.statusCode, 401);
+    assert.equal(denied.body.bookedSlotEmails, undefined);
+
+    const calendar = response();
+    await calendarHandler({ method: 'GET', headers: { 'x-calendar-key': 'calendar-test-key' }, query }, calendar);
+    assert.equal(calendar.statusCode, 200);
+    assert.equal(calendar.headers['Cache-Control'], 'no-store');
+    assert.deepEqual(calendar.body.bookedSlotEmails, {
+        [date]: { '09:00': 'customer@example.com', '10:00': 'onsite@example.com' },
+    });
+
+    const saved = response();
+    await calendarHandler({ method: 'PUT', headers: { 'x-calendar-key': 'calendar-test-key' }, query, body: { blocks: {} } }, saved);
+    assert.deepEqual(saved.body.bookedSlotEmails, calendar.body.bookedSlotEmails);
+
+    const publicResponse = response();
+    await availabilityHandler({ method: 'GET', headers: {}, query }, publicResponse);
+    assert.deepEqual(publicResponse.body.bookedSlots[date], ['09:00', '10:00', '11:00', '12:00']);
+    assert.equal(JSON.stringify(publicResponse.body).includes('@example.com'), false);
+});
 
 function seedBooking(db, status = 'pending') {
     const booking = { reference: 'REF1', bookingDate: '2026-11-10', bookingTime: '15:30', status };

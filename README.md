@@ -74,6 +74,9 @@ allowance in their current billing period as the initial credit balance; their
 older historical monthly periods are not retroactively converted into rollover
 credits.
 
+The protected Business Manager calendar shows the customer's email on booked
+slots when available. Public availability calendars never receive these emails.
+
 The booking availability, cancellation, on-site, on-site payment confirmation, and Yoco
 checkout endpoints are routed through one Vercel function to stay within the
 Hobby plan's 12-function deployment limit. Keep the Vercel project root
@@ -89,6 +92,11 @@ When a booking request is accepted, approval SMS messages go to the customer
 and business numbers. They describe the requested wash and remind the customer
 to complete the booking using the email link. The manager reports any notification
 failure; provider acceptance does not guarantee delivery.
+
+Google review ages are calculated from Google's original publication timestamp
+when the website loads. Use **Fetch Google reviews** in Business Manager to
+refresh timestamp metadata for previously approved reviews; reviews without a
+valid publication timestamp are shown without a guessed age.
 
 ## Vacancy applications with Formspree
 
