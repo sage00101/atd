@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { redis } from './redis.js';
 import { generateReferenceNumber } from './reference.js';
 import { businessFleetRates, getBusinessFleetRateCents, getBusinessFleetTierForCount } from '../../../shared/business-pricing.js';
+import { BOOKING_SLOT_TIMES } from '../../../shared/booking-schedule.js';
 
 const PENDING_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 3; // 3 days — abandoned checkouts expire
 const CONFIRMED_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year — keep the slot blocked long-term
@@ -13,7 +14,7 @@ const PROMO_RESERVATION_TTL_SECONDS = 60 * 60;
 const REFERENCE_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year — matches confirmed-booking retention
 const CALENDAR_BLOCK_INDEX_TTL_SECONDS = 60 * 60 * 24 * 365 * 5; // 5 years — manual blocks persist until cleared
 
-export const BOOKING_SLOT_TIMES = ['08:00', '10:30', '13:00', '15:30', '18:00'];
+export { BOOKING_SLOT_TIMES };
 
 const referenceKey = (reference) => `booking-ref:${reference}`;
 const cancellationTokenKey = (token) => `booking-cancel-token:${token}`;

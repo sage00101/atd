@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ArrowRight,
     Building2,
@@ -25,12 +25,11 @@ import useReveal from '../hooks/use-reveal';
 import VehiclePromoModal from '../components/vehicle-promo-modal';
 import { packageGroups } from '../data/pricing';
 import { getBusinessFleetRateCents, getBusinessFleetTierForCount, isValidFleetVehicleCount } from '../../shared/business-pricing.js';
-import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
+import { getBookingTimesForDate, isBookableBookingDate, WEEKDAY_BOOKING_TIMES } from '../../shared/booking-schedule.js';
+import AddressPicker from '../components/address-picker';
 import { trackSubmittedRequest } from '../utils/booking-request-tracker';
 import { loadReturningCustomer, saveReturningCustomer } from '../utils/returning-customer';
 import { MIN_LEAD_TIME_MS, slotDateTime } from '../utils/booking-time';
-
-const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const TERMS_BOOKLET_URL = `${import.meta.env.BASE_URL}assets/${encodeURIComponent('A10tion To Detail - Client Terms and Conditions Booklet.pdf')}`;
@@ -40,7 +39,6 @@ const MONTHLY_VALIDATION_ENDPOINT = `${API_BASE_URL}/api/monthly/validate`;
 const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
 const BOOKING_CLOCK_REFRESH_MS = 10_000;
-const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 7);
 const SINGLE_WASH_VEHICLE_KEY = 'a10tion-single-wash-vehicle-type';
 const MAX_CONTRACT_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -78,14 +76,6 @@ const packageNames = {
     'private-premium': 'Private Client - Premium Package',
     'business-standard': 'Business / Fleet / Family - Standard Package',
 };
-
-const bookingSlots = [
-    { time: '08:00', window: '08:00 - 09:30' },
-    { time: '10:30', window: '10:30 - 13:00' },
-    { time: '13:00', window: '13:00 - 15:30' },
-    { time: '15:30', window: '15:30 - 18:00' },
-    { time: '18:00', window: '18:00 - 20:30' },
-];
 
 const bookingPoints = [
     { icon: CalendarClock, title: 'Flexible slots' },
@@ -235,7 +225,6 @@ export default function BookingSection() {
     const [contractAccepted, setContractAccepted] = useState(false);
     const [contractFiles, setContractFiles] = useState([]);
     const [contractFileError, setContractFileError] = useState('');
-    const [serviceAreaAccepted, setServiceAreaAccepted] = useState(false);
     const [serviceLocation, setServiceLocation] = useState(null);
     const [returningCustomer] = useState(loadReturningCustomer);
     const [customer, setCustomer] = useState(() => ({
@@ -261,43 +250,37 @@ export default function BookingSection() {
     const todayKey = dateKey(today);
     const calendarMonthKey = dateKey(calendarMonth);
 
-    const isWeekday = (date) => {
-        if (!date) return false;
-        const day = date.getDay();
-        return day >= 1 && day <= 5; // Mon–Fri only
-    };
+    const isBookableDate = (date) => Boolean(date && isBookableBookingDate(date));
 
-    /** Monday-first offset: Mon=0 … Fri=4 (weekends never appear). */
+    /** Monday-first offset for the Monday–Saturday calendar. */
     const mondayFirstOffset = (date) => {
-        const day = date.getDay(); // 0=Sun … 6=Sat
-        if (day === 0 || day === 6) return 0; // unused for weekends
-        return day - 1; // Mon→0, Tue→1, … Fri→4
+        return (date.getDay() + 6) % 7;
     };
 
     const calendarDates = useMemo(() => {
         const monthEnd = endOfMonth(calendarMonth);
         const firstVisibleDate = isSameMonth(calendarMonth, today) ? today : startOfMonth(calendarMonth);
 
-        // Leading empty cells so the first weekday lines up under Mon–Fri headers
+        // Leading empty cells align each bookable date under the Monday–Saturday headers.
         let lead = 0;
-        if (isWeekday(firstVisibleDate)) {
+        if (isBookableDate(firstVisibleDate)) {
             lead = mondayFirstOffset(firstVisibleDate);
         } else {
-            // If first visible day is a weekend, find the next Monday and lead with 0
+            // If the first visible date is Sunday, align the next bookable day.
             const probe = new Date(firstVisibleDate);
-            while (!isWeekday(probe) && probe <= monthEnd) {
+            while (!isBookableDate(probe) && probe <= monthEnd) {
                 probe.setDate(probe.getDate() + 1);
             }
-            lead = isWeekday(probe) ? mondayFirstOffset(probe) : 0;
+            lead = isBookableDate(probe) ? mondayFirstOffset(probe) : 0;
         }
 
         const dates = Array.from({ length: lead }, () => null);
 
         for (let day = firstVisibleDate.getDate(); day <= monthEnd.getDate(); day += 1) {
             const d = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day);
-            if (isWeekday(d)) dates.push(d);
+            if (isBookableDate(d)) dates.push(d);
         }
-        while (dates.length % 5 !== 0) dates.push(null);
+        while (dates.length % 6 !== 0) dates.push(null);
         return dates;
     }, [calendarMonthKey, todayKey]);
 
@@ -524,12 +507,13 @@ export default function BookingSection() {
     }, [checkoutOpen]);
 
     const selectedDateKey = selectedDate ? dateKey(selectedDate) : null;
+    const bookingSlots = selectedDate ? getBookingTimesForDate(selectedDate) : WEEKDAY_BOOKING_TIMES;
     const blockedTimes = selectedDateKey
         ? [...new Set([...(unavailableSlots[selectedDateKey] || []), ...(bookedSlots[selectedDateKey] || [])])]
         : [];
 
     useEffect(() => {
-        if (selectedDate && (selectedDate < today || !isWeekday(selectedDate))) {
+        if (selectedDate && (selectedDate < today || !isBookableDate(selectedDate))) {
             setSelectedDate(null);
             setSelectedTime(null);
             return;
@@ -588,20 +572,7 @@ export default function BookingSection() {
         }
     };
 
-    const serviceDistanceKm = getDistanceFromServiceCenter(serviceLocation);
-    const serviceLocationAllowed = serviceDistanceKm !== null && serviceDistanceKm <= SERVICE_RADIUS_KM;
-    const serviceAddressValid = serviceLocationAllowed && customer.address.trim().length > 0;
-
-    const updateServiceLocation = (location) => {
-        setServiceLocation(location);
-        const distanceKm = getDistanceFromServiceCenter(location);
-        if (distanceKm !== null && distanceKm > SERVICE_RADIUS_KM) {
-            setCustomer((current) => ({ ...current, address: '' }));
-            setPaymentError(`That location is outside our service coverage. The address was cleared. Enter an in-area address and choose an in-area pin to continue.`);
-            return;
-        }
-        setPaymentError('');
-    };
+    const serviceAddressValid = customer.address.trim().length > 0;
 
     const emailMismatch = confirmEmail.length > 0
         && confirmEmail.trim().toLowerCase() !== customer.email.trim().toLowerCase();
@@ -610,10 +581,8 @@ export default function BookingSection() {
         event.preventDefault();
         if (missingSelection || isSubmitting) return;
 
-        if (!serviceLocationAllowed) {
-            setPaymentError(serviceLocation
-                ? 'This address is outside our service coverage. Please contact us before booking.'
-                : 'Pin your service location on the map to check the service area before continuing.');
+        if (!serviceAddressValid) {
+            setPaymentError('Please enter your service address.');
             return;
         }
 
@@ -627,7 +596,7 @@ export default function BookingSection() {
             return;
         }
 
-        if (!termsAccepted || !serviceAreaAccepted || (isMonthly && !contractAccepted)) {
+        if (!termsAccepted || (isMonthly && !contractAccepted)) {
             setPaymentError('Please accept the required booking and agreement confirmations before continuing.');
             return;
         }
@@ -661,7 +630,6 @@ export default function BookingSection() {
                     travelBufferMinutes: 60,
                     serviceLocation,
                     promoCode: purchaseType === 'single' && promoCode.trim() ? promoCode.trim().toUpperCase() : null,
-                    serviceAreaAccepted,
                     termsAccepted,
                     requestedPaymentMethod: paymentMethod,
                     contractAccepted: isMonthly ? contractAccepted : false,
@@ -752,8 +720,8 @@ export default function BookingSection() {
                             <div className='flex items-start gap-2'>
                                 <MapPin className='mt-0.5 size-4 shrink-0 text-sagedeep' />
                                 <div>
-                                    <p className='text-[9px] font-bold uppercase tracking-[0.12em] text-sage sm:text-[10px]'>Mobile Service Coverage</p>
-                                    <p className='mt-1 text-[9.5px] leading-[1.5] text-body sm:text-[10.5px]'>Deep Southern Suburbs. From Muizenberg South towards the CBD. Outside areas are welcome to email us at <a href='mailto:info@a10tion.co.za' className='font-semibold underline underline-offset-2'>{'info@a10tion.co.za'}</a> for quotations and bookings</p>
+                                    <p className='text-[9px] font-bold uppercase tracking-[0.12em] text-sage sm:text-[10px]'>Mobile service</p>
+                                    <p className='mt-1 text-[9.5px] leading-[1.5] text-body sm:text-[10.5px]'>Enter your service address when requesting a booking. We will review your request before confirming.</p>
                                 </div>
                             </div>
 
@@ -796,8 +764,8 @@ export default function BookingSection() {
                             </div>
                         </div>
 
-                        <div className='mt-2 grid grid-cols-5 gap-0.5 sm:gap-1'>
-                            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((day) => (
+                        <div className='mt-2 grid grid-cols-6 gap-0.5 sm:gap-1'>
+                            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
                                 <span key={day} className='text-center text-[6.5px] font-bold uppercase text-body/45 sm:text-[8px]'>{day}</span>
                             ))}
                             {calendarDates.map((date, index) => {
@@ -833,12 +801,12 @@ export default function BookingSection() {
                         </div>
 
                         <div className='mt-1.5 grid grid-cols-3 gap-1 sm:grid-cols-4 sm:gap-2'>
-                            {bookingSlots.map((slot) => {
-                                const unavailable = blockedTimes.includes(slot.time) || Boolean(selectedDate && slotDateTime(selectedDateKey, slot.time).getTime() - now.getTime() < MIN_LEAD_TIME_MS);
-                                const selected = selectedTime === slot.time;
+                            {bookingSlots.map((time) => {
+                                const unavailable = blockedTimes.includes(time) || Boolean(selectedDate && slotDateTime(selectedDateKey, time).getTime() - now.getTime() < MIN_LEAD_TIME_MS);
+                                const selected = selectedTime === time;
                                 return (
-                                    <button key={slot.time} type='button' disabled={!selectedDate || unavailable} onClick={() => setSelectedTime(slot.time)} className={`min-h-[31px] rounded-[7px] border px-0 text-[8.5px] font-semibold transition sm:min-h-[40px] sm:text-[10.5px] ${selected ? 'border-[#274633] bg-[#1d3426] text-white' : unavailable ? 'cursor-not-allowed border-line bg-canvasoft text-body/25 line-through' : !selectedDate ? 'cursor-not-allowed border-line bg-canvasoft text-body/30' : 'border-line bg-white text-ink hover:border-sage/45 hover:bg-sagelight'}`} title={slot.window}>
-                                        {slot.time}
+                                    <button key={time} type='button' disabled={!selectedDate || unavailable} onClick={() => setSelectedTime(time)} className={`min-h-[31px] rounded-[7px] border px-0 text-[8.5px] font-semibold transition sm:min-h-[40px] sm:text-[10.5px] ${selected ? 'border-[#274633] bg-[#1d3426] text-white' : unavailable ? 'cursor-not-allowed border-line bg-canvasoft text-body/25 line-through' : !selectedDate ? 'cursor-not-allowed border-line bg-canvasoft text-body/30' : 'border-line bg-white text-ink hover:border-sage/45 hover:bg-sagelight'}`}>
+                                        {time}
                                     </button>
                                 );
                             })}
@@ -847,7 +815,7 @@ export default function BookingSection() {
                         <div className='mt-2 flex items-start gap-2 rounded-[10px] border border-amber-200/80 bg-amber-50 px-2.5 py-2 text-left sm:px-3 sm:py-2.5' role='note'>
                             <Clock3 className='mt-0.5 size-3.5 shrink-0 text-amber-700' aria-hidden='true' />
                             <p className='text-left text-[10px] leading-[1.45] text-amber-950 sm:text-[11px]'>
-                                <span className='font-semibold'>Public holidays:</span> For weekend and public holiday availability, kindly email us at bookings@a10tion.co.za for a quotation
+                                <span className='font-semibold'>Public holidays:</span> For public-holiday availability, kindly email us at bookings@a10tion.co.za for a quotation
                             </p>
                         </div>
 
@@ -1138,33 +1106,14 @@ export default function BookingSection() {
                                         </label>
                                     )}
 
-                                    <Suspense fallback={<div className='mt-3 h-[220px] animate-pulse rounded-xl border border-line bg-[#f0f2ef] sm:h-[260px]' aria-label='Loading service area map' />}>
-                                        <ServiceAreaPicker
-                                            address={customer.address}
-                                            onAddressChange={updateAddress}
-                                            location={serviceLocation}
-                                            onLocationChange={updateServiceLocation}
-                                            radiusKm={SERVICE_RADIUS_KM}
-                                            addressInvalid={serviceDistanceKm !== null && !serviceLocationAllowed}
-                                        />
-                                    </Suspense>
-                                    <p
-                                        className={`mt-2 rounded-lg px-3 py-2 text-[8.5px] leading-[1.5] sm:text-[9px] ${serviceDistanceKm === null ? 'bg-[#f0f2ef] text-body' : serviceLocationAllowed ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}
-                                        role={serviceDistanceKm !== null && !serviceLocationAllowed ? 'alert' : 'status'}
-                                    >
-                                        {serviceDistanceKm === null
-                                            ? 'Choose your service location on the map to continue.'
-                                            : serviceLocationAllowed
-                                              ? `In service area · ${serviceDistanceKm.toFixed(1)} km from ${SERVICE_AREA_NAME}.`
-                                              : `Outside service coverage · ${serviceDistanceKm.toFixed(1)} km away. Please contact us before booking.`}
-                                    </p>
+                                    <AddressPicker address={customer.address} onAddressChange={updateAddress} onLocationChange={setServiceLocation} />
 
                                     <label className='mt-3.5 block text-left'>
                                         <span className='mb-1 flex justify-between text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>
                                             <span>Booking message / request <span className='font-normal text-body/55'>(optional)</span></span>
                                             <span className='font-normal text-body/50'>{customer.notes.length}/300</span>
                                         </span>
-                                        <textarea className={`${fieldClassName} min-h-[54px] resize-none py-2 sm:min-h-[62px]`} name='notes' value={customer.notes} onChange={updateCustomer} placeholder='Outside our standard coverage or cannot find your exact location? Add your travel request here.' maxLength={300} rows={2} />
+                                        <textarea className={`${fieldClassName} min-h-[54px] resize-none py-2 sm:min-h-[62px]`} name='notes' value={customer.notes} onChange={updateCustomer} placeholder='Add any details about your booking here.' maxLength={300} rows={2} />
                                     </label>
 
                                     {isMonthly && (
@@ -1247,11 +1196,6 @@ export default function BookingSection() {
                                     )}
 
                                     <div className='mt-3.5 grid gap-2.5'>
-                                        <label className='flex items-start gap-2 rounded-xl border border-line bg-white/80 px-3 py-2.5 text-left'>
-                                            <input type='checkbox' checked={serviceAreaAccepted} onChange={(event) => setServiceAreaAccepted(event.target.checked)} className='mt-0.5 accent-[#365943]' required />
-                                            <span className='text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>I understand the standard service coverage is centered near {SERVICE_AREA_NAME}, not at the business address. Locations outside this area cannot be booked.</span>
-                                        </label>
-
                                         <label className='flex items-start gap-2 rounded-xl border border-line bg-white/80 px-3 py-2.5 text-left'>
                                             <input type='checkbox' checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className='mt-0.5 accent-[#365943]' required />
                                             <span className='text-[8.5px] leading-[1.5] text-body sm:text-[9.5px]'>I agree to the <a href={`${import.meta.env.BASE_URL}terms.html`} target='_blank' rel='noreferrer' className='font-semibold text-sagedeep underline underline-offset-2'>Terms &amp; Conditions</a> and acknowledge the booking/cancellation rules.</span>

@@ -11,6 +11,7 @@ import {
     getCalendarHistory,
     setCalendarBlockRange,
 } from '../_lib/store.js';
+import { SATURDAY_BOOKING_TIMES, WEEKDAY_BOOKING_TIMES } from '../../../shared/booking-schedule.js';
 
 function safeEqual(left, right) {
     const leftDigest = crypto.createHash('sha256').update(String(left)).digest();
@@ -220,7 +221,8 @@ const adminPage = `<!doctype html>
   </div>
 </div>
 <script>
-  const slots = ['08:00','10:30','13:00','15:30','18:00'];
+  const weekdaySlots = ${JSON.stringify(WEEKDAY_BOOKING_TIMES)};
+  const saturdaySlots = ${JSON.stringify(SATURDAY_BOOKING_TIMES)};
   const keyInput = document.getElementById('adminKey');
   const loginKeyInput = document.getElementById('loginKeyInput');
   const calendarNode = document.getElementById('calendar');
@@ -255,9 +257,16 @@ const adminPage = `<!doctype html>
     return new Date(year, month - 1, day);
   }
 
-  function isWeekday(value) {
+  function isBookableDate(value) {
     const day = dateFromIso(value).getDay();
-    return day !== 0 && day !== 6;
+    return day !== 0;
+  }
+
+  function slotsForDate(value) {
+    const day = dateFromIso(value).getDay();
+    if (day === 6) return saturdaySlots;
+    if (day >= 1 && day <= 5) return weekdaySlots;
+    return [];
   }
 
   function buildDateRange(days = 30) {
@@ -270,8 +279,8 @@ const adminPage = `<!doctype html>
     });
   }
 
-  function buildWeekdayRange(days = 30) {
-    return buildDateRange(days).filter(isWeekday);
+  function buildBookableDateRange(days = 30) {
+    return buildDateRange(days).filter(isBookableDate);
   }
 
   function buildWeekRange() {
@@ -284,12 +293,12 @@ const adminPage = `<!doctype html>
       const date = new Date(start);
       date.setDate(start.getDate() + index);
       return isoDate(date);
-    }).filter(isWeekday);
+    }).filter(isBookableDate);
   }
 
   function getVisibleDates() {
     if (state.viewMode === 'week') return buildWeekRange();
-    return buildWeekdayRange(30);
+    return buildBookableDateRange(30);
   }
 
   function renderHistory() {
@@ -309,7 +318,7 @@ const adminPage = `<!doctype html>
     const rows = [['date', 'time', 'status']];
     getVisibleDates().forEach((date) => {
       const blockedSet = new Set(state.blockedSlots[date] || []);
-      slots.forEach((time) => {
+      slotsForDate(date).forEach((time) => {
         rows.push([date, time, blockedSet.has(time) ? 'blocked' : 'available']);
       });
     });
@@ -353,12 +362,13 @@ const adminPage = `<!doctype html>
   }
 
   function renderMonthOverview() {
-    const monthDates = buildWeekdayRange(30);
+    const monthDates = buildBookableDateRange(30);
     const cells = monthDates.map((date) => {
-      const blocked = new Set(state.blockedSlots[date] || []);
-      const booked = new Set(state.bookedSlots[date] || []);
+      const slots = slotsForDate(date);
+      const blocked = new Set((state.blockedSlots[date] || []).filter((time) => slots.includes(time)));
+      const booked = new Set((state.bookedSlots[date] || []).filter((time) => slots.includes(time)));
       const occupiedCount = new Set([...blocked, ...booked]).size;
-      const percent = Math.min((occupiedCount / slots.length) * 100, 100);
+      const percent = slots.length ? Math.min((occupiedCount / slots.length) * 100, 100) : 0;
       const label = blocked.size + ' blocked · ' + booked.size + ' booked';
       return '<button type="button" data-date="' + date + '" class="month-day" title="' + label + '"><span class="month-day-label">' + formatDate(dateFromIso(date)).replace(', ', ' ') + '</span><span class="month-bar"><span class="month-bar-fill" style="width:' + percent + '%"></span></span><span class="month-day-meta">' + label + '</span></button>';
     }).join('');
@@ -376,9 +386,11 @@ const adminPage = `<!doctype html>
     });
     const isMonthView = state.viewMode === 'month';
     const cards = isMonthView ? renderMonthOverview() : dates.map((date) => {
+      const slots = slotsForDate(date);
       const blockedSet = new Set(state.blockedSlots[date] || []);
       const bookedSet = new Set(state.bookedSlots[date] || []);
-      const slotButtons = slots.map((time) => {
+      const visibleSlots = [...new Set([...slots, ...bookedSet])].sort();
+      const slotButtons = visibleSlots.map((time) => {
         const blocked = blockedSet.has(time);
         const booked = bookedSet.has(time);
         const slotClass = booked ? 'booked' : blocked ? 'blocked' : '';
@@ -387,9 +399,9 @@ const adminPage = `<!doctype html>
         return '<button class="slot ' + slotClass + '" type="button" data-date="' + date + '" data-time="' + time + '" data-booked="' + booked + '" aria-disabled="' + booked + '" aria-label="' + date + ' ' + time + ', ' + label + '" title="' + label + '"><span>' + time + '</span><span class="slot-status">' + slotStatus + '</span></button>';
       }).join('');
 
-      const blockedCountForDate = blockedSet.size;
+      const blockedCountForDate = slots.filter((time) => blockedSet.has(time)).length;
       const bookedCountForDate = bookedSet.size;
-      const availableCountForDate = Math.max(slots.length - new Set([...blockedSet, ...bookedSet]).size, 0);
+      const availableCountForDate = slots.filter((time) => !blockedSet.has(time) && !bookedSet.has(time)).length;
       const openAttribute = state.openDates.has(date) ? ' open' : '';
       return '<details class="date-card day-card" data-date-card="' + date + '"' + openAttribute + '><summary class="day-summary"><span class="day-heading"><span class="date-name">' + formatDate(dateFromIso(date)) + '</span><span class="date-meta">' + date + '</span></span><span class="day-counts"><span class="count-open">' + availableCountForDate + ' open</span><span>' + blockedCountForDate + ' blocked</span><span class="count-booked">' + bookedCountForDate + ' booked</span></span><span class="day-chevron" aria-hidden="true"></span></summary><div class="day-content"><div class="day-rule"></div><div class="slot-grid">' + slotButtons + '</div><div class="date-actions"><button class="secondary" type="button" data-date="' + date + '" data-action="block-all">Block open slots</button><button class="ghost" type="button" data-date="' + date + '" data-action="clear-all">Clear manual blocks</button></div></div></details>';
     }).join('');
@@ -405,6 +417,7 @@ const adminPage = `<!doctype html>
       calendarNode.querySelectorAll('[data-date]').forEach((button) => {
         button.addEventListener('click', () => {
           const date = button.dataset.date;
+          const slots = slotsForDate(date);
           const set = new Set(state.blockedSlots[date] || []);
           const booked = new Set(state.bookedSlots[date] || []);
           const unbookedSlots = slots.filter((time) => !booked.has(time));
@@ -465,7 +478,7 @@ const adminPage = `<!doctype html>
         const { date } = button.dataset;
         const booked = new Set(state.bookedSlots[date] || []);
         const current = new Set(state.blockedSlots[date] || []);
-        slots.filter((time) => !booked.has(time)).forEach((time) => current.add(time));
+        slotsForDate(date).filter((time) => !booked.has(time)).forEach((time) => current.add(time));
         state.blockedSlots[date] = [...current].sort();
         state.history.unshift({ action: 'blocked', date, time: 'all slots', timestamp: new Date().toISOString() });
         state.history = state.history.slice(0, 20);
@@ -490,10 +503,10 @@ const adminPage = `<!doctype html>
       });
     });
 
-    const blockedCount = dates.reduce((sum, date) => sum + (state.blockedSlots[date] || []).length, 0);
-    const bookedCount = dates.reduce((sum, date) => sum + (state.bookedSlots[date] || []).length, 0);
-    const visibleCount = dates.length * slots.length;
-    const occupiedCount = dates.reduce((sum, date) => sum + new Set([...(state.blockedSlots[date] || []), ...(state.bookedSlots[date] || [])]).size, 0);
+    const visibleCount = dates.reduce((sum, date) => sum + slotsForDate(date).length, 0);
+    const blockedCount = dates.reduce((sum, date) => sum + slotsForDate(date).filter((time) => (state.blockedSlots[date] || []).includes(time)).length, 0);
+    const bookedCount = dates.reduce((sum, date) => sum + slotsForDate(date).filter((time) => (state.bookedSlots[date] || []).includes(time)).length, 0);
+    const occupiedCount = dates.reduce((sum, date) => sum + slotsForDate(date).filter((time) => (state.blockedSlots[date] || []).includes(time) || (state.bookedSlots[date] || []).includes(time)).length, 0);
     const availableCount = Math.max(visibleCount - occupiedCount, 0);
     summaryNode.textContent = 'Visible schedule: ' + visibleCount + ' slots · ' + blockedCount + ' blocked · ' + bookedCount + ' booked · ' + availableCount + ' available';
   }
@@ -637,7 +650,7 @@ const adminPage = `<!doctype html>
   document.getElementById('blockNext30').addEventListener('click', () => {
     const next = { ...state.blockedSlots };
     getVisibleDates().forEach((date) => {
-      next[date] = [...slots];
+      next[date] = [...new Set([...(next[date] || []), ...slotsForDate(date)])].sort();
     });
     state.blockedSlots = next;
     state.history.unshift({ action: 'blocked', date: 'next 30 days', time: 'all slots', timestamp: new Date().toISOString() });

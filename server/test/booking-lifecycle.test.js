@@ -6,11 +6,17 @@ import { hasMinimumBookingNotice } from '../api/_lib/booking-time.js';
 import {
     buildCustomerBookingConfirmationSmsText,
     buildCustomerBookingRequestSmsText,
+    buildBookingRequestSmsText,
+    buildBusinessBookingSmsText,
     isSmsConfigured,
     sendCustomerBookingConfirmationSms,
     sendCustomerBookingRequestSms,
 } from '../api/_lib/sms.js';
 import { MIN_LEAD_TIME_MS, slotDateTime } from '../../src/utils/booking-time.js';
+import {
+    getBookingTimesForDate,
+    isBookableBookingTime,
+} from '../../shared/booking-schedule.js';
 
 const redis = Object.fromEntries(['get', 'set', 'del', 'lrange', 'smembers', 'exists', 'eval'].map((name) => [name, () => {
     throw new Error(`Unexpected Redis call: ${name}`);
@@ -103,13 +109,13 @@ function seedBooking(db, status = 'pending') {
 }
 
 test('one-hour threshold is identical on client and server in South African time', async (t) => {
-    const slot = slotDateTime('2026-11-10', '15:30').getTime();
+    const slot = slotDateTime('2026-11-10', '14:30').getTime();
     assert.equal(MIN_LEAD_TIME_MS, 3600000);
-    assert.equal(hasMinimumBookingNotice('2026-11-10', '15:30', slot - 3600000), true);
-    assert.equal(hasMinimumBookingNotice('2026-11-10', '15:30', slot - 3599999), false);
-    assert.equal(hasMinimumBookingNotice('invalid', '15:30', slot), false);
+    assert.equal(hasMinimumBookingNotice('2026-11-10', '14:30', slot - 3600000), true);
+    assert.equal(hasMinimumBookingNotice('2026-11-10', '14:30', slot - 3599999), false);
+    assert.equal(hasMinimumBookingNotice('invalid', '14:30', slot), false);
     const booking = {
-        purchaseType: 'single', vehicleType: 'Sedan / Hatchback', bookingDate: '2026-11-10', bookingTime: '15:30',
+        purchaseType: 'single', vehicleType: 'Sedan / Hatchback', bookingDate: '2026-11-10', bookingTime: '14:30',
         customer: { firstName: 'Test', surname: 'Customer', mobile: '123', email: 'test@example.com', registration: 'ABC123', address: 'Test address' },
         serviceLocation: { latitude: -33.978, longitude: 18.444 },
         serviceAreaAccepted: true, termsAccepted: true, requestedPaymentMethod: 'online',
@@ -130,12 +136,12 @@ test('business package uses the selected fleet tier and requires that tier', asy
     assert.equal(getMonthlyPackageTotalCents('business-standard', 'Sedan / Hatchback', '6-8', 7), 154000);
     assert.equal(getMonthlyPackagePriceCents('private-standard', 'Sedan / Hatchback'), 42000);
 
-    const slot = slotDateTime('2026-11-10', '15:30').getTime();
+    const slot = slotDateTime('2026-11-10', '14:30').getTime();
     t.mock.method(Date, 'now', () => slot - 3600000);
     const booking = {
         purchaseType: 'monthly', packageId: 'business-standard', vehicleType: 'Sedan / Hatchback',
         fleetSizeTier: '6-8', fleetVehicleCount: 7,
-        bookingDate: '2026-11-10', bookingTime: '15:30', contractAccepted: true, contractFileBase64: 'ZmlsZQ==',
+        bookingDate: '2026-11-10', bookingTime: '14:30', contractAccepted: true, contractFileBase64: 'ZmlsZQ==',
         customer: { firstName: 'Test', surname: 'Customer', mobile: '123', email: 'test@example.com', registration: 'ABC123', address: 'Test address' },
         serviceLocation: { latitude: -33.978, longitude: 18.444 },
         serviceAreaAccepted: true, termsAccepted: true, requestedPaymentMethod: 'online',
@@ -143,6 +149,46 @@ test('business package uses the selected fleet tier and requires that tier', asy
     await assert.doesNotReject(validateBookingRequest(booking));
     await assert.rejects(validateBookingRequest({ ...booking, fleetSizeTier: '3-5' }), /valid monthly package and vehicle category/);
     await assert.rejects(validateBookingRequest({ ...booking, fleetVehicleCount: 9 }), /valid monthly package and vehicle category/);
+});
+
+test('weekday and Saturday booking slots are accepted, while Sunday and mismatched times are rejected', async (t) => {
+    assert.deepEqual(getBookingTimesForDate('2026-11-10'), ['09:30', '12:00', '14:30', '16:00', '18:30']);
+    assert.deepEqual(getBookingTimesForDate('2026-11-14'), ['09:00', '11:30', '13:30']);
+    assert.deepEqual(getBookingTimesForDate('2026-11-15'), []);
+    assert.equal(isBookableBookingTime('2026-11-14', '09:00'), true);
+    assert.equal(isBookableBookingTime('2026-11-14', '09:30'), false);
+
+    const saturdaySlot = slotDateTime('2026-11-14', '09:00').getTime();
+    t.mock.method(Date, 'now', () => saturdaySlot - 3600000);
+    const booking = {
+        purchaseType: 'single',
+        vehicleType: 'Sedan / Hatchback',
+        bookingDate: '2026-11-14',
+        bookingTime: '09:00',
+        customer: { firstName: 'Test', surname: 'Customer', mobile: '123', email: 'test@example.com', registration: 'ABC123', address: 'Test address' },
+        serviceLocation: { latitude: -33.978, longitude: 18.444 },
+        serviceAreaAccepted: true,
+        termsAccepted: true,
+        requestedPaymentMethod: 'online',
+    };
+
+    await assert.doesNotReject(validateBookingRequest(booking));
+    await assert.rejects(validateBookingRequest({ ...booking, bookingTime: '09:30' }), /valid booking date and time/);
+    await assert.rejects(validateBookingRequest({ ...booking, bookingDate: '2026-11-15' }), /valid booking date and time/);
+});
+
+test('booking requests accept manual and distant addresses without coverage confirmation', async (t) => {
+    const slot = slotDateTime('2026-11-10', '14:30').getTime();
+    t.mock.method(Date, 'now', () => slot - 3600000);
+    const booking = {
+        purchaseType: 'single', vehicleType: 'Sedan / Hatchback', bookingDate: '2026-11-10', bookingTime: '14:30',
+        customer: { firstName: 'Test', surname: 'Customer', mobile: '123', email: 'test@example.com', registration: 'ABC123', address: 'A manually entered address' },
+        termsAccepted: true, requestedPaymentMethod: 'online',
+    };
+    await assert.doesNotReject(validateBookingRequest(booking));
+    await assert.doesNotReject(validateBookingRequest({ ...booking, serviceLocation: { latitude: -26.2, longitude: 28.0 } }));
+    await assert.rejects(validateBookingRequest({ ...booking, customer: { ...booking.customer, address: '   ' } }), /service address/);
+    await assert.rejects(validateBookingRequest({ ...booking, termsAccepted: false }), /booking terms/);
 });
 
 test('customer booking SMS targets the supplied mobile and includes request tracking details', async (t) => {
@@ -198,6 +244,45 @@ test('customer booking SMS targets the supplied mobile and includes request trac
     assert.equal(calls.length, 2);
     assert.equal(JSON.parse(calls[1].options.body).recipientNumber, '27821234567');
     assert.match(JSON.parse(calls[1].options.body).message, /CONF456/);
+});
+
+test('business booking SMS includes requested details in one GSM-safe segment', () => {
+    const request = {
+        booking: {
+            packageName: 'Business / Fleet / Family - Standard Package',
+            customer: {
+                firstName: 'Jane',
+                surname: 'Doe',
+                email: 'jane.doe@example.com',
+                address: '12 Main Road, Cape Town',
+            },
+        },
+    };
+    const requestText = buildBookingRequestSmsText(request);
+    const confirmationText = buildBusinessBookingSmsText({
+        name: 'Jane Doe',
+        email: 'jane.doe@example.com',
+        address: '12 Main Road, Cape Town',
+        packageName: 'Business / Fleet / Family - Standard Package',
+    });
+
+    for (const message of [requestText, confirmationText]) {
+        assert.ok(message.length <= 160);
+        assert.match(message, /N:Jane Doe/);
+        assert.match(message, /E:jane\.doe@example\.com/);
+        assert.match(message, /A:12 Main Road, Cape Town/);
+        assert.match(message, /P:Business \/ Fleet \/ Family - Standard Package/);
+        assert.doesNotMatch(message, /[^\x20-\x7E]/);
+    }
+
+    const longAddress = buildBusinessBookingSmsText({
+        name: 'Jane Doe',
+        email: 'jane.doe@example.com',
+        address: '123 Very Long Street Name, A Large Suburb, Cape Town, Western Cape, South Africa',
+        packageName: 'Business / Fleet / Family - Standard Package',
+    });
+    assert.ok(longAddress.length <= 160);
+    assert.match(longAddress, /P:Business \/ Fleet \/ Family - Standard Package$/);
 });
 
 test('cancelled checkout releases the slot and appears in manager records, including on retry', async (t) => {

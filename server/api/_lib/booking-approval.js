@@ -1,9 +1,9 @@
 import crypto from 'node:crypto';
-import { getServiceAreaError } from './service-area.js';
+import { getServiceAddressError } from './service-address.js';
 import { hasMinimumBookingNotice } from './booking-time.js';
+import { isBookableBookingTime } from '../../../shared/booking-schedule.js';
 import { redis } from './redis.js';
 import {
-    BOOKING_SLOT_TIMES,
     SINGLE_WASH_CENTS,
     claimUniqueReferenceNumber,
     getBookingSlotOwner,
@@ -240,11 +240,9 @@ export async function validateBookingRequest(booking) {
     if (booking.bookingType === 'monthly-entitlement' && booking.purchaseType !== 'single') {
         throw new BookingRequestError('Monthly entitlement washes must be submitted as single washes.');
     }
-    if (!isValidDate(bookingDate) || !BOOKING_SLOT_TIMES.includes(bookingTime)) {
+    if (!isValidDate(bookingDate) || !isBookableBookingTime(bookingDate, bookingTime)) {
         throw new BookingRequestError('Choose a valid booking date and time.');
     }
-    const day = new Date(`${bookingDate}T00:00:00.000Z`).getUTCDay();
-    if (day === 0 || day === 6) throw new BookingRequestError('Bookings are available on weekdays only.');
     if (!hasMinimumBookingNotice(bookingDate, bookingTime)) {
         throw new BookingRequestError('Bookings require at least 1 hour notice. Please choose a later time.');
     }
@@ -256,9 +254,9 @@ export async function validateBookingRequest(booking) {
         || !looksLikeVehicleRegistration(customer.registration)) {
         throw new BookingRequestError('Enter your name, mobile number, email address and a valid vehicle registration.');
     }
-    if (!booking.serviceAreaAccepted || !booking.termsAccepted) throw new BookingRequestError('Confirm the service details and booking terms.');
-    const serviceAreaError = getServiceAreaError(booking.serviceLocation, customer.address);
-    if (serviceAreaError) throw new BookingRequestError(serviceAreaError);
+    if (!booking.termsAccepted) throw new BookingRequestError('Confirm the service details and booking terms.');
+    const serviceAddressError = getServiceAddressError(customer.address);
+    if (serviceAddressError) throw new BookingRequestError(serviceAddressError);
 
     if (booking.purchaseType === 'monthly' && !getMonthlyPackageTotalCents(booking.packageId, booking.vehicleType, booking.fleetSizeTier, booking.fleetVehicleCount)) {
         throw new BookingRequestError('Choose a valid monthly package and vehicle category.');

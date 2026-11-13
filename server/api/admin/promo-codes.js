@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { applyCors } from '../_lib/cors.js';
 import { getSharedPromoBatchForAdmin, saveSharedPromoBatch, looksLikeEmail } from '../_lib/store.js';
 import { sendPassphraseEmail } from '../_lib/email.js';
-import { buildBookingRequestSmsText, getBusinessSmsNumber, isSmsConfigured, sendSms } from '../_lib/sms.js';
+import { getBusinessSmsNumber, isSmsConfigured, sendSms } from '../_lib/sms.js';
 
 const managerLogoUrl = new URL(
     'assets/android-chrome-192x192.png',
@@ -387,9 +387,16 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 <p class="hint">Passwords are exact and case-sensitive. Duplicate promo codes are allowed, but that promo code can only be redeemed once across the batch.</p>
 <div class="buttons"><button id="save" type="button">Save active batch</button></div>
 <section class="distribution-panel" style="display:block" aria-label="Booking request SMS alerts">
-  <div><h3>Booking request SMS alerts</h3><p>New booking requests are texted to the company cell number through SMSMessenger. The test sends a sample booking request, including address and map link, to confirm it is connected.</p></div>
-  <div class="buttons"><button id="smsTest" class="secondary" type="button">Send test SMS</button></div>
-  <p id="smsTestNotice" class="inline-notice" role="status" aria-live="polite" hidden></p>
+  <div><h3>Booking request SMS alerts</h3><p>Send a test to the configured business cell number. The combined SMS must be no more than 612 characters and may use multiple SMS segments.</p></div>
+  <form id="smsTestForm" class="manager-form">
+    <label class="field-label">Name<input class="manager-input" name="firstName" maxlength="80" placeholder="Enter name" required></label>
+    <label class="field-label">Surname<input class="manager-input" name="surname" maxlength="80" placeholder="Enter surname" required></label>
+    <label class="field-label">Email<input class="manager-input" name="email" type="email" maxlength="254" placeholder="Enter email" required></label>
+    <label class="field-label">Address<input class="manager-input" name="address" maxlength="250" placeholder="Enter address" required></label>
+    <label class="field-label field-full">Message<textarea name="message" maxlength="400" rows="3" placeholder="Enter a test message" style="min-height:100px;white-space:pre-wrap" required></textarea></label>
+    <div class="field-full manager-form-actions"><button id="smsTest" class="secondary" type="submit">Send test SMS</button></div>
+    <p id="smsTestNotice" class="inline-notice field-full" role="status" aria-live="polite" hidden></p>
+  </form>
 </section>
 <section class="distribution-panel" style="display:block" aria-label="Email a passphrase">
   <div><h3>Email a passphrase</h3><p>Send a passphrase, and optionally its promo code, to a customer in the A10tion To Detail branded email.</p></div>
@@ -1347,13 +1354,16 @@ bulkConfirmButton.addEventListener('click',async()=>{
 });
 const smsTestButton=document.getElementById('smsTest');
 const smsTestNotice=document.getElementById('smsTestNotice');
-smsTestButton.addEventListener('click',async()=>{
+const smsTestForm=document.getElementById('smsTestForm');
+smsTestForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  if(!smsTestForm.reportValidity())return;
   smsTestButton.disabled=true;
   showNotice(smsTestNotice,'Sending test SMS…','');
   try{
-    const result=await request('POST',{action:'test-sms'});
-    showNotice(smsTestNotice,'✓ Test SMS sent to +'+result.to+'.','ok');
-  }catch(error){showNotice(smsTestNotice,'SMS was NOT sent: '+error.message,'error');}
+    const result=await request('POST',{action:'test-sms',...Object.fromEntries(new FormData(smsTestForm).entries())});
+    showNotice(smsTestNotice,'✓ SMSMessenger accepted the test SMS for +'+result.to+'. Delivery is not yet confirmed.','ok');
+  }catch(error){showNotice(smsTestNotice,'Test SMS could not be confirmed: '+error.message,'error');}
   finally{smsTestButton.disabled=false;}
 });
 const passphraseForm=document.getElementById('passphraseForm');
@@ -1621,20 +1631,33 @@ export default async function handler(req, res) {
                     res.status(502).json({ message: 'SMS is not configured on the server (SMSMESSENGER_EMAIL / SMSMESSENGER_API_KEY missing).' });
                     return;
                 }
+                const fields = ['firstName', 'surname', 'email', 'address', 'message'];
+                if (fields.some((field) => typeof req.body[field] !== 'string' || !req.body[field].trim())) {
+                    res.status(400).json({ message: 'Enter a name, surname, email, address and message.' });
+                    return;
+                }
+                const { firstName, surname, email, address, message } = Object.fromEntries(
+                    fields.map((field) => [field, req.body[field].trim()]),
+                );
+                if (!looksLikeEmail(email)) {
+                    res.status(400).json({ message: 'Enter a valid email address.' });
+                    return;
+                }
+                const testMessage = `A10tion TEST\nName: ${firstName} ${surname}\nEmail: ${email}\nAddress: ${address}\nMessage: ${message}`;
+                if (testMessage.length > 612) {
+                    res.status(400).json({ message: 'The combined test SMS is too long. Shorten the details or message to fit 612 characters.' });
+                    return;
+                }
                 const sent = await sendSms({
                     to: getBusinessSmsNumber(),
-                    message: buildBookingRequestSmsText({
-                        reference: 'TEST',
-                        booking: {
-                            bookingType: 'single',
-                            bookingDate: '2026-12-01',
-                            bookingTime: '09:00',
-                            customer: { firstName: 'Test', surname: 'Customer', mobile: '0821234567', address: '1 Nelson Mandela Square, Sandton, Johannesburg' },
-                        },
-                    }).replace('NEW booking request awaiting approval', 'TEST booking request (sample only)'),
+                    message: testMessage,
                     campaign: 'Test',
                 });
-                res.status(200).json({ sent: Boolean(sent?.sent), to: getBusinessSmsNumber() });
+                if (!sent?.sent) {
+                    res.status(502).json({ message: 'SMS could not be sent. Check the SMS configuration and business number.' });
+                    return;
+                }
+                res.status(200).json({ sent: true, to: getBusinessSmsNumber() });
                 return;
             }
             if (req.body?.action !== 'email-passphrase') {

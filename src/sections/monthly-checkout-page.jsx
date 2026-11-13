@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ArrowLeft,
     ArrowRight,
@@ -11,25 +11,23 @@ import {
     PackageCheck,
     ShieldCheck,
 } from 'lucide-react';
-import { getDistanceFromServiceCenter, SERVICE_AREA_NAME } from '../utils/service-area';
+import AddressPicker from '../components/address-picker';
 import { trackSubmittedRequest } from '../utils/booking-request-tracker';
 import { loadReturningCustomer, saveReturningCustomer } from '../utils/returning-customer';
 import { MIN_LEAD_TIME_MS, slotDateTime as getSlotDateTime } from '../utils/booking-time';
+import { getBookingTimesForDate, isBookableBookingDate, isBookableBookingTime, WEEKDAY_BOOKING_TIMES } from '../../shared/booking-schedule.js';
 
-const ServiceAreaPicker = lazy(() => import('../components/service-area-picker'));
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const BOOKING_REQUEST_ENDPOINT = `${API_BASE_URL}/api/bookings/request`;
 const AVAILABILITY_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const MONTHLY_VALIDATION_ENDPOINT = `${API_BASE_URL}/api/monthly/validate`;
-const SERVICE_RADIUS_KM = Number(import.meta.env.VITE_SERVICE_RADIUS_KM || 7);
 const MONTHLY_SELECTION_KEY = 'a10tion-monthly-checkout-selection';
 const WASH_PRICES = {
     'Sedan / Hatchback': 25000,
     'SUV / Bakkie': 35000,
     'Minibus / Van': 45000,
 };
-const BOOKING_SLOTS = ['08:00', '10:30', '13:00', '15:30', '18:00'];
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const CUSTOMER_TYPES = {
     private: 'Private Client',
     business: 'Business / Fleet / Family',
@@ -87,12 +85,16 @@ function clearMonthlyRoute(goToBooking = false) {
 
 function makeCalendarDays(month) {
     const first = new Date(month.getFullYear(), month.getMonth(), 1);
+    while (first.getDay() === 0) first.setDate(first.getDate() + 1);
     const offset = (first.getDay() + 6) % 7;
     const count = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-    return [
+    const days = [
         ...Array(offset).fill(null),
-        ...Array.from({ length: count }, (_, index) => new Date(month.getFullYear(), month.getMonth(), index + 1)),
+        ...Array.from({ length: count }, (_, index) => new Date(month.getFullYear(), month.getMonth(), index + 1))
+            .filter((date) => date.getDay() !== 0),
     ];
+    while (days.length % 6 !== 0) days.push(null);
+    return days;
 }
 
 export default function MonthlyCheckoutPage() {
@@ -126,7 +128,6 @@ export default function MonthlyCheckoutPage() {
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
-    const [serviceAreaStatus, setServiceAreaStatus] = useState(null);
     const [confirmation, setConfirmation] = useState(null);
 
     const allowance = selection?.customerType === 'business' ? 1 : selection?.packageTier === 'premium' ? 4 : 2;
@@ -140,8 +141,7 @@ export default function MonthlyCheckoutPage() {
     const previousMonthDisabled = month <= firstOfCurrentMonth;
     const nextMonthDisabled = month >= firstOfNextMonth;
     const selectedDateKey = selectedDate ? dateKey(selectedDate) : '';
-    const distanceKm = getDistanceFromServiceCenter(serviceLocation);
-    const serviceAreaAllowed = distanceKm !== null && distanceKm <= SERVICE_RADIUS_KM;
+    const bookingSlots = selectedDate ? getBookingTimesForDate(selectedDate) : WEEKDAY_BOOKING_TIMES;
 
     useEffect(() => {
         const timer = window.setInterval(() => setNow(new Date()), 30_000);
@@ -238,9 +238,8 @@ export default function MonthlyCheckoutPage() {
     useEffect(() => {
         if (!selectedDate || !selectedTime) return;
         const isPast = selectedDate < today;
-        const isWeekend = selectedDate.getDay() === 0 || selectedDate.getDay() === 6;
         const slotDateTime = getSlotDateTime(selectedDateKey, selectedTime);
-        if (isPast || isWeekend || (bookedSlots[selectedDateKey] || []).includes(selectedTime)
+        if (isPast || !isBookableBookingTime(selectedDateKey, selectedTime) || (bookedSlots[selectedDateKey] || []).includes(selectedTime)
             || slotDateTime.getTime() - now.getTime() < MIN_LEAD_TIME_MS) {
             setSelectedTime('');
         }
@@ -256,16 +255,6 @@ export default function MonthlyCheckoutPage() {
         setCustomer((current) => ({ ...current, address }));
         if (!preserveServiceLocation) {
             setServiceLocation(null);
-            setServiceAreaStatus(null);
-        }
-    };
-
-    const updateLocation = (location) => {
-        setServiceLocation(location);
-        const distance = getDistanceFromServiceCenter(location);
-        setServiceAreaStatus(distance);
-        if (distance !== null && distance > SERVICE_RADIUS_KM) {
-            setCustomer((current) => ({ ...current, address: '' }));
         }
     };
 
@@ -289,8 +278,8 @@ export default function MonthlyCheckoutPage() {
             setError('Enter a valid-looking vehicle registration number.');
             return;
         }
-        if (!serviceAreaAllowed || !customer.address.trim()) {
-            setError('Pin your service location on the map and enter an in-area address.');
+        if (!customer.address.trim()) {
+            setError('Please enter your service address.');
             return;
         }
         if (!termsAccepted) {
@@ -318,7 +307,6 @@ export default function MonthlyCheckoutPage() {
                 travelBufferMinutes: 60,
                 serviceLocation,
                 promoCode: promoCode.trim().toUpperCase(),
-                serviceAreaAccepted: true,
                 termsAccepted: true,
                 requestedPaymentMethod: 'monthly',
                 contractAccepted: false,
@@ -430,19 +418,19 @@ export default function MonthlyCheckoutPage() {
                                     <h3 className='text-sm font-bold text-[#1e3128]'>{formatMonth(month)}</h3>
                                     <button type='button' aria-label='Next month' disabled={nextMonthDisabled} onClick={() => { setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1)); setSelectedDate(null); setSelectedTime(''); }} className='grid size-8 place-items-center rounded-lg border border-[#dce6de] disabled:opacity-35'><ChevronRight className='size-4' /></button>
                                 </div>
-                                <div className='mt-2 grid grid-cols-7 gap-0.5 text-center'>
+                                <div className='mt-2 grid grid-cols-6 gap-0.5 text-center'>
                                     {WEEKDAYS.map((day) => <span key={day} className='py-1 text-[9px] font-bold text-[#68776e]'>{day}</span>)}
                                     {days.map((date, index) => {
                                         if (!date) return <span key={`empty-${index}`} />;
                                         const key = dateKey(date);
-                                        const disabled = date < today || date.getDay() === 0 || date.getDay() === 6;
+                                        const disabled = date < today || !isBookableBookingDate(date);
                                         const active = selectedDateKey === key;
                                         return <button key={key} type='button' disabled={disabled} onClick={() => { setSelectedDate(date); setSelectedTime(''); }} className={`h-8 rounded-md text-xs font-semibold transition ${active ? 'bg-[#1e4931] text-white' : disabled ? 'cursor-not-allowed text-[#b3bbb5]' : 'text-[#35483b] hover:bg-[#edf4ee]'}`}>{date.getDate()}</button>;
                                     })}
                                 </div>
-                                <p className='mt-2 text-[10px] text-[#68776e]' role='status'>{availabilityError || 'Weekday appointments require at least 1 hour notice.'}</p>
+                                <p className='mt-2 text-[10px] text-[#68776e]' role='status'>{availabilityError || 'Appointments require at least 1 hour notice.'}</p>
                                 <div className='mx-auto mt-3 grid max-w-md grid-cols-3 gap-1.5 sm:grid-cols-5'>
-                                    {BOOKING_SLOTS.map((time) => {
+                                    {bookingSlots.map((time) => {
                                         const slotDateTime = selectedDate ? getSlotDateTime(selectedDateKey, time) : null;
                                         const unavailable = !selectedDate || (bookedSlots[selectedDateKey] || []).includes(time)
                                             || (slotDateTime && slotDateTime.getTime() - now.getTime() < MIN_LEAD_TIME_MS);
@@ -470,19 +458,7 @@ export default function MonthlyCheckoutPage() {
                         <section>
                             <h2 className='flex items-center gap-2 text-sm font-bold text-[#1e3128]'><MapPin className='size-4' /> Service address</h2>
                             <div className='mt-3 overflow-hidden rounded-xl border border-[#e1e9e2] p-3 sm:p-4'>
-                                <Suspense fallback={<div className='grid min-h-48 place-items-center text-xs text-[#68776e]'>Loading service-area map…</div>}>
-                                    <ServiceAreaPicker
-                                        address={customer.address}
-                                        onAddressChange={updateAddress}
-                                        location={serviceLocation}
-                                        onLocationChange={updateLocation}
-                                        radiusKm={SERVICE_RADIUS_KM}
-                                        addressInvalid={serviceAreaStatus !== null && !serviceAreaAllowed}
-                                    />
-                                </Suspense>
-                                <p className={`mt-2 rounded-lg px-3 py-2 text-xs ${distanceKm === null ? 'bg-[#f0f2ef] text-[#52635a]' : serviceAreaAllowed ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`} role={distanceKm !== null && !serviceAreaAllowed ? 'alert' : 'status'}>
-                                    {distanceKm === null ? 'Select your exact location on the map to check service coverage.' : serviceAreaAllowed ? `In service area · ${distanceKm.toFixed(1)} km from ${SERVICE_AREA_NAME}.` : `Outside service coverage · ${distanceKm.toFixed(1)} km away. Please contact us.`}
-                                </p>
+                                <AddressPicker address={customer.address} onAddressChange={updateAddress} onLocationChange={setServiceLocation} />
                             </div>
                         </section>
 

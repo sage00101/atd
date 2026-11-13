@@ -5,7 +5,7 @@ import '../api/_lib/load-env.js';
 import { hasMinimumBookingNotice } from '../api/_lib/booking-time.js';
 import { applyCors } from '../api/_lib/cors.js';
 import { sendReceiptEmail } from '../api/_lib/email.js';
-import { getServiceAreaError } from '../api/_lib/service-area.js';
+import { getServiceAddressError } from '../api/_lib/service-address.js';
 import {
     beginBookingContinuation,
     completeBookingContinuation,
@@ -131,7 +131,6 @@ export default async function handler(req, res) {
         };
 
         const {
-            serviceLocation,
             purchaseType,
             packageId,
             packageName,
@@ -142,7 +141,6 @@ export default async function handler(req, res) {
             bookingTime,
             promoCode,
             customer,
-            serviceAreaAccepted,
             termsAccepted,
             contractAccepted,
             bookingType,
@@ -151,13 +149,13 @@ export default async function handler(req, res) {
         } = booking;
         const isMonthlyWashBooking = bookingType === 'monthly-entitlement';
 
-        if (!serviceAreaAccepted || !termsAccepted) {
+        if (!termsAccepted) {
             res.status(400).json({ message: 'Required confirmations missing.' });
             return;
         }
-        const serviceAreaError = getServiceAreaError(serviceLocation, customer?.address);
-        if (serviceAreaError) {
-            res.status(400).json({ message: serviceAreaError });
+        const serviceAddressError = getServiceAddressError(customer?.address);
+        if (serviceAddressError) {
+            res.status(400).json({ message: serviceAddressError });
             return;
         }
         if (!bookingDate || !bookingTime) {

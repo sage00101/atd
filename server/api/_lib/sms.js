@@ -51,13 +51,17 @@ export async function sendSms({ to, message, campaign = 'A10tion', dataField = '
         }),
     });
 
-    const text = await response.text().catch(() => '');
+    const text = await response.text();
     let result = {};
     try { result = text ? JSON.parse(text) : {}; } catch { result = { raw: text }; }
+    if (!result || typeof result !== 'object') result = {};
     if (!response.ok || result.error) {
         throw new Error(`SMSMessenger send failed (${response.status}): ${result.error || text || 'no response body'}`);
     }
-    return { sent: true, messageId: result.messageId || '' };
+    if (!result.messageId) {
+        throw new Error('SMSMessenger did not confirm acceptance. Check the provider before retrying.');
+    }
+    return { sent: true, messageId: result.messageId };
 }
 
 export function buildMapsLink(address) {
@@ -69,18 +73,37 @@ export function buildAddressSmsLines(address) {
     return clean ? [`Address: ${clean}`, `Map: ${buildMapsLink(clean)}`] : [];
 }
 
+function normaliseGsmField(value) {
+    return String(value || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Za-z0-9 @._,+()'/:;-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+export function buildBusinessBookingSmsText({ name, email, address, packageName }) {
+    const safeName = normaliseGsmField(name) || 'Customer';
+    const safeEmail = normaliseGsmField(email) || 'Not provided';
+    const safeAddress = normaliseGsmField(address) || 'Not provided';
+    const safePackage = normaliseGsmField(packageName) || 'Wash package';
+    const prefix = `A10tion; N:${safeName}; E:${safeEmail}; A:`;
+    const suffix = `; P:${safePackage}`;
+    const addressLimit = Math.max(0, 160 - prefix.length - suffix.length);
+    const clippedAddress = safeAddress.slice(0, addressLimit).trimEnd();
+    return `${prefix}${clippedAddress}${suffix}`.slice(0, 160);
+}
+
 export function buildBookingRequestSmsText(request) {
     const booking = request.booking || {};
     const customer = booking.customer || {};
     const name = `${customer.firstName || ''} ${customer.surname || ''}`.trim() || 'Customer';
-    const kind = booking.bookingType === 'monthly-entitlement' ? 'Monthly' : 'Single wash';
-    return [
-        'A10tion: NEW booking request awaiting approval',
-        `${kind} · ${name}`,
-        `Date: ${`${booking.bookingDate || ''} ${booking.bookingTime || ''}`.trim() || '—'}`,
-        `Contact: ${customer.mobile || customer.email || '—'}`,
-        ...buildAddressSmsLines(customer.address),
-    ].join('\n');
+    return buildBusinessBookingSmsText({
+        name,
+        email: customer.email,
+        address: customer.address,
+        packageName: booking.packageName || booking.packageId,
+    });
 }
 
 export function buildCustomerBookingRequestSmsText(request, statusUrl = '') {

@@ -4,7 +4,7 @@ import { buildSupportEmailHtml } from './support-email-template.js';
 import { buildMonthlyCodeEmailHtml } from './monthly-code-email-template.js';
 import { buildPassphraseEmailHtml } from './passphrase-email-template.js';
 import { buildDistributionReportHtml } from './distribution-report-template.js';
-import { buildCustomerBookingConfirmationSmsText, buildMapsLink, getBusinessSmsNumber, sendSms } from './sms.js';
+import { buildBusinessBookingSmsText, buildCustomerBookingConfirmationSmsText, getBusinessSmsNumber, sendSms } from './sms.js';
 import {
     buildBookingApprovedEmail,
     buildBookingCancelledEmail,
@@ -17,19 +17,14 @@ const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const BOOKINGS_EMAIL = process.env.BUSINESS_EMAIL || 'bookings@a10tion.co.za';
 const SUPPORT_EMAIL = 'support@a10tion.co.za';
 async function sendBusinessBookingSms(receipt) {
-    const body = [
-        `A10tion booking: ${receipt.customerName || 'Customer'} ${receipt.packageName || 'wash'} booked.`,
-        `Ref: ${receipt.reference}`,
-        `Date: ${receipt.bookingDate} ${receipt.bookingTime}`,
-        `Vehicle: ${receipt.registration || '—'}`,
-        `Address: ${receipt.address || '—'}`,
-        ...(receipt.address ? [`Map: ${buildMapsLink(receipt.address)}`] : []),
-        `Amount: ${receipt.amountZar || '—'}`,
-        `Contact: ${receipt.customerMobile || receipt.customerEmail || '—'}`,
-    ].join(' | ');
     return sendSms({
         to: getBusinessSmsNumber(),
-        message: body,
+        message: buildBusinessBookingSmsText({
+            name: receipt.customerName,
+            email: receipt.customerEmail,
+            address: receipt.address,
+            packageName: receipt.packageName,
+        }),
         campaign: 'Confirmed bookings',
         dataField: receipt.reference,
     });

@@ -13,7 +13,7 @@ npm run dev
 Booking lifecycle regression tests use Node's experimental module mocking:
 
 ```bash
-node --experimental-test-module-mocks --test server/test/booking-lifecycle.test.js
+node --experimental-test-module-mocks --test server/test/booking-lifecycle.test.js server/test/service-address-continuation.test.js
 ```
 
 ## Monthly client management email
@@ -41,6 +41,11 @@ checkout releases its pending slot and updates the request in the Business Manag
 Failed-payment webhooks also release pending slots. If a customer abandons checkout
 without returning or a payment event, the hold expires automatically. Appointments
 require at least one hour's notice in South African time.
+
+Both checkout forms accept a manually entered service address without a map or
+distance restriction. Optional address suggestions use the free public Photon
+service and send the typed search to it; availability and coverage are not
+guaranteed, and manual entry remains available if lookup fails.
 
 Single-wash promo codes are reserved when checkout starts and redeemed only
 after Yoco confirms payment. The Business Manager continues to manage promo
@@ -75,6 +80,11 @@ Hobby plan's 12-function deployment limit. Keep the Vercel project root
 directory set to `server` so `server/vercel.json` rewrites are applied. Continue
 using the configured `SITE_URL`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`,
 `YOCO_SECRET_KEY`, `YOCO_WEBHOOK_SECRET`, and Upstash Redis credentials.
+
+For SMS alerts, configure `SMSMESSENGER_EMAIL`, `SMSMESSENGER_API_KEY`, and
+`BUSINESS_SMS` in the backend's Vercel environment and redeploy after changes.
+In Business Manager, open **Promo codes** and use **Send test SMS** with the
+requested details. The result confirms provider acceptance, not delivery to the phone.
 
 ## Vacancy applications with Formspree
 

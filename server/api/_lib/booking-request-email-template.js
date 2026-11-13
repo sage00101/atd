@@ -76,7 +76,7 @@ function bookingEntries(request) {
         ['Promo code', booking.bookingType === 'monthly-entitlement' ? '' : booking.promoCode],
         ['Payment method requested', booking.requestedPaymentMethod],
         ['Contract accepted', booking.contractAccepted ? 'Yes' : 'No'],
-        ['Service area accepted', booking.serviceAreaAccepted ? 'Yes' : 'No'],
+        ['Service area accepted', booking.serviceAreaAccepted == null ? '' : booking.serviceAreaAccepted ? 'Yes' : 'No'],
         ['Booking terms accepted', booking.termsAccepted ? 'Yes' : 'No'],
     ];
     const excluded = new Set([
