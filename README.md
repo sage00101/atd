@@ -85,6 +85,10 @@ For SMS alerts, configure `SMSMESSENGER_EMAIL`, `SMSMESSENGER_API_KEY`, and
 `BUSINESS_SMS` in the backend's Vercel environment and redeploy after changes.
 In Business Manager, open **Promo codes** and use **Send test SMS** with the
 requested details. The result confirms provider acceptance, not delivery to the phone.
+When a booking request is accepted, approval SMS messages go to the customer
+and business numbers. They describe the requested wash and remind the customer
+to complete the booking using the email link. The manager reports any notification
+failure; provider acceptance does not guarantee delivery.
 
 ## Vacancy applications with Formspree
 

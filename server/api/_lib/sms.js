@@ -119,6 +119,72 @@ export function buildCustomerBookingRequestSmsText(request, statusUrl = '') {
     ].filter(Boolean).join('\n');
 }
 
+function bookingApprovalDetails(request) {
+    const booking = request.booking || {};
+    const customer = booking.customer || {};
+    const details = {
+        firstName: String(customer.firstName || '').trim(),
+        surname: String(customer.surname || '').trim(),
+        mobile: String(customer.mobile || '').trim(),
+        date: String(booking.bookingDate || '').trim(),
+        time: String(booking.bookingTime || '').trim(),
+        wash: String(booking.packageName || booking.packageId || '').trim(),
+        address: String(customer.address || '').trim(),
+    };
+    if (Object.values(details).some((value) => !value)) {
+        throw new Error('Booking details required for the approval SMS are missing.');
+    }
+    return details;
+}
+
+export function buildCustomerBookingApprovalSmsText(request) {
+    const details = bookingApprovalDetails(request);
+    return [
+        `A10tion To Detail: Hi ${details.firstName}, your booking request has been approved.`,
+        `Date: ${details.date}`,
+        `Time: ${details.time}`,
+        `Wash: ${details.wash}`,
+        `Address: ${details.address}`,
+        'Please complete your booking using the link in your email.',
+    ].join('\n');
+}
+
+export function buildBusinessBookingApprovalSmsText(request) {
+    const details = bookingApprovalDetails(request);
+    return [
+        'A10tion To Detail: Booking request approved.',
+        `Customer: ${details.firstName} ${details.surname}`,
+        `Phone: ${details.mobile}`,
+        `Date: ${details.date}`,
+        `Time: ${details.time}`,
+        `Wash: ${details.wash}`,
+        `Address: ${details.address}`,
+    ].join('\n');
+}
+
+function sendBookingApprovalSms(to, message, reference) {
+    if (message.length > 612) {
+        throw new Error('Booking approval SMS exceeds the 612-character limit.');
+    }
+    return sendSms({ to, message, campaign: 'Booking approvals', dataField: reference });
+}
+
+export function sendCustomerBookingApprovalSms(request) {
+    return sendBookingApprovalSms(
+        request.booking?.customer?.mobile,
+        buildCustomerBookingApprovalSmsText(request),
+        request.reference,
+    );
+}
+
+export function sendBusinessBookingApprovalSms(request) {
+    return sendBookingApprovalSms(
+        getBusinessSmsNumber(),
+        buildBusinessBookingApprovalSmsText(request),
+        request.reference,
+    );
+}
+
 export function buildCustomerBookingConfirmationSmsText(receipt) {
     return [
         `A10tion: Your booking is confirmed, ${String(receipt.customerName || 'thank you').trim()}.`,

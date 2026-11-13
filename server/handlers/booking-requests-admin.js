@@ -13,6 +13,7 @@ import {
     sendBookingRequestApprovedEmail,
     sendBookingRequestDeclinedEmail,
 } from '../api/_lib/email.js';
+import { sendBusinessBookingApprovalSms, sendCustomerBookingApprovalSms } from '../api/_lib/sms.js';
 
 function safeEqual(left, right) {
     const leftDigest = crypto.createHash('sha256').update(String(left)).digest();
@@ -31,6 +32,17 @@ function getContinuationUrl(token) {
     url.searchParams.set('booking-continuation', token);
     url.hash = '';
     return url.toString();
+}
+
+async function sendApprovalSms(send, request, recipient) {
+    try {
+        const result = await send(request);
+        if (result?.sent) return { sent: true };
+        return { sent: false, problem: 'SMS is not configured or the recipient number is missing.' };
+    } catch (error) {
+        console.error(`[${recipient} approval sms failed]`, request.reference, error);
+        return { sent: false, problem: error instanceof Error ? error.message : 'SMS could not be confirmed.' };
+    }
 }
 
 export default async function handler(req, res) {
@@ -57,17 +69,20 @@ export default async function handler(req, res) {
         const adminName = String(req.body?.adminName || '').trim();
         if (action === 'accept') {
             const { request, continuationToken } = await acceptBookingRequest(id, adminName);
-            const email = await sendBookingRequestApprovedEmail(
-                request,
-                getContinuationUrl(continuationToken),
-            ).catch((error) => {
-                console.error('[approval email failed]', error);
-                return { skipped: true, failed: true, reason: error instanceof Error ? error.message : String(error) };
-            });
+            const [email, customerSms, businessSms] = await Promise.all([
+                sendBookingRequestApprovedEmail(request, getContinuationUrl(continuationToken)).catch((error) => {
+                    console.error('[approval email failed]', error);
+                    return { skipped: true, failed: true, reason: error instanceof Error ? error.message : String(error) };
+                }),
+                sendApprovalSms(sendCustomerBookingApprovalSms, request, 'customer'),
+                sendApprovalSms(sendBusinessBookingApprovalSms, request, 'business'),
+            ]);
             res.status(200).json({
                 request: getPublicBookingRequest(request),
                 emailSent: !email?.skipped,
                 emailProblem: email?.failed ? email.reason : (email?.skipped ? 'Email is not configured on the server (RESEND_API_KEY / RESEND_FROM_EMAIL missing).' : ''),
+                customerSms,
+                businessSms,
             });
             return;
         }

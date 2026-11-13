@@ -952,10 +952,16 @@ async function processBookingRequest(action,id,reason=''){
   try{
     const result=await bookingRequestsApi({action,id,reason,adminName:bookingRequestAdminName()});
     await loadBookingRequests();
-    if(!result.emailSent){
-      setStatus('Request updated, but the customer email was NOT sent: '+(result.emailProblem||'delivery was not confirmed')+' Use the resend option once this is fixed.','error');
+    const problems=[];
+    if(!result.emailSent)problems.push('Customer email: '+(result.emailProblem||'delivery was not confirmed')+'. Use the email resend option once fixed.');
+    if(action==='accept'){
+      if(!result.customerSms?.sent)problems.push('Customer SMS: '+(result.customerSms?.problem||'provider acceptance was not confirmed')+'.');
+      if(!result.businessSms?.sent)problems.push('Business SMS: '+(result.businessSms?.problem||'provider acceptance was not confirmed')+'.');
+    }
+    if(problems.length){
+      setStatus('Request updated, but notifications need attention. '+problems.join(' ')+' Check the provider before retrying an unconfirmed SMS.','error');
     }else{
-      setStatus(action==='accept'?'Booking approved and approval email sent.':action==='decline'?'Booking declined and customer email sent.':'Customer email sent.','ok');
+      setStatus(action==='accept'?'Booking approved; the email was sent and both approval SMS messages were accepted by the provider.':action==='decline'?'Booking declined and customer email sent.':'Customer email sent.','ok');
     }
   }catch(error){
     await loadBookingRequests();
