@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { redis } from './redis.js';
 import { looksLikeEmail, normaliseEmail, normaliseReg } from './store.js';
 import { sendMonthlyAccessCodeEmail, sendMonthlyDistributionReport } from './email.js';
+import { getMonthlyContractMonths } from '../../../shared/monthly-contract.js';
 
 const ENTITLEMENT_INDEX_KEY = 'promo:monthly:entitlements';
 const MONTHLY_RESERVATION_TTL_SECONDS = 60 * 60 * 24 * 3;
@@ -65,6 +66,22 @@ redis.call('SADD', KEYS[2], ARGV[2])
 redis.call('SET', KEYS[3], ARGV[2])
 redis.call('SET', KEYS[4], ARGV[2])
 redis.call('SET', KEYS[5], ARGV[2])
+redis.call('SADD', KEYS[8], ARGV[4])
+redis.call('EXPIRE', KEYS[8], ARGV[6])
+redis.call('LPUSH', KEYS[9], ARGV[5])
+redis.call('EXPIRE', KEYS[9], ARGV[6])
+local bookingRaw = redis.call('GET', KEYS[10])
+if bookingRaw then
+  local booking = cjson.decode(bookingRaw)
+  local entitlement = cjson.decode(ARGV[1])
+  local washHistory = cjson.decode(ARGV[5])
+  booking.monthlyEntitlementId = entitlement.id
+  booking.monthlyUsagePeriod = washHistory.period
+  booking.monthlyClientType = entitlement.clientType
+  booking.monthlyPackageTier = entitlement.packageTier
+  booking.monthlyAllowance = entitlement.monthlyAllowance
+  redis.call('SET', KEYS[10], cjson.encode(booking), 'EX', ARGV[6])
+end
 return {'OK'}
 `;
 
@@ -146,17 +163,39 @@ if existingPurchase == entitlement.id then return {'DUPLICATE'} end
 if existingPurchase and existingPurchase ~= 'pending:' .. ARGV[7] then return {'PURCHASE_EXISTS'} end
 local pendingRaw = redis.call('GET', KEYS[3])
 if existingPurchase and not pendingRaw then return {'PURCHASE_NOT_FOUND'} end
+local pending
 if pendingRaw then
-  local pending = cjson.decode(pendingRaw)
+  pending = cjson.decode(pendingRaw)
   if pending.reference ~= ARGV[7] or pending.email ~= entitlement.email then return {'PURCHASE_MISMATCH'} end
   if pending.clientType ~= entitlement.clientType or pending.packageTier ~= entitlement.packageTier then return {'PACKAGE_MISMATCH'} end
 end
 local allowance = tonumber(entitlement.monthlyAllowance)
 if not allowance or allowance < 1 then return {'INVALID_ALLOWANCE'} end
-entitlement.creditsAvailable = tonumber(entitlement.creditsAvailable or 0) + allowance
-entitlement.creditsGrantedTotal = tonumber(entitlement.creditsGrantedTotal or allowance) + allowance
+local creditsAdded = tonumber(ARGV[13])
+if not creditsAdded or creditsAdded < 0 then return {'INVALID_CREDITS'} end
+entitlement.creditsAvailable = tonumber(entitlement.creditsAvailable or 0) + creditsAdded
+entitlement.creditsGrantedTotal = tonumber(entitlement.creditsGrantedTotal or allowance) + creditsAdded
 entitlement.creditsUsedTotal = tonumber(entitlement.creditsUsedTotal or 0)
 entitlement.creditsReserved = tonumber(entitlement.creditsReserved or 0)
+if ARGV[14] == '1' then
+  entitlement.creditsUsedTotal = entitlement.creditsUsedTotal + 1
+  redis.call('SADD', KEYS[6], ARGV[7])
+  redis.call('LPUSH', KEYS[7], ARGV[15])
+  redis.call('EXPIRE', KEYS[6], ARGV[16])
+  redis.call('EXPIRE', KEYS[7], ARGV[16])
+  local bookingRaw = redis.call('GET', KEYS[8])
+  if bookingRaw then
+    local booking = cjson.decode(bookingRaw)
+    local washHistory = cjson.decode(ARGV[15])
+    booking.monthlyEntitlementId = entitlement.id
+    booking.monthlyUsagePeriod = washHistory.period
+    booking.monthlyClientType = entitlement.clientType
+    booking.monthlyPackageTier = entitlement.packageTier
+    booking.monthlyAllowance = entitlement.monthlyAllowance
+    redis.call('SET', KEYS[8], cjson.encode(booking), 'EX', ARGV[16])
+  end
+end
+entitlement.contractOption = ARGV[17]
 entitlement.billingAnchor = ARGV[8]
 entitlement.billingCyclesPaid = tonumber(ARGV[9])
 entitlement.validUntil = ARGV[10]
@@ -203,6 +242,35 @@ entitlement.updatedAt = ARGV[2]
 local encoded = cjson.encode(entitlement)
 redis.call('SET', KEYS[1], encoded)
 return {'OK', encoded}
+`;
+
+const CHANGE_MONTHLY_PACKAGE_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return {'NOT_FOUND'} end
+if redis.call('EXISTS', KEYS[2]) == 1 then return {'DUPLICATE'} end
+local existing = cjson.decode(raw)
+if existing.updatedAt ~= ARGV[1] then return {'STALE'} end
+if existing.archived then return {'ARCHIVED'} end
+if not existing.active then return {'INACTIVE'} end
+if tonumber(existing.creditsAvailable or 0) > 0 or tonumber(existing.creditsReserved or 0) > 0 then
+  return {'CREDITS_REMAIN'}
+end
+local nextRecord = cjson.decode(ARGV[2])
+nextRecord.updatedAt = ARGV[6]
+nextRecord.creditsAvailable = tonumber(ARGV[4])
+nextRecord.creditsReserved = 0
+nextRecord.creditsGrantedTotal = tonumber(existing.creditsGrantedTotal or existing.monthlyAllowance or 0) + tonumber(ARGV[4])
+nextRecord.creditsUsedTotal = tonumber(existing.creditsUsedTotal or 0)
+nextRecord.paymentHistory = existing.paymentHistory or {}
+table.insert(nextRecord.paymentHistory, 1, cjson.decode(ARGV[3]))
+nextRecord.auditHistory = existing.auditHistory or {}
+table.insert(nextRecord.auditHistory, 1, cjson.decode(ARGV[5]))
+while #nextRecord.auditHistory > 50 do table.remove(nextRecord.auditHistory) end
+nextRecord.codeHistory = existing.codeHistory or {}
+nextRecord.emailHistory = existing.emailHistory or {}
+redis.call('SET', KEYS[1], cjson.encode(nextRecord))
+redis.call('SET', KEYS[2], existing.id)
+return {'OK', cjson.encode(nextRecord)}
 `;
 
 const CLEAN_EXPIRED_RESERVATIONS_SCRIPT = `
@@ -304,7 +372,6 @@ if entitlement.email ~= ARGV[2] then return {'EMAIL_MISMATCH'} end
 if ARGV[10] ~= '' and entitlement.clientType ~= ARGV[10] then return {'CLIENT_TYPE_MISMATCH'} end
 if ARGV[11] ~= '' and entitlement.packageTier ~= ARGV[11] then return {'PACKAGE_MISMATCH'} end
 if entitlement.validFrom and entitlement.validFrom ~= cjson.null and ARGV[3] < entitlement.validFrom then return {'NOT_YET_VALID'} end
-if entitlement.validUntil and entitlement.validUntil ~= cjson.null and ARGV[3] > entitlement.validUntil then return {'EXPIRED'} end
 local allowance = tonumber(entitlement.monthlyAllowance)
 if not allowance or allowance < 1 then return {'INVALID_ALLOWANCE'} end
 if redis.call('SISMEMBER', KEYS[2], ARGV[4]) == 1 then return {'ALREADY_USED'} end
@@ -397,7 +464,6 @@ if entitlement.packageTier ~= reservation.packageTier then return 'PACKAGE_MISMA
 if entitlement.archived then return 'ARCHIVED' end
 if not entitlement.active then return 'INACTIVE' end
 if entitlement.validFrom and entitlement.validFrom ~= cjson.null and reservation.bookingDate < entitlement.validFrom then return 'NOT_YET_VALID' end
-if entitlement.validUntil and entitlement.validUntil ~= cjson.null and reservation.bookingDate > entitlement.validUntil then return 'EXPIRED' end
 local allowance = tonumber(entitlement.monthlyAllowance)
 if not allowance or allowance < 1 then return 'INVALID_ALLOWANCE' end
 local usedBefore = redis.call('SCARD', KEYS[2])
@@ -496,23 +562,13 @@ function addMonthsClamped(date, amount) {
     return `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
 }
 
-function getBillingPeriod(bookingDate, billingAnchor) {
+function getBillingPeriod(bookingDate) {
     if (!isValidDate(bookingDate)) throw new Error('Choose a valid booking date.');
-    const anchor = isValidDate(billingAnchor) ? billingAnchor : bookingDate;
-    if (bookingDate < anchor) {
-        return { start: anchor, end: addDays(addMonthsClamped(anchor, 1), -1) };
-    }
-    const [anchorYear, anchorMonth] = anchor.split('-').map(Number);
-    const [bookingYear, bookingMonth] = bookingDate.split('-').map(Number);
-    let monthOffset = (bookingYear - anchorYear) * 12 + bookingMonth - anchorMonth;
-    let start = addMonthsClamped(anchor, monthOffset);
-    if (start > bookingDate) {
-        monthOffset -= 1;
-        start = addMonthsClamped(anchor, monthOffset);
-    }
+    const [year, month] = bookingDate.split('-');
+    const start = `${year}-${month}-01`;
     return {
         start,
-        end: addDays(addMonthsClamped(anchor, monthOffset + 1), -1),
+        end: addDays(addMonthsClamped(start, 1), -1),
     };
 }
 
@@ -579,6 +635,8 @@ function validateEntitlementInput(input) {
     const clientType = String(input?.clientType || '');
     const packageTier = String(input?.packageTier || '');
     const vehicleType = String(input?.vehicleType || '').trim();
+    const packageId = `${clientType}-${packageTier}`;
+    const contractOption = String(input?.contractOption || '1-months');
     const validFrom = String(input?.validFrom || getSouthAfricanDate());
     const validUntil = String(input?.validUntil || '');
 
@@ -605,6 +663,9 @@ function validateEntitlementInput(input) {
     if (clientType === 'business' && packageTier === 'premium') {
         throw new Error('Business / Fleet / Family accounts only have the Standard package.');
     }
+    if (!getMonthlyContractMonths(contractOption, packageId)) {
+        throw new Error('Choose a valid contract duration for this monthly package.');
+    }
     if (vehicleType && !MONTHLY_VEHICLE_TYPES.includes(vehicleType)) {
         throw new Error('Choose Sedan / Hatchback, SUV / Bakkie or Minibus / Van.');
     }
@@ -628,6 +689,7 @@ function validateEntitlementInput(input) {
         clientType,
         packageTier,
         vehicleType,
+        contractOption,
         monthlyAllowance: clientType === 'business' ? 1 : packageTier === 'premium' ? 4 : 2,
         validFrom,
         validUntil: validUntil || null,
@@ -636,42 +698,19 @@ function validateEntitlementInput(input) {
 
 export const MONTHLY_VEHICLE_TYPES = ['Sedan / Hatchback', 'SUV / Bakkie', 'Minibus / Van'];
 
-function getCalendarMonthsBetween(start, end) {
-    const months = [];
-    const [startYear, startMonth] = start.split('-').map(Number);
-    const [endYear, endMonth] = end.split('-').map(Number);
-    let year = startYear;
-    let month = startMonth;
-    while (year < endYear || (year === endYear && month <= endMonth)) {
-        months.push(`${year}-${String(month).padStart(2, '0')}`);
-        month += 1;
-        if (month > 12) {
-            month = 1;
-            year += 1;
-        }
-    }
-    return months;
-}
-
-async function migrateLegacyReservations(id, billingAnchor) {
-    const markerKey = `promo:monthly:reservation-migration:${id}`;
+async function migrateLegacyReservations(id) {
+    const markerKey = `promo:monthly:reservation-calendar-migration:${id}`;
     if (await redis.exists(markerKey)) return;
     const now = Date.now();
-    const today = getSouthAfricanDate();
-    const months = getCalendarMonthsBetween(today, addDays(today, 90));
-    const reservationIds = new Set();
-    for (const month of months) {
-        const oldIds = await redis.zrange(periodReservationsKey(id, month), 0, -1);
-        oldIds.forEach((reservationId) => reservationIds.add(String(reservationId)));
-    }
-    for (const reservationId of reservationIds) {
+    const reservationIds = await redis.zrange(allReservationsKey(id), 0, -1);
+    for (const reservationId of reservationIds.map(String)) {
         const reservation = await redis.get(reservationKey(reservationId));
         if (!reservation || !isValidDate(reservation.bookingDate)) continue;
         const createdAt = new Date(reservation.createdAt || 0).getTime();
         const expiresAt = Number(reservation.expiresAt)
             || (Number.isFinite(createdAt) ? createdAt + MONTHLY_RESERVATION_TTL_SECONDS * 1000 : now);
         if (expiresAt <= now) continue;
-        const period = getBillingPeriod(reservation.bookingDate, billingAnchor).start;
+        const period = getBillingPeriod(reservation.bookingDate).start;
         if (reservation.period) await redis.zrem(periodReservationsKey(id, reservation.period), reservationId);
         reservation.period = period;
         reservation.expiresAt = expiresAt;
@@ -685,8 +724,8 @@ async function migrateLegacyReservations(id, billingAnchor) {
 }
 
 async function migratePeriodHistory(id, period, billingAnchor = period.start) {
-    await migrateLegacyReservations(id, billingAnchor);
-    const markerKey = `promo:monthly:migration:${id}:${period.start}`;
+    await migrateLegacyReservations(id);
+    const markerKey = `promo:monthly:calendar-migration:${id}:${period.start}`;
     if (await redis.exists(markerKey)) return;
 
     const usageKey = periodUsageKey(id, period.start);
@@ -694,7 +733,10 @@ async function migratePeriodHistory(id, period, billingAnchor = period.start) {
     const usedReferences = [];
     for (const entry of history) {
         const record = typeof entry === 'string' ? JSON.parse(entry) : entry;
-        if (record?.reference && record.bookingDate >= period.start && record.bookingDate <= period.end) {
+        const bookingPeriod = record?.bookingDate && isValidDate(record.bookingDate)
+            ? getBillingPeriod(record.bookingDate)
+            : null;
+        if (record?.reference && bookingPeriod?.start === period.start) {
             usedReferences.push(record.reference);
         }
     }
@@ -757,6 +799,7 @@ export async function createMonthlyEntitlement(input) {
         creditsReserved: 0,
         creditsUsedTotal: 0,
         creditsGrantedTotal: details.monthlyAllowance,
+        contractOption: details.contractOption,
         paymentHistory: [],
         active: true,
         archived: false,
@@ -818,6 +861,9 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
     if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
         throw new Error('The paid monthly package amount is invalid.');
     }
+    const contractOption = String(booking.contractOption || '1-months');
+    const contractMonths = getMonthlyContractMonths(contractOption, packageId);
+    if (!contractMonths) throw new Error('The paid monthly package has an invalid contract duration.');
 
     const paidAt = String(booking.paidAt || new Date().toISOString());
     const paidDate = getSouthAfricanDate(new Date(paidAt));
@@ -829,10 +875,13 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
         businessName: customer.businessName || '',
         clientType,
         packageTier,
+        contractOption,
         validFrom: paidDate,
     });
     const monthlyAllowance = details.monthlyAllowance;
-    const validUntil = addDays(addMonthsClamped(paidDate, 1), -1);
+    const creditsPurchased = monthlyAllowance * contractMonths;
+    const initialWashPeriod = getBillingPeriod(booking.bookingDate || paidDate);
+    const validUntil = addDays(addMonthsClamped(paidDate, contractMonths), -1);
     const now = new Date().toISOString();
     const initialPayment = {
         type: 'initial',
@@ -844,8 +893,9 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
         packageId,
         packageName: booking.packageName || '',
         vehicleType: booking.vehicleType || '',
-        contractOption: booking.contractOption || null,
-        creditsAdded: monthlyAllowance,
+        contractOption,
+        creditsAdded: creditsPurchased,
+        initialWashCreditUsed: 1,
     };
     const pendingPurchase = {
         reference,
@@ -862,7 +912,11 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
         packageId,
         packageName: booking.packageName || '',
         vehicleType: booking.vehicleType || '',
-        contractOption: booking.contractOption || null,
+        contractOption,
+        bookingDate: booking.bookingDate || '',
+        bookingTime: booking.bookingTime || '',
+        checkoutId: String(booking.checkoutId || ''),
+        registration: normaliseReg(customer.registration),
     };
     const id = crypto.randomUUID();
     let code;
@@ -874,11 +928,11 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
             ...details,
             validUntil,
             billingAnchor: paidDate,
-            billingCyclesPaid: 1,
-            creditsAvailable: monthlyAllowance,
+            billingCyclesPaid: contractMonths,
+            creditsAvailable: Math.max(creditsPurchased - 1, 0),
             creditsReserved: 0,
-            creditsUsedTotal: 0,
-            creditsGrantedTotal: monthlyAllowance,
+            creditsUsedTotal: 1,
+            creditsGrantedTotal: creditsPurchased,
             code,
             currentCodeDigest: digest(code),
             codeDigests: [digest(code)],
@@ -891,8 +945,22 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
             packageId,
             packageName: booking.packageName || '',
             vehicleType: booking.vehicleType || '',
-            contractOption: booking.contractOption || null,
+            contractOption,
             paymentHistory: [initialPayment],
+            history: [{
+                status: 'used',
+                reference,
+                period: initialWashPeriod.start,
+                bookingDate: booking.bookingDate || paidDate,
+                bookingTime: booking.bookingTime || '',
+                customerName: details.customerName,
+                email: details.email,
+                registration: normaliseReg(customer.registration),
+                vehicleType: booking.vehicleType || '',
+                packageName: booking.packageName || '',
+                promoCode: 'Initial monthly package wash',
+                confirmedAt: paidAt,
+            }],
             codeHistory: [],
             auditHistory: [{ action: 'paid_purchase_created', reference, createdAt: now }],
         };
@@ -904,7 +972,17 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
             purchaseKey(reference),
             pendingPurchaseKey(reference),
             pendingPurchaseIndexKey,
-        ], [JSON.stringify(entitlement), id, JSON.stringify(pendingPurchase)]);
+            periodUsageKey(id, initialWashPeriod.start),
+            historyKey(id),
+            bookingKey(booking.checkoutId || reference),
+        ], [
+            JSON.stringify(entitlement),
+            id,
+            JSON.stringify(pendingPurchase),
+            reference,
+            JSON.stringify(entitlement.history[0]),
+            String(CONFIRMED_BOOKING_TTL_SECONDS),
+        ]);
 
         if (Array.isArray(result) && result[0] === 'CODE_EXISTS') continue;
         break;
@@ -912,10 +990,12 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
 
     if (!Array.isArray(result)) throw new Error('Could not provision the paid monthly entitlement.');
     if (result[0] === 'EMAIL_EXISTS') {
+        const existingEntitlement = await redis.get(entitlementKey(String(result[1] || '')));
         return {
             status: 'needs_manager',
             reference,
             existingEntitlementId: String(result[1] || ''),
+            monthlyCode: existingEntitlement?.code || '',
         };
     }
     if (result[0] === 'PURCHASE_EXISTS') {
@@ -930,10 +1010,10 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
                 entitlementId: owner,
                 idempotencyKey: `monthly-purchase-${digest(reference).slice(0, 24)}`,
             });
-            return { status: 'already_provisioned', entitlement: existingEntitlement, emailStatus: dispatch.status };
+            return { status: 'already_provisioned', entitlement: existingEntitlement, monthlyCode: existingEntitlement.code || '', emailStatus: dispatch.status };
         } catch (error) {
             console.error('[monthly purchase code email failed]', reference, error);
-            return { status: 'already_provisioned', entitlement: existingEntitlement, emailError: error.message };
+            return { status: 'already_provisioned', entitlement: existingEntitlement, monthlyCode: existingEntitlement.code || '', emailError: error.message };
         }
     }
     if (result[0] !== 'OK') throw new Error('Could not provision the paid monthly entitlement.');
@@ -944,10 +1024,10 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
             entitlementId: id,
             idempotencyKey: `monthly-purchase-${digest(reference).slice(0, 24)}`,
         });
-        return { status: 'created', entitlement, emailStatus: dispatch.status };
+        return { status: 'created', entitlement, monthlyCode: entitlement.code || '', emailStatus: dispatch.status };
     } catch (error) {
         console.error('[monthly purchase code email failed]', reference, error);
-        return { status: 'created', entitlement, emailError: error.message };
+        return { status: 'created', entitlement, monthlyCode: entitlement.code || '', emailError: error.message };
     }
 }
 
@@ -956,6 +1036,7 @@ export async function recordMonthlyEntitlementPayment({
     paymentReference,
     amountCents,
     paymentDate,
+    contractOption,
 }) {
     const id = String(entitlementId || '').trim();
     const suppliedReference = String(paymentReference || '').trim();
@@ -972,8 +1053,8 @@ export async function recordMonthlyEntitlementPayment({
     if (!entitlement) throw new Error('Monthly entitlement not found.');
     const now = new Date().toISOString();
     const today = getSouthAfricanDate();
-    const currentPeriod = getBillingPeriod(today, entitlement.billingAnchor || entitlement.validFrom);
-    await migratePeriodHistory(id, currentPeriod, entitlement.billingAnchor || entitlement.validFrom);
+    const currentPeriod = getBillingPeriod(today);
+    await migratePeriodHistory(id, currentPeriod);
     entitlement = await ensureCreditLedger(entitlement, currentPeriod);
 
     const reference = suppliedReference || `manual-${crypto.randomUUID()}`;
@@ -988,24 +1069,31 @@ export async function recordMonthlyEntitlementPayment({
         if (pending.clientType !== entitlement.clientType || pending.packageTier !== entitlement.packageTier) {
             throw new Error('Update the customer package to match this paid purchase before applying it.');
         }
+        if (pending.vehicleType && entitlement.vehicleType && pending.vehicleType !== entitlement.vehicleType) {
+            throw new Error('Update the customer vehicle category to match this paid purchase before applying it.');
+        }
     }
 
     const paidAt = pending?.paidAt || `${enteredPaymentDate}T12:00:00+02:00`;
     const effectivePaymentDate = getSouthAfricanDate(new Date(paidAt));
-    const stillCurrent = entitlement.validUntil && entitlement.validUntil >= effectivePaymentDate;
-    let billingAnchor = stillCurrent
+    const packageId = String(pending?.packageId || entitlement.packageId || `${entitlement.clientType}-${entitlement.packageTier}`);
+    const paidContractOption = String(pending?.contractOption || contractOption || entitlement.contractOption || '1-months');
+    const monthsPaid = getMonthlyContractMonths(paidContractOption, packageId);
+    if (!monthsPaid) throw new Error('Choose a valid contract duration for this monthly payment.');
+    const initialWashUsed = Boolean(pending?.bookingDate);
+    const creditsAdded = Math.max(entitlement.monthlyAllowance * monthsPaid - (initialWashUsed ? 1 : 0), 0);
+    const currentTermActive = entitlement.validUntil && entitlement.validUntil >= effectivePaymentDate;
+    let billingAnchor = currentTermActive
         ? (entitlement.billingAnchor || entitlement.validFrom)
         : effectivePaymentDate;
-    let billingCyclesPaid = stillCurrent
-        ? getBillingCycleCount(billingAnchor, entitlement.validUntil)
-        : 0;
-    if (!billingCyclesPaid) {
-        billingAnchor = stillCurrent ? addDays(entitlement.validUntil, 1) : effectivePaymentDate;
-        billingCyclesPaid = 1;
-    } else {
-        billingCyclesPaid += 1;
+    let currentCyclesPaid = currentTermActive ? getBillingCycleCount(billingAnchor, entitlement.validUntil) || 0 : 0;
+    if (currentTermActive && currentCyclesPaid === 0) {
+        billingAnchor = addDays(entitlement.validUntil, 1);
+        currentCyclesPaid = 0;
     }
+    const billingCyclesPaid = currentCyclesPaid + monthsPaid;
     const validUntil = addDays(addMonthsClamped(billingAnchor, billingCyclesPaid), -1);
+    const usagePeriod = getBillingPeriod(pending?.bookingDate || effectivePaymentDate);
     const payment = {
         type: pending ? 'renewal_purchase' : 'manual_renewal',
         paidAt,
@@ -1013,16 +1101,17 @@ export async function recordMonthlyEntitlementPayment({
         amountCents: amount,
         paymentMethod: pending?.paymentMethod || 'manual',
         reference,
-        packageId: pending?.packageId || entitlement.packageId || '',
+        packageId,
         packageName: pending?.packageName || entitlement.packageName || '',
         vehicleType: pending?.vehicleType || entitlement.vehicleType || '',
-        contractOption: pending?.contractOption || entitlement.contractOption || null,
-        creditsAdded: entitlement.monthlyAllowance,
+        contractOption: paidContractOption,
+        creditsAdded,
+        initialWashCreditUsed: initialWashUsed,
     };
     const auditEntry = {
         action: 'monthly_payment_recorded',
         reference,
-        creditsAdded: entitlement.monthlyAllowance,
+        creditsAdded,
         previousValidUntil: entitlement.validUntil || null,
         validUntil,
         performedBy: 'admin',
@@ -1038,6 +1127,9 @@ export async function recordMonthlyEntitlementPayment({
             pendingPurchaseKey(reference),
             pendingPurchaseIndexKey,
             codeKey(code),
+            periodUsageKey(id, usagePeriod.start),
+            historyKey(id),
+            bookingKey(pending?.checkoutId || reference),
         ], [
             entitlement.updatedAt,
             '',
@@ -1051,6 +1143,24 @@ export async function recordMonthlyEntitlementPayment({
             validUntil,
             JSON.stringify(codeRecord),
             now,
+            String(creditsAdded),
+            initialWashUsed ? '1' : '0',
+            JSON.stringify(initialWashUsed ? {
+                status: 'used',
+                reference,
+                period: usagePeriod.start,
+                bookingDate: pending.bookingDate,
+                bookingTime: pending.bookingTime || '',
+                customerName: pending.customerName,
+                email: pending.email,
+                registration: normaliseReg(pending.registration),
+                vehicleType: pending.vehicleType || entitlement.vehicleType || '',
+                packageName: pending.packageName || entitlement.packageName || '',
+                promoCode: 'Initial monthly package wash',
+                confirmedAt: paidAt,
+            } : {}),
+            String(CONFIRMED_BOOKING_TTL_SECONDS),
+            paidContractOption,
         ]);
         if (result?.[0] !== 'CODE_EXISTS') break;
     }
@@ -1080,6 +1190,112 @@ export async function recordMonthlyEntitlementPayment({
     }
 }
 
+export async function changeMonthlyEntitlementPackage({
+    entitlementId,
+    clientType,
+    packageTier,
+    vehicleType,
+    contractOption,
+    paymentReference,
+    amountCents,
+    paymentDate,
+}) {
+    const id = String(entitlementId || '').trim();
+    const referenceInput = String(paymentReference || '').trim();
+    const amount = Number(amountCents);
+    const paidDate = String(paymentDate || '').trim();
+    if (!id) throw new Error('Choose an existing monthly client.');
+    if (referenceInput && !/^[\w.:-]{3,120}$/.test(referenceInput)) {
+        throw new Error('Enter a valid payment reference.');
+    }
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('Enter the amount paid in cents.');
+    if (!isValidDate(paidDate)) throw new Error('Choose a valid payment date.');
+
+    let existing = await redis.get(entitlementKey(id));
+    if (!existing) throw new Error('Monthly entitlement not found.');
+    const period = getBillingPeriod(getSouthAfricanDate());
+    await migratePeriodHistory(id, period);
+    existing = await ensureCreditLedger(existing, period);
+    if (Number(existing.creditsAvailable || 0) > 0 || Number(existing.creditsReserved || 0) > 0) {
+        throw new Error('This customer still has unused or reserved credits. Use the existing package until its balance reaches zero before changing packages.');
+    }
+
+    const details = validateEntitlementInput({
+        ...existing,
+        clientType,
+        packageTier,
+        vehicleType,
+        contractOption,
+        validFrom: paidDate,
+        validUntil: '',
+        requireCustomerPhone: true,
+        email: existing.email,
+    });
+    const packageId = `${details.clientType}-${details.packageTier}`;
+    const monthsPaid = getMonthlyContractMonths(details.contractOption, packageId);
+    const creditsAdded = details.monthlyAllowance * monthsPaid;
+    const validUntil = addDays(addMonthsClamped(paidDate, monthsPaid), -1);
+    const now = new Date().toISOString();
+    const paidAt = `${paidDate}T12:00:00+02:00`;
+    const reference = referenceInput || `package-change-${crypto.randomUUID()}`;
+    const packageName = `${details.clientType === 'business' ? 'Business / Fleet / Family' : 'Private Client'} · ${details.packageTier === 'premium' ? 'Premium' : 'Standard'} Package`;
+    const payment = {
+        type: 'package_change',
+        paidAt,
+        paymentDate: paidDate,
+        amountCents: amount,
+        paymentMethod: 'manual',
+        reference,
+        packageId,
+        packageName,
+        vehicleType: details.vehicleType,
+        contractOption: details.contractOption,
+        creditsAdded,
+    };
+    const auditEntry = {
+        action: 'package_changed',
+        reference,
+        previousPackage: {
+            clientType: existing.clientType,
+            packageTier: existing.packageTier,
+            vehicleType: existing.vehicleType || '',
+        },
+        packageId,
+        packageTier: details.packageTier,
+        vehicleType: details.vehicleType,
+        creditsAdded,
+        performedBy: 'admin',
+        createdAt: paidAt,
+    };
+    const next = {
+        ...existing,
+        ...details,
+        packageId,
+        packageName,
+        billingAnchor: paidDate,
+        billingCyclesPaid: monthsPaid,
+        validUntil,
+        lastPaidAt: paidAt,
+    };
+    const result = await redis.eval(CHANGE_MONTHLY_PACKAGE_SCRIPT, [entitlementKey(id), purchaseKey(reference)], [
+        existing.updatedAt,
+        JSON.stringify(next),
+        JSON.stringify(payment),
+        String(creditsAdded),
+        JSON.stringify(auditEntry),
+        now,
+    ]);
+    if (result?.[0] === 'NOT_FOUND') throw new Error('Monthly entitlement not found.');
+    if (result?.[0] === 'STALE') throw new Error('This monthly record changed during the package update. Refresh and try again.');
+    if (result?.[0] === 'ARCHIVED' || result?.[0] === 'INACTIVE') throw new Error('Reactivate this monthly account before changing its package.');
+    if (result?.[0] === 'DUPLICATE') throw new Error('This payment reference has already been recorded.');
+    if (result?.[0] === 'CREDITS_REMAIN') {
+        throw new Error('This customer still has unused or reserved credits. Use the existing package until its balance reaches zero before changing packages.');
+    }
+    if (result?.[0] !== 'OK') throw new Error('Could not save the new monthly package.');
+    return typeof result[1] === 'string' ? JSON.parse(result[1]) : result[1];
+}
+
 export async function getPendingMonthlyPurchasesForAdmin() {
     const references = await redis.lrange(pendingPurchaseIndexKey, 0, -1);
     const purchases = await Promise.all(references.map((reference) => redis.get(pendingPurchaseKey(reference))));
@@ -1098,6 +1314,17 @@ export async function updateMonthlyEntitlement(id, input) {
         validFrom: input?.validFrom === undefined ? existing.validFrom : input.validFrom,
         validUntil: input?.validUntil === undefined ? existing.validUntil : input.validUntil,
     });
+    const packageChanged = details.clientType !== existing.clientType
+        || details.packageTier !== existing.packageTier
+        || details.vehicleType !== (existing.vehicleType || '');
+    if (packageChanged) {
+        const remaining = Number(existing.creditsAvailable ?? existing.monthlyAllowance ?? 0)
+            + Number(existing.creditsReserved || 0);
+        if (remaining > 0) {
+            throw new Error('Package change blocked: existing unused or reserved credits must be fully used first.');
+        }
+        throw new Error('Use “New Package for Existing Client” to change the package and allocate its credits.');
+    }
     if (input?.active !== undefined && typeof input.active !== 'boolean') {
         throw new Error('Entitlement active status must be true or false.');
     }
@@ -1152,10 +1379,10 @@ export async function updateMonthlyEntitlement(id, input) {
             details.validFrom !== existing.validFrom ? details.validFrom : (existing.billingAnchor || details.validFrom),
             details.validUntil,
         ) || Number(existing.billingCyclesPaid || 1),
-        creditsAvailable: Math.max(Number(existing.creditsAvailable ?? existing.monthlyAllowance) + details.monthlyAllowance - existing.monthlyAllowance, 0),
+        creditsAvailable: Number(existing.creditsAvailable ?? existing.monthlyAllowance),
         creditsReserved: Number(existing.creditsReserved || 0),
         creditsUsedTotal: Number(existing.creditsUsedTotal || 0),
-        creditsGrantedTotal: Math.max(Number(existing.creditsGrantedTotal ?? existing.monthlyAllowance) + details.monthlyAllowance - existing.monthlyAllowance, 0),
+        creditsGrantedTotal: Number(existing.creditsGrantedTotal ?? existing.monthlyAllowance),
         code: revokeCodes ? null : code,
         currentCodeDigest: revokeCodes ? null : replaceCode ? digest(code) : existing.currentCodeDigest,
         codeDigests: revokeCodes
@@ -1255,7 +1482,6 @@ export async function getMonthlyEntitlementsForAdmin() {
         let status = 'Active';
         if (record.archived) status = 'Archived';
         else if (!record.active) status = 'Deactivated';
-        else if (record.validUntil && record.validUntil < today) status = 'Expired';
         else if (record.validFrom > today) status = 'Scheduled';
         else if (Number(record.creditsAvailable) < 1) status = 'No credits';
         else if (Number(used) >= record.monthlyAllowance) status = 'Fully used';
@@ -1288,8 +1514,8 @@ function isValidPhone(value) {
 function getEntitlementStatus(record, today) {
     if (record.archived) return 'Archived';
     if (!record.active) return 'Deactivated';
-    if (record.validUntil && record.validUntil < today) return 'Expired';
     if (record.validFrom > today) return 'Scheduled';
+    if (Number(record.creditsAvailable) < 1) return 'No credits';
     return 'Active';
 }
 
@@ -1303,8 +1529,7 @@ export async function createMonthlyDistributionPreview(adminName = 'Business Man
     for (const record of considered) {
         const reason = record.archived ? 'archived'
             : !record.active ? 'inactive'
-                : record.validUntil && record.validUntil < today ? 'expired'
-                    : record.validFrom > today ? 'not yet active'
+                : record.validFrom > today ? 'not yet active'
                         : !looksLikeEmail(record.email) ? 'missing or invalid email'
                             : !isValidPhone(record.customerPhone) ? 'missing contact number'
                                 : null;
@@ -1344,7 +1569,7 @@ export async function createMonthlyDistributionPreview(adminName = 'Business Man
         distributionDate: getSouthAfricanDate(createdAt),
         adminName: String(adminName || 'Business Manager admin').trim().slice(0, 100),
         activeConsidered: considered.filter((record) => record.active && !record.archived
-            && (!record.validUntil || record.validUntil >= today) && record.validFrom <= today).length,
+            && record.validFrom <= today).length,
         recipients: clients,
         exclusions,
         results: [],
@@ -1646,11 +1871,10 @@ export async function reserveMonthlyWash({
         return { status: 'VEHICLE_MISMATCH' };
     }
 
-    const billingAnchor = entitlement.billingAnchor || entitlement.validFrom;
-    const billingPeriod = getBillingPeriod(bookingDate, billingAnchor);
-    const currentPeriod = getBillingPeriod(getSouthAfricanDate(), billingAnchor);
-    await migratePeriodHistory(entitlement.id, billingPeriod, billingAnchor);
-    await migratePeriodHistory(entitlement.id, currentPeriod, billingAnchor);
+    const billingPeriod = getBillingPeriod(bookingDate);
+    const currentPeriod = getBillingPeriod(getSouthAfricanDate());
+    await migratePeriodHistory(entitlement.id, billingPeriod);
+    await migratePeriodHistory(entitlement.id, currentPeriod);
     const currentEntitlement = await ensureCreditLedger(entitlement, currentPeriod);
     const period = billingPeriod.start;
     const expiresAt = Date.now() + MONTHLY_RESERVATION_TTL_SECONDS * 1000;
@@ -1709,7 +1933,7 @@ export function getMonthlyReservationError(status) {
         VEHICLE_MISMATCH: { statusCode: 403, message: 'The selected vehicle category does not match the vehicle this monthly package was bought for.' },
         NOT_YET_VALID: { statusCode: 403, message: 'This monthly wash package is not active for the selected booking date.' },
         EXPIRED: { statusCode: 410, message: 'This monthly wash package has expired.' },
-        LIMIT_REACHED: { statusCode: 409, message: 'The booking limit for this monthly billing period is used or reserved. Choose a date in another billing period or book at the normal price.' },
+        LIMIT_REACHED: { statusCode: 409, message: 'The booking limit for this calendar month is used or reserved. Choose a date next month or book at the normal price.' },
         CREDITS_EXHAUSTED: { statusCode: 409, message: 'There are no prepaid washes left on this monthly package. Contact the business to record a renewal payment.' },
         ALREADY_USED: { statusCode: 409, message: 'This booking has already used a monthly wash.' },
         ALREADY_RESERVED: { statusCode: 409, message: 'This booking already has a monthly wash reservation.' },
@@ -1747,11 +1971,9 @@ export async function checkMonthlyWashAvailability({
     if (expectedPackageTier && entitlement.packageTier !== expectedPackageTier) return { status: 'PACKAGE_MISMATCH' };
     if (expectedVehicleType && entitlement.vehicleType && entitlement.vehicleType !== expectedVehicleType) return { status: 'VEHICLE_MISMATCH' };
     if (entitlement.validFrom && bookingDate < entitlement.validFrom) return { status: 'NOT_YET_VALID' };
-    if (entitlement.validUntil && bookingDate > entitlement.validUntil) return { status: 'EXPIRED' };
 
-    const billingAnchor = entitlement.billingAnchor || entitlement.validFrom;
-    const period = getBillingPeriod(bookingDate, billingAnchor);
-    await migratePeriodHistory(entitlement.id, period, billingAnchor);
+    const period = getBillingPeriod(bookingDate);
+    await migratePeriodHistory(entitlement.id, period);
     entitlement = await ensureCreditLedger(entitlement, period);
     await redis.eval(CLEAN_EXPIRED_RESERVATIONS_SCRIPT, [
         entitlementKey(entitlement.id),
@@ -1888,7 +2110,7 @@ export async function confirmMonthlyWashReservation({
     };
     const entitlement = await redis.get(entitlementKey(entitlementId));
     if (entitlement) {
-        const periodDetails = getBillingPeriod(booking.bookingDate, entitlement.billingAnchor || entitlement.validFrom);
+        const periodDetails = getBillingPeriod(booking.bookingDate);
         effectivePeriod = periodDetails.start;
         historyRecord.period = effectivePeriod;
         await migratePeriodHistory(entitlementId, periodDetails, entitlement.billingAnchor || entitlement.validFrom);

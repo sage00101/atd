@@ -185,6 +185,22 @@ export function sendBusinessBookingApprovalSms(request) {
     );
 }
 
+export function sendCustomerBookingDeclinedSms(request) {
+    const firstName = String(request.booking?.customer?.firstName || '').trim().slice(0, 80) || 'there';
+    const reference = String(request.reference || '').trim().slice(0, 40);
+    const message = [
+        `A10tion To Detail: Hi ${firstName}, unfortunately your booking request was declined.`,
+        reference ? `Ref: ${reference}.` : '',
+        'Please check your email for details.',
+    ].filter(Boolean).join(' ');
+    return sendSms({
+        to: request.booking?.customer?.mobile,
+        message,
+        campaign: 'Customer booking updates',
+        dataField: request.reference,
+    });
+}
+
 export function buildCustomerBookingConfirmationSmsText(receipt) {
     return [
         `A10tion: Your booking is confirmed, ${String(receipt.customerName || 'thank you').trim()}.`,

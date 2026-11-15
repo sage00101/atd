@@ -89,6 +89,7 @@ export default async function handler(req, res) {
             customerEmail: customer.email,
             customerMobile: customer.mobile,
             address: customer.address,
+            monthlyCode: monthlyProvisioning?.monthlyCode || '',
             originalAmountZar: formatZar(originalAmountCents),
             discountZar: discountCents > 0 ? formatZar(discountCents) : null,
             amountZar: formatZar(amountCents),

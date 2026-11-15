@@ -194,21 +194,91 @@ test('business package uses the selected fleet tier and requires that tier', asy
     assert.equal(getMonthlyPackagePriceCents('business-standard', 'Sedan / Hatchback', '9+', 25), 19000);
     assert.equal(getMonthlyPackagePriceCents('business-standard', 'Sedan / Hatchback', '3-5', 7), undefined);
     assert.equal(getMonthlyPackageTotalCents('business-standard', 'Sedan / Hatchback', '6-8', 7), 154000);
+    assert.equal(getMonthlyPackageTotalCents('business-standard', 'Sedan / Hatchback', '6-8', 7, '3-months'), 462000);
     assert.equal(getMonthlyPackagePriceCents('private-standard', 'Sedan / Hatchback'), 42000);
+    assert.equal(getMonthlyPackageTotalCents('private-standard', 'Sedan / Hatchback', '', 1, '3-months'), 116000);
+    assert.equal(getMonthlyPackageTotalCents('private-premium', 'SUV / Bakkie', '', 1, '3-months'), 362000);
+    assert.equal(getMonthlyPackageTotalCents('private-standard', 'Sedan / Hatchback', '', 1, '6-months'), undefined);
 
     const slot = slotDateTime('2026-11-10', '14:30').getTime();
     t.mock.method(Date, 'now', () => slot - 3600000);
     const booking = {
         purchaseType: 'monthly', packageId: 'business-standard', vehicleType: 'Sedan / Hatchback',
         fleetSizeTier: '6-8', fleetVehicleCount: 7,
-        bookingDate: '2026-11-10', bookingTime: '14:30', contractAccepted: true, contractFileBase64: 'ZmlsZQ==',
+        bookingDate: '2026-11-10', bookingTime: '14:30', contractOption: '3-months',
+        contractAccepted: true, contractFileBase64: 'ZmlsZQ==',
         customer: { firstName: 'Test', surname: 'Customer', mobile: '123', email: 'test@example.com', registration: 'ABC123', address: 'Test address' },
         serviceLocation: { latitude: -33.978, longitude: 18.444 },
         serviceAreaAccepted: true, termsAccepted: true, requestedPaymentMethod: 'online',
     };
     await assert.doesNotReject(validateBookingRequest(booking));
+    await assert.doesNotReject(validateBookingRequest({
+        ...booking,
+        contractOption: '1-months',
+        contractAccepted: false,
+        contractFileBase64: null,
+    }));
+    await assert.rejects(validateBookingRequest({
+        ...booking,
+        contractAccepted: false,
+        contractFileBase64: null,
+    }), /Attach the completed monthly contract/);
     await assert.rejects(validateBookingRequest({ ...booking, fleetSizeTier: '3-5' }), /valid monthly package and vehicle category/);
     await assert.rejects(validateBookingRequest({ ...booking, fleetVehicleCount: 9 }), /valid monthly package and vehicle category/);
+});
+
+test('all monthly wash packages and terms validate without requiring a payment', async (t) => {
+    const vehicles = ['Sedan / Hatchback', 'SUV / Bakkie', 'Minibus / Van'];
+    const packages = [
+        { packageId: 'private-standard', clientType: 'private', packageTier: 'standard', terms: ['1-months', '3-months'] },
+        { packageId: 'private-premium', clientType: 'private', packageTier: 'premium', terms: ['1-months', '3-months'] },
+        { packageId: 'business-standard', clientType: 'business', packageTier: 'standard', terms: ['1-months', '3-months', '6-months', '12-months'] },
+    ];
+    const date = '2026-11-17';
+    const slot = slotDateTime(date, '14:30').getTime();
+    t.mock.method(Date, 'now', () => slot - 3600000);
+
+    for (const { packageId, clientType, packageTier, terms } of packages) {
+        const fleetVehicleCount = packageId === 'business-standard' ? 7 : 1;
+        const fleetSizeTier = packageId === 'business-standard' ? '6-8' : undefined;
+        for (const vehicleType of vehicles) {
+            for (const contractOption of terms) {
+                assert.ok(getMonthlyPackageTotalCents(
+                    packageId,
+                    vehicleType,
+                    fleetSizeTier,
+                    fleetVehicleCount,
+                    contractOption,
+                ) > 0, `${packageId} ${vehicleType} ${contractOption} should have a checkout total`);
+                const requiresContract = contractOption !== '1-months';
+                await assert.doesNotReject(validateBookingRequest({
+                    purchaseType: 'monthly',
+                    packageId,
+                    packageName: packageId,
+                    vehicleType,
+                    fleetSizeTier,
+                    fleetVehicleCount,
+                    contractOption,
+                    bookingDate: date,
+                    bookingTime: '14:30',
+                    contractAccepted: requiresContract,
+                    contractFileBase64: requiresContract ? 'ZmlsZQ==' : null,
+                    customer: {
+                        firstName: 'Test',
+                        surname: 'Customer',
+                        mobile: '123',
+                        email: 'test@example.com',
+                        registration: 'ABC123',
+                        address: 'Test address',
+                    },
+                    serviceLocation: { latitude: -33.978, longitude: 18.444 },
+                    serviceAreaAccepted: true,
+                    termsAccepted: true,
+                    requestedPaymentMethod: 'online',
+                }));
+            }
+        }
+    }
 });
 
 test('weekday and Saturday booking slots are accepted, while Sunday and mismatched times are rejected', async (t) => {

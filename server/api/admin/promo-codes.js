@@ -412,7 +412,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 </section>
 </section>
 <section id="monthlyWashPanel" class="promo-panel" role="tabpanel" aria-labelledby="clientsTab" hidden>
-  <p class="note">A confirmed first package payment automatically creates and emails a random access code. Business Standard permits 1 wash per month, Private Standard permits up to 2 bookings per billing period, and Private Premium permits up to 4. Unused prepaid washes roll over, but the per-period booking cap remains. Each recorded payment creates a fresh access code, and emails the customer.</p>
+  <p class="note">A confirmed first package payment automatically creates a Monthly Client profile and access code. Website purchases grant the term's credits less the initial booked wash. Business Standard permits 1 booking per calendar month, Private Standard permits 2 and Private Premium permits 4. Credits roll over indefinitely; the booking cap resets on the 1st. Package changes require a zero credit balance.</p>
   <div id="monthlyStats" class="stat-row" hidden></div>
   <h2 id="monthlyFormTitle" class="section-title">Create monthly entitlement</h2>
   <form id="monthlyForm" class="manager-form">
@@ -422,7 +422,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
     <label class="field-label">Customer email<input class="manager-input" name="email" type="email" autocomplete="email" required></label>
     <label class="field-label">Cell number<input class="manager-input" name="customerPhone" type="tel" autocomplete="tel" required></label>
     <label class="field-label">Package type<select class="manager-select" name="clientType" required><option value="private">Private Client</option><option value="business">Business / Fleet / Family</option></select></label>
-    <label class="field-label">Package level<select class="manager-select" name="packageTier" required><option value="standard">Standard · 2 washes per billing period</option><option value="premium">Premium · 4 washes per billing period</option></select></label>
+    <label class="field-label">Package level<select class="manager-select" name="packageTier" required><option value="standard">Standard · 2 washes per calendar month</option><option value="premium">Premium · 4 washes per calendar month</option></select></label>
     <label class="field-label">Vehicle category<select class="manager-select" name="vehicleType" required><option value="">Choose vehicle…</option><option>Sedan / Hatchback</option><option>SUV / Bakkie</option><option>Minibus / Van</option></select></label>
     <label class="field-label">Active from<input class="manager-input" name="validFrom" type="date" required></label>
     <label class="field-label">Active until <span class="optional">(optional)</span><input class="manager-input" name="validUntil" type="date"></label>
@@ -443,6 +443,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
   </section>
   <p id="bulkEmailNotice" class="inline-notice" role="status" aria-live="polite" hidden></p>
   <div class="monthly-toolbar">
+    <button id="newPackageOpen" type="button">New Package for Existing Client</button>
     <input id="monthlySearch" class="manager-search" type="search" placeholder="Search customer, email, package or code" aria-label="Search monthly entitlements">
     <span id="monthlyCount" class="hint" aria-live="polite"></span>
   </div>
@@ -464,12 +465,33 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
       <button id="paymentClose" class="dialog-close" type="button" aria-label="Close payment form">×</button>
       <h2>Record payment</h2>
       <p>Save the payment and email the customer a newly generated access code.</p>
+      <label class="field-label">Paid contract term<select id="paymentContractOption" class="manager-select" required><option value="1-months">1 month</option><option value="3-months">3 months</option><option value="6-months">6 months</option><option value="12-months">12 months</option></select></label>
       <label class="field-label">Amount paid (R)<input id="paymentAmount" class="manager-input" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
       <label class="field-label">Payment date<input id="paymentDate" class="manager-input" type="date" required></label>
       <label class="field-label">Payment reference <span class="optional">(optional)</span><input id="paymentReference" class="manager-input" maxlength="120" placeholder="Receipt, bank or card reference"></label>
       <div class="dialog-actions">
         <button id="paymentCancel" class="secondary" type="button">Close</button>
         <button id="paymentSubmit" type="submit">Record payment</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="packageChangeDialog" class="manager-dialog">
+    <form id="packageChangeForm" class="manager-dialog-inner has-close">
+      <button id="packageChangeClose" class="dialog-close" type="button" aria-label="Close package change">×</button>
+      <h2>New Package for Existing Client</h2>
+      <p>Package changes are available only after all unused and reserved credits have been used.</p>
+      <label class="field-label">Existing monthly client<select id="packageChangeClient" class="manager-select" required><option value="">Choose a customer…</option></select></label>
+      <p id="packageChangeBalanceNotice" class="inline-notice" role="status" aria-live="polite">Choose a customer to check their remaining credits.</p>
+      <label class="field-label">Package type<select id="packageChangeClientType" class="manager-select" required><option value="private">Private Client</option><option value="business">Business / Fleet / Family</option></select></label>
+      <label class="field-label">Package level<select id="packageChangePackageTier" class="manager-select" required><option value="standard">Standard · 2 washes per calendar month</option><option value="premium">Premium · 4 washes per calendar month</option></select></label>
+      <label class="field-label">Vehicle category<select id="packageChangeVehicleType" class="manager-select" required><option value="">Choose vehicle…</option><option>Sedan / Hatchback</option><option>SUV / Bakkie</option><option>Minibus / Van</option></select></label>
+      <label class="field-label">New contract term<select id="packageChangeContractOption" class="manager-select" required><option value="1-months">1 month</option><option value="3-months">3 months</option><option value="6-months">6 months</option><option value="12-months">12 months</option></select></label>
+      <label class="field-label">Amount paid (R)<input id="packageChangeAmount" class="manager-input" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
+      <label class="field-label">Payment date<input id="packageChangeDate" class="manager-input" type="date" required></label>
+      <label class="field-label">Payment reference <span class="optional">(optional)</span><input id="packageChangeReference" class="manager-input" maxlength="120" placeholder="Receipt, bank or card reference"></label>
+      <div class="dialog-actions">
+        <button id="packageChangeCancel" class="secondary" type="button">Cancel</button>
+        <button id="packageChangeSubmit" type="submit" disabled>Save new package</button>
       </div>
     </form>
   </dialog>
@@ -659,7 +681,21 @@ const paymentForm=document.getElementById('paymentForm');
 const paymentAmount=document.getElementById('paymentAmount');
 const paymentDate=document.getElementById('paymentDate');
 const paymentReference=document.getElementById('paymentReference');
+const paymentContractOption=document.getElementById('paymentContractOption');
 const paymentSubmit=document.getElementById('paymentSubmit');
+const newPackageOpen=document.getElementById('newPackageOpen');
+const packageChangeDialog=document.getElementById('packageChangeDialog');
+const packageChangeForm=document.getElementById('packageChangeForm');
+const packageChangeClient=document.getElementById('packageChangeClient');
+const packageChangeClientType=document.getElementById('packageChangeClientType');
+const packageChangePackageTier=document.getElementById('packageChangePackageTier');
+const packageChangeVehicleType=document.getElementById('packageChangeVehicleType');
+const packageChangeBalanceNotice=document.getElementById('packageChangeBalanceNotice');
+const packageChangeAmount=document.getElementById('packageChangeAmount');
+const packageChangeDate=document.getElementById('packageChangeDate');
+const packageChangeContractOption=document.getElementById('packageChangeContractOption');
+const packageChangeReference=document.getElementById('packageChangeReference');
+const packageChangeSubmit=document.getElementById('packageChangeSubmit');
 const bookingRequestCards=document.getElementById('bookingRequestCards');
 const bookingRequestsEmpty=document.getElementById('bookingRequestsEmpty');
 const bookingRequestsCount=document.getElementById('bookingRequestsCount');
@@ -954,14 +990,16 @@ async function processBookingRequest(action,id,reason=''){
     await loadBookingRequests();
     const problems=[];
     if(!result.emailSent)problems.push('Customer email: '+(result.emailProblem||'delivery was not confirmed')+'. Use the email resend option once fixed.');
-    if(action==='accept'){
+    if(action==='accept'||action==='decline'){
       if(!result.customerSms?.sent)problems.push('Customer SMS: '+(result.customerSms?.problem||'provider acceptance was not confirmed')+'.');
+    }
+    if(action==='accept'){
       if(!result.businessSms?.sent)problems.push('Business SMS: '+(result.businessSms?.problem||'provider acceptance was not confirmed')+'.');
     }
     if(problems.length){
       setStatus('Request updated, but notifications need attention. '+problems.join(' ')+' Check the provider before retrying an unconfirmed SMS.','error');
     }else{
-      setStatus(action==='accept'?'Booking approved; the email was sent and both approval SMS messages were accepted by the provider.':action==='decline'?'Booking declined and customer email sent.':'Customer email sent.','ok');
+      setStatus(action==='accept'?'Booking approved; the email was sent and both approval SMS messages were accepted by the provider.':action==='decline'?'Booking declined; the email was sent and the customer SMS was accepted by the provider.':'Customer email sent.','ok');
     }
   }catch(error){
     await loadBookingRequests();
@@ -1043,7 +1081,7 @@ function renderEntitlementCard(record){
     const contactDetails=[entry.businessName,entry.customerPhone].filter(Boolean).map(escapeHtml).join(' · ');
     return '<li><strong>'+escapeHtml(entry.bookingDate||'')+' '+escapeHtml(entry.bookingTime||'')+'</strong> · '+escapeHtml(entry.vehicleType||'Wash')+packageDetails+(contactDetails?' · '+contactDetails:'')+' · '+escapeHtml(entry.registration||'')+' · Ref '+escapeHtml(entry.reference||'')+' · '+escapeHtml(formatMonth(entry.period||''))+remainingDetails+'</li>';
   }).join('');
-  const paymentHistory=(record.paymentHistory||[]).map(entry=>'<li><strong>'+escapeHtml(entry.type==='initial'?'Initial package payment':'Payment')+'</strong> · '+escapeHtml(entry.paidAt?new Date(entry.paidAt).toLocaleDateString('en-ZA'):'')+' · '+escapeHtml(formatZar(entry.amountCents))+' · '+escapeHtml(entry.creditsAdded||record.monthlyAllowance)+' washes added · Ref '+escapeHtml(entry.reference||'')+(entry.packageName?' · '+escapeHtml(entry.packageName):'')+'</li>').join('');
+  const paymentHistory=(record.paymentHistory||[]).map(entry=>'<li><strong>'+escapeHtml(entry.type==='initial'?'Initial package payment':entry.type==='package_change'?'New package':'Payment')+'</strong> · '+escapeHtml(entry.paidAt?new Date(entry.paidAt).toLocaleDateString('en-ZA'):'')+' · '+escapeHtml(formatZar(entry.amountCents))+' · '+escapeHtml(entry.creditsAdded??record.monthlyAllowance)+' washes added'+(entry.initialWashCreditUsed?' · 1 initial website wash deducted':'')+' · Ref '+escapeHtml(entry.reference||'')+(entry.packageName?' · '+escapeHtml(entry.packageName):'')+'</li>').join('');
   const additionalCodes=(record.codes||[])
     .filter(entry=>entry.code&&entry.code!==record.code)
     .map(entry=>'<li><code>'+escapeHtml(entry.code)+'</code><button type="button" data-action="copy" data-code="'+escapeHtml(entry.code)+'">Copy</button> · generated '+escapeHtml(new Date(entry.createdAt).toLocaleDateString('en-ZA'))+'</li>').join('');
@@ -1053,6 +1091,7 @@ function renderEntitlementCard(record){
     canIssueCode?'<button type="button" data-action="generate-code">'+(record.code?'Generate another code':'Generate code')+'</button>':'',
     canIssueCode&&record.code?'<button type="button" data-action="email">Email latest code</button>':'',
     canIssueCode?'<button type="button" data-action="payment">Record payment</button>':'',
+    canIssueCode?'<button type="button" data-action="new-package">New Package</button>':'',
     '<button type="button" data-action="edit">Edit details</button>',
     '<button'+(isArchivedRecord(record)?'':' class="danger"')+' type="button" data-action="toggle">'+(isArchivedRecord(record)?'Restore & reactivate':'Deactivate account')+'</button>',
 
@@ -1066,8 +1105,8 @@ function renderEntitlementCard(record){
     '<details class="account-collapse"><summary aria-label="Expand or collapse account"></summary><div class="account-collapse-body">'+
     '<p class="entitlement-meta">'+escapeHtml(record.businessName||'')+(record.businessName?'<br>':'')+escapeHtml(dateRange)+(record.contractOption?'<br>'+escapeHtml(record.contractOption)+' contract':'')+'</p>'+
     codeBlock+(additionalCodes?'<details class="entitlement-history"><summary>Other account codes ('+(record.codes.length-1)+')</summary><ul class="history-list">'+additionalCodes+'</ul></details>':'')+
-    '<div class="usage-grid"><div class="usage-cell"><strong>'+record.monthlyAllowance+'</strong><span>Booking cap · '+escapeHtml(formatMonth(record.period))+'</span></div><div class="usage-cell"><strong>'+record.used+'</strong><span>Used this period'+(record.reserved?' · '+record.reserved+' pending':'')+'</span></div><div class="usage-cell"><strong>'+record.periodRemaining+'</strong>    <span>Booking slots left</span></div></div>'+
-    '<p class="hint" style="margin:8px 0 0">Billing period: '+escapeHtml(record.period)+' to '+escapeHtml(record.periodEnd||'')+'</p>'+
+    '<div class="usage-grid"><div class="usage-cell"><strong>'+record.creditsAvailable+'</strong><span>Available wash credits</span></div><div class="usage-cell"><strong>'+record.monthlyAllowance+'</strong><span>Booking cap · '+escapeHtml(formatMonth(record.period))+'</span></div><div class="usage-cell"><strong>'+record.used+'</strong><span>Used this month'+(record.reserved?' · '+record.reserved+' pending':'')+'</span></div><div class="usage-cell"><strong>'+record.periodRemaining+'</strong><span>Booking slots left this month</span></div></div>'+
+    '<p class="hint" style="margin:8px 0 0">Calendar month: '+escapeHtml(record.period)+' to '+escapeHtml(record.periodEnd||'')+' · unused credits roll over and do not expire.</p>'+
     '<div class="entitlement-actions">'+actions+'</div>'+
     '<details class="entitlement-history"><summary>Booking, payment, access and audit history ('+((record.history||[]).length+(record.paymentHistory||[]).length+(record.codeHistory||[]).length+(record.distributionHistory||[]).length+(record.auditHistory||[]).length)+')</summary><ul class="history-list">'+(usageHistory||'<li>No confirmed monthly wash bookings yet.</li>')+paymentHistory+codeHistory+emailHistory+auditHistory+(record.deactivationReason?'<li>Current status reason: '+escapeHtml(record.deactivationReason)+'</li>':'')+'</ul></details>'+
     '</div></details></article>';
@@ -1149,7 +1188,7 @@ function syncMonthlyPackageTierOptions(){
   const isBusiness=monthlyForm.elements.clientType.value==='business';
   const standard=monthlyForm.elements.packageTier.querySelector('option[value="standard"]');
   const premium=monthlyForm.elements.packageTier.querySelector('option[value="premium"]');
-  standard.textContent=isBusiness?'Standard · 1 wash per month':'Standard · 2 washes per billing period';
+  standard.textContent=isBusiness?'Standard · 1 wash per calendar month':'Standard · 2 washes per calendar month';
   premium.hidden=isBusiness;
   premium.disabled=isBusiness;
 }
@@ -1170,6 +1209,78 @@ function editMonthlyEntitlement(record){
   monthlySubmit.textContent='Save changes';
   monthlyForm.scrollIntoView({behavior:'smooth',block:'start'});
 }
+function refreshPackageChangeEligibility(){
+  const record=monthlyEntitlements.find(item=>item.id===packageChangeClient.value);
+  if(!record){
+    packageChangeBalanceNotice.textContent='Choose a customer to check their remaining credits.';
+    packageChangeBalanceNotice.className='inline-notice';
+    packageChangeSubmit.disabled=true;
+    return;
+  }
+  const available=Number(record.creditsAvailable||0);
+  const reserved=Number(record.creditsReserved||0);
+  const remaining=available+reserved;
+  const canChange=record.active&&!isArchivedRecord(record)&&remaining===0;
+  packageChangeBalanceNotice.textContent=canChange
+    ?'This customer has no unused or reserved credits. You can assign a new package; all credits included in the selected term will be added.'
+    :'Package change blocked: '+available+' unused credit'+(available===1?'':'s')+' and '+reserved+' reserved credit'+(reserved===1?'':'s')+' remain. The existing credits must be fully used before a package change.';
+  packageChangeBalanceNotice.className='inline-notice '+(canChange?'success':'error');
+  packageChangeSubmit.disabled=!canChange;
+}
+function syncPackageChangeTierOptions(){
+  const premium=packageChangePackageTier.querySelector('option[value="premium"]');
+  const isBusiness=packageChangeClientType.value==='business';
+  premium.hidden=isBusiness;
+  premium.disabled=isBusiness;
+  if(isBusiness)packageChangePackageTier.value='standard';
+}
+function syncContractOptions(select,clientType){
+  const isBusiness=clientType==='business';
+  for(const months of ['6','12']){
+    const option=select.querySelector('option[value="'+months+'-months"]');
+    option.hidden=!isBusiness;
+    option.disabled=!isBusiness;
+  }
+  if(select.selectedOptions[0]?.disabled)select.value='1-months';
+}
+function openPackageChangeDialog(recordId=''){
+  packageChangeForm.reset();
+  const eligibleClients=monthlyEntitlements.filter(record=>record.active&&!isArchivedRecord(record));
+  packageChangeClient.innerHTML='<option value="">Choose a customer…</option>'+eligibleClients.map(record=>'<option value="'+escapeHtml(record.id)+'">'+escapeHtml(record.customerName)+' · '+escapeHtml(record.email)+'</option>').join('');
+  packageChangeDate.value=localToday();
+  packageChangeClient.value=recordId;
+  const record=eligibleClients.find(item=>item.id===recordId);
+  if(record){
+    packageChangeClientType.value=record.clientType;
+    packageChangePackageTier.value=record.packageTier;
+    packageChangeVehicleType.value=record.vehicleType||'';
+    packageChangeContractOption.value='1-months';
+  }
+  syncPackageChangeTierOptions();
+  syncContractOptions(packageChangeContractOption,packageChangeClientType.value);
+  refreshPackageChangeEligibility();
+  packageChangeDialog.showModal();
+}
+packageChangeClient.addEventListener('change',()=>{
+  const record=monthlyEntitlements.find(item=>item.id===packageChangeClient.value);
+  if(record){
+    packageChangeClientType.value=record.clientType;
+    packageChangePackageTier.value=record.packageTier;
+    packageChangeVehicleType.value=record.vehicleType||'';
+  }
+  packageChangeContractOption.value='1-months';
+  syncPackageChangeTierOptions();
+  syncContractOptions(packageChangeContractOption,packageChangeClientType.value);
+  refreshPackageChangeEligibility();
+});
+packageChangeClientType.addEventListener('change',()=>{
+  syncPackageChangeTierOptions();
+  syncContractOptions(packageChangeContractOption,packageChangeClientType.value);
+});
+newPackageOpen.addEventListener('click',()=>openPackageChangeDialog());
+document.getElementById('packageChangeClose').addEventListener('click',()=>packageChangeDialog.close());
+document.getElementById('packageChangeCancel').addEventListener('click',()=>packageChangeDialog.close());
+packageChangeDialog.addEventListener('close',()=>packageChangeForm.reset());
 monthlyForm.addEventListener('submit',async event=>{
   event.preventDefault();
   monthlySubmit.disabled=true;
@@ -1234,8 +1345,15 @@ async function handleMonthlyCardAction(event){
       selectedPaymentEntitlementId=record.id;
       paymentForm.reset();
       paymentDate.value=localToday();
+      syncContractOptions(paymentContractOption,record.clientType);
+      paymentContractOption.value=record.contractOption||'1-months';
+      if(paymentContractOption.selectedOptions[0]?.disabled)paymentContractOption.value='1-months';
       paymentDialog.showModal();
       paymentAmount.focus();
+      return;
+    }
+    if(button.dataset.action==='new-package'){
+      openPackageChangeDialog(record.id);
       return;
     }
     if(button.dataset.action==='edit'){editMonthlyEntitlement(record);return;}
@@ -1280,6 +1398,7 @@ paymentForm.addEventListener('submit',async event=>{
       id:selectedPaymentEntitlementId,
       amountCents,
       paymentDate:paymentDate.value,
+      contractOption:paymentContractOption.value,
       paymentReference:paymentReference.value.trim(),
     });
     paymentDialog.close();
@@ -1295,6 +1414,35 @@ paymentForm.addEventListener('submit',async event=>{
   }catch(error){
     setStatus(error.message,'error');
   }finally{paymentSubmit.disabled=false;}
+});
+packageChangeForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  if(!packageChangeForm.reportValidity()||packageChangeSubmit.disabled)return;
+  const amountCents=Math.round(Number(packageChangeAmount.value)*100);
+  if(!Number.isSafeInteger(amountCents)||amountCents<1){
+    setStatus('Enter a valid payment amount greater than zero.','error');
+    packageChangeAmount.focus();
+    return;
+  }
+  packageChangeSubmit.disabled=true;
+  try{
+    await monthlyRequest('POST',{
+      action:'change-package',
+      id:packageChangeClient.value,
+      clientType:packageChangeClientType.value,
+      packageTier:packageChangePackageTier.value,
+      vehicleType:packageChangeVehicleType.value,
+      contractOption:packageChangeContractOption.value,
+      amountCents,
+      paymentDate:packageChangeDate.value,
+      paymentReference:packageChangeReference.value.trim(),
+    });
+    packageChangeDialog.close();
+    await loadMonthlyEntitlements();
+    setStatus('New package saved. The full selected package credit balance has been added; no initial wash was deducted.','ok');
+  }catch(error){
+    setStatus(error.message,'error');
+  }finally{refreshPackageChangeEligibility();}
 });
 pendingMonthlyPurchasesNode.addEventListener('click',async event=>{
   const button=event.target.closest('button[data-action="apply-purchase"]');

@@ -55,24 +55,30 @@ request and checkout holds expire automatically within three days.
 The **Monthly Clients** manager tracks a customer's package, random access code,
 payment history, prepaid wash-credit balance, reservations, and confirmed
 bookings. A confirmed first monthly-package payment automatically creates the
-entitlement, grants 1 wash credit to Business Standard, 2 to Private Standard,
-or 4 to Private Premium, and emails the
-code. Each booking reserves one credit and confirmation consumes it. Cancelled or
-expired reservations restore the credit. Unused credits roll over while the
-entitlement remains active and paid through. The booking cap is still 2 or
-4 confirmed/reserved appointments in each billing period, anchored to the
-customer's payment date; rollover credits do not increase that per-period cap.
+customer's profile, generates an access code, and includes the code in the
+payment receipt. Website purchases grant all credits for the selected
+term, less one credit for the initial booked wash. Each booking reserves one
+credit and confirmation consumes it; cancelled or expired reservations restore
+the credit.
+
+The booking cap is 1 wash per calendar month for Business Standard, 2 for
+Private Standard, and 4 for Private Premium. It resets on the first of each
+calendar month and is independent of the contract start date. Unused credits
+roll over indefinitely, including after the contract ends, but do not increase
+the monthly booking cap.
 
 Later monthly payments are recorded manually in the Monthly Clients manager.
-Recording a renewal extends the paid-through date, adds that package's washes
-without clearing rollover credits, records the payment reference, and emails
-the existing code. A payment for a customer who already has an entitlement is
-queued for manager review instead of creating a duplicate code; apply it to the
-matching customer record in the manager. Email delivery requires the configured
-Resend integration. Existing entitlements are migrated with the remaining
-allowance in their current billing period as the initial credit balance; their
-older historical monthly periods are not retroactively converted into rollover
-credits.
+Recording a renewal requires the payment date, amount, and term; it extends the
+paid-through date and adds that term's package credits without clearing rollover
+credits. A payment for a customer who already has an entitlement is queued for
+manager review instead of creating a duplicate profile; apply it to the
+matching customer record in the manager. Package changes are available only
+when the existing balance and reservations are both zero. A manager-assigned
+package grants all credits for its selected term without deducting an initial
+wash. Legacy accounts without a credit ledger initialize with the unused
+allowance for the current calendar month; older pre-migration periods are not
+reconstructed as additional credits. Email delivery requires the configured
+Resend integration.
 
 The protected Business Manager calendar shows the customer's email on booked
 slots when available. Public availability calendars never receive these emails.
@@ -94,6 +100,8 @@ When a booking request is accepted, approval SMS messages go to the customer
 and business numbers. They describe the requested wash and remind the customer
 to complete the booking using the email link. The manager reports any notification
 failure; provider acceptance does not guarantee delivery.
+When a request is declined, the customer receives an email with the reason and
+an SMS directing them to that email. The manager reports failures independently.
 
 Google review ages are calculated from Google's original publication timestamp
 when the website loads. Use **Fetch Google reviews** in Business Manager to

@@ -1,5 +1,5 @@
 import { markBookingRequestCancelled } from './booking-approval.js';
-import { releaseMonthlyWashReservation } from './monthly-promos.js';
+import { refundMonthlyWashForCancelledBooking, releaseMonthlyWashReservation } from './monthly-promos.js';
 import { releaseSharedPromoCode } from './store.js';
 
 export async function finishPendingBookingCancellation(result) {
@@ -17,6 +17,15 @@ export async function finishPendingBookingCancellation(result) {
             entitlementId: booking.monthlyEntitlementId,
             period: booking.monthlyUsagePeriod,
             reservationId: booking.promoReservationId,
+        });
+    }
+    if (booking?.purchaseType === 'monthly'
+        && booking.monthlyEntitlementId && booking.monthlyUsagePeriod) {
+        await refundMonthlyWashForCancelledBooking({
+            entitlementId: booking.monthlyEntitlementId,
+            reference: booking.reference,
+            bookingDate: booking.bookingDate,
+            bookingTime: booking.bookingTime,
         });
     }
     return true;

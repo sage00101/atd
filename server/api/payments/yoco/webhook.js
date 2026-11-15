@@ -156,10 +156,11 @@ export default async function handler(req, res) {
         await markVehiclePromoUsed(promo);
     }
     await markBookingRequestConfirmed(meta.reference || paidBooking?.reference || '');
+    let monthlyProvisioning = null;
     if (pending?.purchaseType === 'monthly') {
-        const provisioning = await provisionMonthlyEntitlementFromPaidPurchase(paidBooking);
-        if (provisioning.status === 'needs_manager') {
-            console.error('[monthly purchase requires manager action]', pending.reference, provisioning.existingEntitlementId || '');
+        monthlyProvisioning = await provisionMonthlyEntitlementFromPaidPurchase({ ...paidBooking, checkoutId });
+        if (monthlyProvisioning.status === 'needs_manager') {
+            console.error('[monthly purchase requires manager action]', pending.reference, monthlyProvisioning.existingEntitlementId || '');
         }
     }
 
@@ -178,6 +179,7 @@ export default async function handler(req, res) {
         customerEmail: meta.customerEmail || pending?.customer?.email,
         customerMobile: meta.customerMobile || pending?.customer?.mobile,
         address: pending?.customer?.address,
+        monthlyCode: monthlyProvisioning?.monthlyCode || '',
         originalAmountZar: formatZar(originalAmountCents),
         discountZar: discountCents > 0 ? formatZar(discountCents) : null,
         amountZar: formatZar(amountCents),

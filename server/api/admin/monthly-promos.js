@@ -3,6 +3,7 @@ import '../_lib/load-env.js';
 import { applyCors } from '../_lib/cors.js';
 import {
     clearMonthlyDistributionRuns,
+    changeMonthlyEntitlementPackage,
     createMonthlyEntitlement,
     deleteMonthlyEntitlementPermanently,
     createMonthlyCodeDistributionForClient,
@@ -53,6 +54,22 @@ export default async function handler(req, res) {
         if (req.method === 'POST' && req.body?.action === 'record-payment') {
             const entitlement = await recordMonthlyEntitlementPayment({
                 entitlementId: String(req.body?.id || '').trim(),
+                paymentReference: String(req.body?.paymentReference || '').trim(),
+                amountCents: req.body?.amountCents,
+                paymentDate: String(req.body?.paymentDate || '').trim(),
+                contractOption: String(req.body?.contractOption || '').trim(),
+            });
+            res.status(200).json({ entitlement });
+            return;
+        }
+
+        if (req.method === 'POST' && req.body?.action === 'change-package') {
+            const entitlement = await changeMonthlyEntitlementPackage({
+                entitlementId: String(req.body?.id || '').trim(),
+                clientType: String(req.body?.clientType || '').trim(),
+                packageTier: String(req.body?.packageTier || '').trim(),
+                vehicleType: String(req.body?.vehicleType || '').trim(),
+                contractOption: String(req.body?.contractOption || '').trim(),
                 paymentReference: String(req.body?.paymentReference || '').trim(),
                 amountCents: req.body?.amountCents,
                 paymentDate: String(req.body?.paymentDate || '').trim(),

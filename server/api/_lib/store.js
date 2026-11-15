@@ -4,6 +4,7 @@ import { redis } from './redis.js';
 import { generateReferenceNumber } from './reference.js';
 import { businessFleetRates, getBusinessFleetRateCents, getBusinessFleetTierForCount } from '../../../shared/business-pricing.js';
 import { BOOKING_SLOT_TIMES } from '../../../shared/booking-schedule.js';
+import { getMonthlyContractMonths } from '../../../shared/monthly-contract.js';
 
 const PENDING_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 3; // 3 days — abandoned checkouts expire
 const CONFIRMED_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year — keep the slot blocked long-term
@@ -100,6 +101,19 @@ export const MONTHLY_PACKAGE_CENTS = {
     },
 };
 
+const MONTHLY_PACKAGE_THREE_MONTH_TOTAL_CENTS = {
+    'private-standard': {
+        'Sedan / Hatchback': 116000,
+        'SUV / Bakkie': 176000,
+        'Minibus / Van': 236000,
+    },
+    'private-premium': {
+        'Sedan / Hatchback': 242000,
+        'SUV / Bakkie': 362000,
+        'Minibus / Van': 482000,
+    },
+};
+
 export function getMonthlyPackagePriceCents(packageId, vehicleType, fleetSizeTier, fleetVehicleCount) {
     const packageRates = MONTHLY_PACKAGE_CENTS[packageId];
     if (packageId === 'business-standard') {
@@ -110,11 +124,16 @@ export function getMonthlyPackagePriceCents(packageId, vehicleType, fleetSizeTie
     return packageRates?.[vehicleType];
 }
 
-export function getMonthlyPackageTotalCents(packageId, vehicleType, fleetSizeTier, fleetVehicleCount) {
+export function getMonthlyPackageTotalCents(packageId, vehicleType, fleetSizeTier, fleetVehicleCount, contractOption = '1-months') {
+    const contractMonths = getMonthlyContractMonths(contractOption, packageId);
+    if (!contractMonths) return undefined;
     const pricePerVehicle = getMonthlyPackagePriceCents(packageId, vehicleType, fleetSizeTier, fleetVehicleCount);
     if (!pricePerVehicle) return undefined;
     const vehicleCount = packageId === 'business-standard' ? fleetVehicleCount : 1;
-    const total = pricePerVehicle * vehicleCount;
+    const contractTotal = contractMonths === 3 && packageId !== 'business-standard'
+        ? MONTHLY_PACKAGE_THREE_MONTH_TOTAL_CENTS[packageId]?.[vehicleType]
+        : pricePerVehicle * contractMonths;
+    const total = contractTotal * vehicleCount;
     return Number.isSafeInteger(total) ? total : undefined;
 }
 

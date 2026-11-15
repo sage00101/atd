@@ -39,13 +39,14 @@ export function buildReceiptEmailHtml(receipt) {
         row('Customer type', isMonthlyCovered ? receipt.customerType : ''),
         row('Monthly package', isMonthlyCovered ? formatPackageTier(receipt.monthlyPackageTier) : ''),
         row('Monthly booking cap', isMonthlyCovered && receipt.monthlyAllowance
-            ? `${receipt.monthlyAllowance} bookings per billing period` : ''),
+            ? `${receipt.monthlyAllowance} bookings per calendar month` : ''),
         row('Wash booked', isMonthlyCovered ? receipt.vehicleType : ''),
         row('Package', receipt.vehicleType ? `${receipt.packageName} · ${receipt.vehicleType}` : receipt.packageName),
         row('Date & time', `${receipt.bookingDate} at ${receipt.bookingTime}`),
         row('Vehicle registration', receipt.registration),
         row('Customer', receipt.customerName),
         row('Contact', [receipt.customerEmail, receipt.customerMobile].filter(Boolean).join(' · ')),
+        row('Monthly access code', receipt.monthlyCode),
         row('Service address', receipt.address),
         row(isMonthlyCovered ? 'Monthly entitlement reference' : 'Promo code used', isMonthlyCovered
             ? receipt.promoCodeReference || 'Assigned monthly package'
@@ -92,7 +93,7 @@ export function buildReceiptEmailHtml(receipt) {
                     <tr>
                         <td style="padding:28px 32px;">
                             <p style="margin:0 0 16px;color:${BRAND.body};font-size:14px;line-height:1.6;">
-                                Hi ${escapeHtml(receipt.customerName || 'there')}, ${isOnsiteUnpaid ? "your wash is booked in — you'll pay our technician when we arrive." : isMonthlyCovered ? 'your wash is booked in under your monthly package. Your entitlement covers this booking in full, so no payment is due.' : "we've received your payment and your wash is booked in."}
+                                Hi ${escapeHtml(receipt.customerName || 'there')}, ${isOnsiteUnpaid ? "your wash is booked in — you'll pay our technician when we arrive." : isMonthlyCovered ? 'your wash is booked in under your monthly package. Your entitlement covers this booking in full, so no payment is due.' : "we've received your payment and your wash is booked in."}${receipt.monthlyCode ? ` Your monthly access code is ${escapeHtml(receipt.monthlyCode)}; keep it private for future bookings.` : ''}
                                 Keep your reference number handy in case you need to contact us about this booking.
                             </p>
                             <div style="margin:0 0 20px;padding:14px 16px;background:${BRAND.sagelight};border-radius:10px;text-align:center;">

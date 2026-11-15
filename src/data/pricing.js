@@ -25,7 +25,7 @@ export const packageGroups = {
             {
                 id: 'private-standard',
                 title: 'Standard Package',
-                washes: '2 Washes Per Billing Period',
+                washes: '2 Washes Per Calendar Month',
                 badge: 'Discounted Rates',
                 image: privateTwoWashesImage,
                 imageAlt: 'Private client two-wash monthly package',
@@ -38,7 +38,7 @@ export const packageGroups = {
                 threeMonthNote: 'Save R340 on a 3-month contract',
                 monthlyNote: 'Save R80 per month',
                 details: [
-                    'Up to 2 bookings per billing period',
+                    'Up to 2 bookings per calendar month',
                     'Save R80 per month',
                     'Includes the standard wash services',
                 ],
@@ -46,7 +46,7 @@ export const packageGroups = {
             {
                 id: 'private-premium',
                 title: 'Premium Package',
-                washes: '4 Washes Per Billing Period',
+                washes: '4 Washes Per Calendar Month',
                 badge: 'Best Value',
                 image: privateFourWashesImage,
                 imageAlt: 'Private client four-wash monthly package',
@@ -59,7 +59,7 @@ export const packageGroups = {
                 threeMonthNote: 'Save R580 on a 3-month contract',
                 monthlyNote: 'Save R160 per month',
                 details: [
-                    'Up to 4 bookings per billing period',
+                    'Up to 4 bookings per calendar month',
                     'Save R160 per month',
                     'Includes the standard wash services',
                 ],
@@ -75,17 +75,17 @@ export const packageGroups = {
             {
                 id: 'business-standard',
                 title: 'Standard Package',
-                washes: '1 Wash Per Month',
+                washes: '1 Wash Per Calendar Month',
                 badge: 'Discounted Rates',
                 image: businessTwoWashesImage,
-                imageAlt: 'Business, fleet or family two-wash monthly package',
+                imageAlt: 'Business, fleet or family one-wash monthly package',
                 fleetRates: businessFleetRates,
                 monthlyPrices: businessVehicleTypes.map((vehicle) => [vehicle, '']),
                 monthlyNote: 'Rates per car, per wash',
                 fleetNote: 'Do you have different types of vehicles on the same premises?',
                 fleetExample: 'Eg 1x Hatch, 2x Bakkies and 1x Minivan',
                 details: [
-                    'Up to 1 booking per month',
+                    'Up to 1 booking per calendar month',
                     'Discounted fleet rates',
                     'Suitable for business, fleet and family vehicles',
                     'Includes the standard wash services',

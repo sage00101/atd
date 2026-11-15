@@ -42,9 +42,9 @@ export default async function handler(req, res) {
             expectedVehicleType: req.body?.vehicleType,
         });
         const message = eligibility.status === 'OK'
-            ? `Code verified. ${eligibility.availableWashes} prepaid wash${eligibility.availableWashes === 1 ? '' : 'es'} available for this billing period.`
+            ? `Code verified. ${eligibility.availableWashes} prepaid wash${eligibility.availableWashes === 1 ? '' : 'es'} available for this calendar month.`
             : eligibility.status === 'LIMIT_REACHED'
-                ? `You have reached the limit of ${eligibility.allowance} covered bookings for this billing period (${eligibility.used} used, ${eligibility.reserved} pending).`
+                ? `You have reached the limit of ${eligibility.allowance} covered bookings for this calendar month (${eligibility.used} used, ${eligibility.reserved} pending).`
                 : eligibility.status === 'CREDITS_EXHAUSTED'
                     ? 'You have run out of prepaid washes on this monthly package. Contact the business to record a renewal payment.'
                     : getMonthlyReservationError(eligibility.status).message;

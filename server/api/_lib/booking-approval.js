@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { getServiceAddressError } from './service-address.js';
 import { hasMinimumBookingNotice } from './booking-time.js';
 import { isBookableBookingTime } from '../../../shared/booking-schedule.js';
+import { getMonthlyContractMonths } from '../../../shared/monthly-contract.js';
 import { redis } from './redis.js';
 import {
     SINGLE_WASH_CENTS,
@@ -259,10 +260,15 @@ export async function validateBookingRequest(booking) {
     const serviceAddressError = getServiceAddressError(customer.address);
     if (serviceAddressError) throw new BookingRequestError(serviceAddressError);
 
-    if (booking.purchaseType === 'monthly' && !getMonthlyPackageTotalCents(booking.packageId, booking.vehicleType, booking.fleetSizeTier, booking.fleetVehicleCount)) {
+    const monthlyContractMonths = booking.purchaseType === 'monthly'
+        ? getMonthlyContractMonths(booking.contractOption, booking.packageId)
+        : 0;
+    if (booking.purchaseType === 'monthly' && (!monthlyContractMonths
+        || !getMonthlyPackageTotalCents(booking.packageId, booking.vehicleType, booking.fleetSizeTier, booking.fleetVehicleCount, booking.contractOption))) {
         throw new BookingRequestError('Choose a valid monthly package and vehicle category.');
     }
-    if (booking.purchaseType === 'monthly' && (!booking.contractAccepted || !booking.contractFileBase64)) {
+    if (booking.purchaseType === 'monthly' && monthlyContractMonths > 1
+        && (!booking.contractAccepted || !booking.contractFileBase64)) {
         throw new BookingRequestError('Attach the completed monthly contract and accept the contract terms.');
     }
 
@@ -283,7 +289,7 @@ export async function validateBookingRequest(booking) {
             throw new BookingRequestError(eligibility.status === 'CREDITS_EXHAUSTED'
                 ? 'You have run out of prepaid washes on this monthly package.'
                 : eligibility.status === 'LIMIT_REACHED'
-                    ? 'You have reached the booking limit for this monthly billing period.'
+                    ? 'You have reached the booking limit for this calendar month.'
                     : `Monthly account check failed: ${eligibility.status}.`);
         }
     }
@@ -713,14 +719,15 @@ export async function cancelBookedSlotRecords(request) {
     }
     const { bookingDate, bookingTime } = current.booking;
     await releaseBookingSlotIfOwned(bookingDate, bookingTime, current.reference);
-    const stored = await redis.get(`booking:${current.reference}`).catch(() => null);
+    const storedBookingKey = current.checkoutId || current.reference;
+    const stored = await redis.get(`booking:${storedBookingKey}`).catch(() => null);
     await Promise.all([
         markStoredBookingCancelled(current.reference),
         markStoredBookingCancelled(current.checkoutId),
     ]);
     let monthlyRefund = { status: 'NOT_MONTHLY' };
     const entitlementId = stored?.monthlyEntitlementId || current.booking.monthlyEntitlementId;
-    if (entitlementId && (current.booking.bookingType === 'monthly-entitlement' || stored?.bookingType === 'monthly-entitlement')) {
+    if (entitlementId) {
         try {
             monthlyRefund = await refundMonthlyWashForCancelledBooking({
                 entitlementId,

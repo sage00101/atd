@@ -137,6 +137,7 @@ export default async function handler(req, res) {
             vehicleType,
             fleetSizeTier,
             fleetVehicleCount,
+            contractOption,
             bookingDate,
             bookingTime,
             promoCode,
@@ -208,7 +209,7 @@ export default async function handler(req, res) {
 
         let contractFileBase64 = null;
         let contractFileName = null;
-        if (isMonthly && !booking.contractFileBase64) {
+        if (isMonthly && booking.contractOption !== '1-months' && !booking.contractFileBase64) {
             const contractFiles = files.contract_files
                 ? (Array.isArray(files.contract_files) ? files.contract_files : [files.contract_files])
                 : [];
@@ -235,7 +236,7 @@ export default async function handler(req, res) {
                 contractFileName = contractFile.originalFilename;
             }
         }
-        if (isMonthly && booking.contractFileBase64) {
+        if (isMonthly && booking.contractOption !== '1-months' && booking.contractFileBase64) {
             contractFileBase64 = booking.contractFileBase64;
             contractFileName = booking.contractFileName;
         }
@@ -398,7 +399,7 @@ export default async function handler(req, res) {
             return;
         } else {
             // First monthly installment, charged according to the package + vehicle rate card.
-            originalAmountCents = getMonthlyPackageTotalCents(packageId, vehicleType, fleetSizeTier, fleetVehicleCount);
+            originalAmountCents = getMonthlyPackageTotalCents(packageId, vehicleType, fleetSizeTier, fleetVehicleCount, contractOption);
             if (!originalAmountCents) {
                 await releaseBookingSlot(reservedSlotDate, reservedSlotTime);
                 reservedSlotDate = null;

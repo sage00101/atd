@@ -51,6 +51,11 @@ function isAllowedContractFile(file) {
         || fileName.endsWith('.pdf');
 }
 
+function getContractLabel(contractOption) {
+    const months = String(contractOption || '').match(/^(\d+)-months$/)?.[1];
+    return months ? `${months} ${months === '1' ? 'month' : 'months'}` : '';
+}
+
 const PAYMENT_STATUS_MESSAGES = {
     success: { tone: 'success', text: 'Payment received - thank you! Your booking is confirmed and a receipt is on its way.' },
     covered: { tone: 'success', text: 'Booking confirmed! This wash is covered by your monthly package; no payment is due.' },
@@ -525,6 +530,7 @@ export default function BookingSection() {
 
     const selectedPackageName = packageNames[selectedPackage] || 'Single Wash';
     const isMonthly = purchaseType === 'monthly';
+    const requiresMonthlyContract = isMonthly && selectedContract !== '1-months';
     const selectedPackageData = Object.values(packageGroups).flatMap((group) => group.packages).find((item) => item.id === selectedPackage);
     const selectedBusinessRateCents = selectedPackageData?.fleetRates
         ? getBusinessFleetRateCents(selectedFleetSizeTier, selectedVehicleType)
@@ -536,10 +542,11 @@ export default function BookingSection() {
         if (!isMonthly || !selectedContract || !selectedVehicleType) return '';
         const pkg = selectedPackageData;
         const vehicleIndex = pkg?.monthlyPrices?.findIndex(([vehicle]) => vehicle === selectedVehicleType) ?? -1;
-        const term = selectedContract.match(/^(3|6|12)-months$/)?.[1];
+        const term = selectedContract.match(/^(1|3|6|12)-months$/)?.[1];
         if (selectedBusinessRateCents && selectedFleetMonthlyTotalCents && term) {
             return formatZarFromCents(selectedFleetMonthlyTotalCents * Number(term));
         }
+        if (term === '1') return pkg?.monthlyPrices?.[vehicleIndex]?.[1] || '';
         const priceList = term === '3' ? pkg?.threeMonthPrices : term === '6' ? pkg?.sixMonthPrices : term === '12' ? pkg?.twelveMonthPrices : null;
         return vehicleIndex >= 0 ? priceList?.[vehicleIndex] || '' : '';
     })();
@@ -596,12 +603,12 @@ export default function BookingSection() {
             return;
         }
 
-        if (!termsAccepted || (isMonthly && !contractAccepted)) {
+        if (!termsAccepted || (requiresMonthlyContract && !contractAccepted)) {
             setPaymentError('Please accept the required booking and agreement confirmations before continuing.');
             return;
         }
 
-        if (isMonthly) {
+        if (requiresMonthlyContract) {
             const [contractFile] = contractFiles;
             const isValidContractFile = contractFiles.length === 1 && isAllowedContractFile(contractFile);
 
@@ -632,7 +639,7 @@ export default function BookingSection() {
                     promoCode: purchaseType === 'single' && promoCode.trim() ? promoCode.trim().toUpperCase() : null,
                     termsAccepted,
                     requestedPaymentMethod: paymentMethod,
-                    contractAccepted: isMonthly ? contractAccepted : false,
+                    contractAccepted: requiresMonthlyContract ? contractAccepted : false,
                     customer: {
                         ...customer,
                         registration: customer.registration.trim().toUpperCase(),
@@ -640,7 +647,7 @@ export default function BookingSection() {
                 };
             const formData = new FormData();
             formData.append('booking', JSON.stringify(bookingPayload));
-            if (isMonthly) contractFiles.forEach((file) => formData.append('contract_files', file, file.name));
+            if (requiresMonthlyContract) contractFiles.forEach((file) => formData.append('contract_files', file, file.name));
 
             const response = await fetch(BOOKING_REQUEST_ENDPOINT, {
                 method: 'POST',
@@ -707,7 +714,7 @@ export default function BookingSection() {
                         <div className='grid size-7 shrink-0 place-items-center rounded-full bg-sagelight text-sagedeep'><Package className='size-3.5' /></div>
                         <div className='min-w-0 text-left'>
                             <p className='text-[7.5px] font-semibold uppercase tracking-[0.11em] text-sage'>{isMonthly ? 'Monthly package' : 'Once-off booking'}</p>
-                            <p className='truncate text-[9.5px] font-semibold text-ink sm:text-[10.5px]'>{selectedPackageName}{selectedVehicleType ? ` · ${selectedVehicleType}` : ''}{isMonthly && selectedPackage === 'business-standard' ? ` · ${selectedFleetVehicleCount} vehicles (${selectedFleetSizeTier})` : ''}{isMonthly && selectedContract ? ` · ${selectedContract.replace('-', ' ')}` : ''}</p>
+                            <p className='truncate text-[9.5px] font-semibold text-ink sm:text-[10.5px]'>{selectedPackageName}{selectedVehicleType ? ` · ${selectedVehicleType}` : ''}{isMonthly && selectedPackage === 'business-standard' ? ` · ${selectedFleetVehicleCount} vehicles (${selectedFleetSizeTier})` : ''}{isMonthly && selectedContract ? ` · ${getContractLabel(selectedContract)}` : ''}</p>
                             {isMonthly && selectedPackage === 'business-standard' && selectedBusinessRateCents && <p className='mt-0.5 truncate text-[8px] text-body sm:text-[9px]'>{formatZarFromCents(selectedBusinessRateCents)} per vehicle / month · Fleet total {formatZarFromCents(selectedFleetMonthlyTotalCents)} / month</p>}
                         </div>
                     </div>
@@ -995,7 +1002,7 @@ export default function BookingSection() {
                                 <p className='mt-1 text-[12px] font-semibold text-white'>{selectedPackageName}</p>
                                 {selectedPackage === 'business-standard' && selectedFleetSizeTier && <p className='mt-0.5 text-[9px] text-white/55'>Fleet size: {selectedFleetVehicleCount} vehicles · {selectedFleetSizeTier} tier</p>}
                                 {selectedContract && (
-                                    <p className='mt-0.5 text-[9px] capitalize text-white/55'>{selectedContract.replace('-', ' ')} duration</p>
+                                    <p className='mt-0.5 text-[9px] capitalize text-white/55'>{getContractLabel(selectedContract)} duration</p>
                                 )}
                             </div>
                         </aside>
@@ -1036,7 +1043,7 @@ export default function BookingSection() {
                                                 {selectedBusinessRateCents && <p className='mt-1 text-[9px] text-body'>{formatZarFromCents(selectedBusinessRateCents)} per vehicle / month · Fleet monthly total: {formatZarFromCents(selectedFleetMonthlyTotalCents)}</p>}
                                             </>
                                         )}
-                                        {selectedMonthlyTotal && <p className='mt-1 text-[10px] font-semibold text-sagedeep'>{selectedContract?.replace('-', ' ').replace('months', 'month')} contract total: {selectedMonthlyTotal}</p>}
+                                        {selectedMonthlyTotal && <p className='mt-1 text-[10px] font-semibold text-sagedeep'>Amount due at checkout ({getContractLabel(selectedContract)}): {selectedMonthlyTotal}</p>}
                                     </div>
                                     <div className='rounded-xl border border-sage/15 bg-white/65 px-3 py-2 text-left sm:text-right'>
                                         <p className='text-[8px] font-medium text-body'>Appointment</p>
@@ -1116,7 +1123,7 @@ export default function BookingSection() {
                                         <textarea className={`${fieldClassName} min-h-[54px] resize-none py-2 sm:min-h-[62px]`} name='notes' value={customer.notes} onChange={updateCustomer} placeholder='Add any details about your booking here.' maxLength={300} rows={2} />
                                     </label>
 
-                                    {isMonthly && (
+                                    {requiresMonthlyContract && (
                                         <div className='mt-3 rounded-2xl border border-[#cddbd0] bg-white p-3.5 sm:p-4'>
                                             <div className='flex items-start gap-3'>
                                                 <div className='grid size-8 shrink-0 place-items-center rounded-xl bg-[#edf3ee] text-sage'>
