@@ -190,10 +190,7 @@ export default async function handler(req, res) {
     };
 
     try {
-        const contractAttachment = pending?.contractFileBase64 && pending?.contractFileName
-            ? { filename: pending.contractFileName, content: pending.contractFileBase64 }
-            : null;
-        await sendReceiptEmail(receipt, contractAttachment);
+        await sendReceiptEmail(receipt);
     } catch (err) {
         console.error('[receipt email failed]', receipt.reference, err);
     }

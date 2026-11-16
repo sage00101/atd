@@ -469,6 +469,12 @@ export default function MonthlyCheckoutPage() {
                             <p className={`mt-2 text-xs leading-5 ${codeCheck.status === 'available' ? 'text-emerald-800' : codeCheck.status === 'blocked' || codeCheck.status === 'error' ? 'text-red-700' : 'text-[#52635a]'}`} role='status' aria-live='polite'>{codeCheck.message}</p>
                         </section>
 
+                        <div className='rounded-2xl bg-gradient-to-br from-[#183b29] to-[#315f41] p-5 text-white shadow-[0_12px_30px_-18px_rgba(20,49,29,.7)]'>
+                            <p className='text-[10px] font-bold uppercase tracking-[0.14em] text-[#c8dfcd]'>Total:</p>
+                            <p className='mt-1 text-3xl font-bold tracking-tight tabular-nums sm:text-4xl'>R0.00</p>
+                            <p className='mt-2 text-xs leading-relaxed text-[#d3e6d6]'>Covered by your monthly credits if your entitlement is valid. Your code and credits are checked again after approval.</p>
+                        </div>
+
                         <label className='flex items-start gap-2.5 text-xs leading-5 text-[#52635a]'>
                             <input type='checkbox' checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} className='mt-1 size-4 shrink-0 accent-[#31553c]' />
                             <span>I confirm my booking details and service location are accurate, and agree to the booking terms.</span>

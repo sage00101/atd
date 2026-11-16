@@ -6,6 +6,7 @@ import { getMonthlyContractMonths } from '../../../shared/monthly-contract.js';
 import { redis } from './redis.js';
 import {
     SINGLE_WASH_CENTS,
+    PROMO_DISCOUNT_RATE,
     claimUniqueReferenceNumber,
     getBooking,
     getBookingSlotOwner,
@@ -298,8 +299,17 @@ export async function validateBookingRequest(booking) {
         && !['online', 'onsite'].includes(booking.requestedPaymentMethod)) {
         throw new BookingRequestError('Choose a valid payment method.');
     }
+    const originalAmountCents = booking.purchaseType === 'monthly'
+        ? getMonthlyPackageTotalCents(booking.packageId, booking.vehicleType, booking.fleetSizeTier, booking.fleetVehicleCount, booking.contractOption)
+        : SINGLE_WASH_CENTS[booking.vehicleType];
+    const monthlyCovered = booking.bookingType === 'monthly-entitlement';
+    const promoPending = !monthlyCovered && booking.purchaseType === 'single' && Boolean(String(booking.promoCode || '').trim());
+    const totalAmountCents = monthlyCovered ? 0
+        : promoPending ? originalAmountCents - Math.round(originalAmountCents * PROMO_DISCOUNT_RATE)
+            : originalAmountCents;
     return {
         ...booking,
+        pricingSummary: { originalAmountCents, totalAmountCents, promoPending, monthlyCovered },
         customer: {
             ...customer,
             firstName: String(customer.firstName).trim(),

@@ -29,6 +29,10 @@
       "destination": "/api/booking-router?__route=monthly-validate"
     },
     {
+      "source": "/api/promo/validate",
+      "destination": "/api/booking-router?__route=promo-validate"
+    },
+    {
       "source": "/api/bookings/request",
       "destination": "/api/booking-router?__route=booking-request"
     },

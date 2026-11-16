@@ -465,7 +465,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
       <button id="paymentClose" class="dialog-close" type="button" aria-label="Close payment form">×</button>
       <h2>Record payment</h2>
       <p>Save the payment and email the customer a newly generated access code.</p>
-      <label class="field-label">Paid contract term<select id="paymentContractOption" class="manager-select" required><option value="1-months">1 month</option><option value="3-months">3 months</option><option value="6-months">6 months</option><option value="12-months">12 months</option></select></label>
+      <label class="field-label">Paid contract term<select id="paymentContractOption" class="manager-select" required><option value="1-months">1 month</option><option value="3-months">3 months</option></select></label>
       <label class="field-label">Amount paid (R)<input id="paymentAmount" class="manager-input" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
       <label class="field-label">Payment date<input id="paymentDate" class="manager-input" type="date" required></label>
       <label class="field-label">Payment reference <span class="optional">(optional)</span><input id="paymentReference" class="manager-input" maxlength="120" placeholder="Receipt, bank or card reference"></label>
@@ -485,7 +485,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
       <label class="field-label">Package type<select id="packageChangeClientType" class="manager-select" required><option value="private">Private Client</option><option value="business">Business / Fleet / Family</option></select></label>
       <label class="field-label">Package level<select id="packageChangePackageTier" class="manager-select" required><option value="standard">Standard · 2 washes per calendar month</option><option value="premium">Premium · 4 washes per calendar month</option></select></label>
       <label class="field-label">Vehicle category<select id="packageChangeVehicleType" class="manager-select" required><option value="">Choose vehicle…</option><option>Sedan / Hatchback</option><option>SUV / Bakkie</option><option>Minibus / Van</option></select></label>
-      <label class="field-label">New contract term<select id="packageChangeContractOption" class="manager-select" required><option value="1-months">1 month</option><option value="3-months">3 months</option><option value="6-months">6 months</option><option value="12-months">12 months</option></select></label>
+      <label class="field-label">New contract term<select id="packageChangeContractOption" class="manager-select" required><option value="1-months">1 month</option><option value="3-months">3 months</option></select></label>
       <label class="field-label">Amount paid (R)<input id="packageChangeAmount" class="manager-input" type="number" min="0.01" step="0.01" inputmode="decimal" required></label>
       <label class="field-label">Payment date<input id="packageChangeDate" class="manager-input" type="date" required></label>
       <label class="field-label">Payment reference <span class="optional">(optional)</span><input id="packageChangeReference" class="manager-input" maxlength="120" placeholder="Receipt, bank or card reference"></label>
@@ -1234,15 +1234,6 @@ function syncPackageChangeTierOptions(){
   premium.disabled=isBusiness;
   if(isBusiness)packageChangePackageTier.value='standard';
 }
-function syncContractOptions(select,clientType){
-  const isBusiness=clientType==='business';
-  for(const months of ['6','12']){
-    const option=select.querySelector('option[value="'+months+'-months"]');
-    option.hidden=!isBusiness;
-    option.disabled=!isBusiness;
-  }
-  if(select.selectedOptions[0]?.disabled)select.value='1-months';
-}
 function openPackageChangeDialog(recordId=''){
   packageChangeForm.reset();
   const eligibleClients=monthlyEntitlements.filter(record=>record.active&&!isArchivedRecord(record));
@@ -1257,7 +1248,6 @@ function openPackageChangeDialog(recordId=''){
     packageChangeContractOption.value='1-months';
   }
   syncPackageChangeTierOptions();
-  syncContractOptions(packageChangeContractOption,packageChangeClientType.value);
   refreshPackageChangeEligibility();
   packageChangeDialog.showModal();
 }
@@ -1270,12 +1260,10 @@ packageChangeClient.addEventListener('change',()=>{
   }
   packageChangeContractOption.value='1-months';
   syncPackageChangeTierOptions();
-  syncContractOptions(packageChangeContractOption,packageChangeClientType.value);
   refreshPackageChangeEligibility();
 });
 packageChangeClientType.addEventListener('change',()=>{
   syncPackageChangeTierOptions();
-  syncContractOptions(packageChangeContractOption,packageChangeClientType.value);
 });
 newPackageOpen.addEventListener('click',()=>openPackageChangeDialog());
 document.getElementById('packageChangeClose').addEventListener('click',()=>packageChangeDialog.close());
@@ -1345,9 +1333,7 @@ async function handleMonthlyCardAction(event){
       selectedPaymentEntitlementId=record.id;
       paymentForm.reset();
       paymentDate.value=localToday();
-      syncContractOptions(paymentContractOption,record.clientType);
-      paymentContractOption.value=record.contractOption||'1-months';
-      if(paymentContractOption.selectedOptions[0]?.disabled)paymentContractOption.value='1-months';
+      paymentContractOption.value=['1-months','3-months'].includes(record.contractOption)?record.contractOption:'1-months';
       paymentDialog.showModal();
       paymentAmount.focus();
       return;

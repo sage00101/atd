@@ -15,6 +15,7 @@ import {
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const BOOKINGS_EMAIL = process.env.BUSINESS_EMAIL || 'bookings@a10tion.co.za';
+const BOOKING_REQUEST_EMAIL = process.env.BOOKING_REQUEST_EMAIL || 'bookings@a10tion.co.za';
 const SUPPORT_EMAIL = 'support@a10tion.co.za';
 async function sendBusinessBookingSms(receipt) {
     return sendSms({
@@ -155,7 +156,7 @@ async function sendBookingRequestEmailPair({ request, customerSubject, customerH
         ? [{ filename: request.booking.contractFileName, content: request.booking.contractFileBase64 }]
         : undefined;
     const sendBusiness = (withAttachments) => sendViaResend({
-        to: BOOKINGS_EMAIL,
+        to: BOOKING_REQUEST_EMAIL,
         subject: businessSubject,
         html: businessHtml,
         replyTo: customerEmail || undefined,
@@ -251,50 +252,30 @@ export async function sendBookingCancelledEmail(request, reason, retryId = '') {
     });
 }
 
-/** Sends booking receipts to the customer and business; optional contract attachments go only to the business. */
-export async function sendReceiptEmail(receipt, contractAttachment = null) {
+/** Sends the booking receipt to the customer and confirmation SMS notifications. */
+export async function sendReceiptEmail(receipt) {
     const html = buildReceiptEmailHtml(receipt);
     const isMonthlyBooking = receipt.bookingType === 'monthly-entitlement'
         || receipt.paymentMethod === 'monthly-entitlement';
     const subject = `${isMonthlyBooking ? 'Monthly booking confirmed' : 'Booking confirmed'} — ${receipt.reference}`;
 
-    // Separate direct send so the business copy never depends on bcc or on the customer send succeeding.
-    const jobs = [sendViaResend({
-        to: BOOKINGS_EMAIL,
-        subject: `${subject} (${isMonthlyBooking ? 'monthly client' : 'business copy'}: ${receipt.customerName || receipt.customerEmail || 'customer'})`,
-        html,
-        replyTo: receipt.customerEmail || undefined,
-        attachments: contractAttachment ? [contractAttachment] : undefined,
-    })];
-
-    if (receipt.customerEmail) {
-        jobs.unshift(sendViaResend({
+    const emailJob = receipt.customerEmail
+        ? sendViaResend({
             to: receipt.customerEmail,
             subject,
             html,
             replyTo: BOOKINGS_EMAIL,
-        }));
-    } else {
-        console.warn('[email] no customer email on receipt, sending business copy only', receipt.reference);
-    }
+        })
+        : Promise.resolve({ skipped: true });
 
-    const emailJobCount = jobs.length;
-    jobs.push(sendCustomerBookingSms(receipt));
-    jobs.push(sendBusinessBookingSms(receipt));
-
-    const results = await Promise.allSettled(jobs);
-    const emailResults = results.slice(0, emailJobCount);
-    const emailFailures = emailResults.filter((result) => result.status === 'rejected');
-    if (emailFailures.length) {
-        emailFailures.forEach((result) => console.error('[receipt email failed]', receipt.reference, result.reason));
-        if (results.every((result) => result.status === 'rejected')) throw emailFailures[0].reason;
-    }
-
-    const smsResults = results.slice(emailJobCount);
-    if (smsResults[0]?.status === 'rejected') console.error('[customer receipt sms failed]', receipt.reference, smsResults[0].reason);
-    if (smsResults[1]?.status === 'rejected') console.error('[business receipt sms failed]', receipt.reference, smsResults[1].reason);
-
-    return results.find((r) => r.status === 'fulfilled' && r.value && !r.value?.skipped)?.value;
+    const [emailResult, customerSms, businessSms] = await Promise.allSettled([
+        emailJob, sendCustomerBookingSms(receipt), sendBusinessBookingSms(receipt),
+    ]);
+    if (customerSms.status === 'rejected') console.error('[customer receipt sms failed]', receipt.reference, customerSms.reason);
+    if (businessSms.status === 'rejected') console.error('[business receipt sms failed]', receipt.reference, businessSms.reason);
+    if (emailResult.status === 'rejected') throw emailResult.reason;
+    if (!receipt.customerEmail) console.warn('[email] no customer email on receipt', receipt.reference);
+    return emailResult.value;
 }
 
 /** Emails a newly approved customer confirming their vehicle registration now works as a promo code. */

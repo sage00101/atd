@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { redis } from './redis.js';
 import { looksLikeEmail, normaliseEmail, normaliseReg } from './store.js';
 import { sendMonthlyAccessCodeEmail, sendMonthlyDistributionReport } from './email.js';
-import { getMonthlyContractMonths } from '../../../shared/monthly-contract.js';
+import { getAvailableMonthlyContractMonths, getMonthlyContractMonths } from '../../../shared/monthly-contract.js';
 
 const ENTITLEMENT_INDEX_KEY = 'promo:monthly:entitlements';
 const MONTHLY_RESERVATION_TTL_SECONDS = 60 * 60 * 24 * 3;
@@ -611,7 +611,7 @@ async function createUniqueCode() {
     throw new Error('Could not generate a unique monthly promo code. Please try again.');
 }
 
-function validateEntitlementInput(input) {
+function validateEntitlementInput(input, { allowLegacyTerm = false } = {}) {
     const firstNameInput = String(input?.firstName || '').trim();
     const surnameInput = String(input?.surname || '').trim();
     const suppliedName = String(input?.customerName || '').trim();
@@ -663,8 +663,9 @@ function validateEntitlementInput(input) {
     if (clientType === 'business' && packageTier === 'premium') {
         throw new Error('Business / Fleet / Family accounts only have the Standard package.');
     }
-    if (!getMonthlyContractMonths(contractOption, packageId)) {
-        throw new Error('Choose a valid contract duration for this monthly package.');
+    const getContractMonths = allowLegacyTerm ? getMonthlyContractMonths : getAvailableMonthlyContractMonths;
+    if (!getContractMonths(contractOption, packageId)) {
+        throw new Error('Choose a valid contract duration for this monthly package (1 or 3 months).');
     }
     if (vehicleType && !MONTHLY_VEHICLE_TYPES.includes(vehicleType)) {
         throw new Error('Choose Sedan / Hatchback, SUV / Bakkie or Minibus / Van.');
@@ -877,7 +878,7 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
         packageTier,
         contractOption,
         validFrom: paidDate,
-    });
+    }, { allowLegacyTerm: true });
     const monthlyAllowance = details.monthlyAllowance;
     const creditsPurchased = monthlyAllowance * contractMonths;
     const initialWashPeriod = getBillingPeriod(booking.bookingDate || paidDate);
@@ -1078,8 +1079,8 @@ export async function recordMonthlyEntitlementPayment({
     const effectivePaymentDate = getSouthAfricanDate(new Date(paidAt));
     const packageId = String(pending?.packageId || entitlement.packageId || `${entitlement.clientType}-${entitlement.packageTier}`);
     const paidContractOption = String(pending?.contractOption || contractOption || entitlement.contractOption || '1-months');
-    const monthsPaid = getMonthlyContractMonths(paidContractOption, packageId);
-    if (!monthsPaid) throw new Error('Choose a valid contract duration for this monthly payment.');
+    const monthsPaid = (pending ? getMonthlyContractMonths : getAvailableMonthlyContractMonths)(paidContractOption, packageId);
+    if (!monthsPaid) throw new Error('Choose a valid contract duration for this monthly payment (1 or 3 months).');
     const initialWashUsed = Boolean(pending?.bookingDate);
     const creditsAdded = Math.max(entitlement.monthlyAllowance * monthsPaid - (initialWashUsed ? 1 : 0), 0);
     const currentTermActive = entitlement.validUntil && entitlement.validUntil >= effectivePaymentDate;
@@ -1313,6 +1314,10 @@ export async function updateMonthlyEntitlement(id, input) {
         email: input?.email === undefined ? existing.email : input.email,
         validFrom: input?.validFrom === undefined ? existing.validFrom : input.validFrom,
         validUntil: input?.validUntil === undefined ? existing.validUntil : input.validUntil,
+    }, {
+        allowLegacyTerm: (input?.contractOption === undefined || input.contractOption === existing.contractOption)
+            && (input?.clientType === undefined || input.clientType === existing.clientType)
+            && (input?.packageTier === undefined || input.packageTier === existing.packageTier),
     });
     const packageChanged = details.clientType !== existing.clientType
         || details.packageTier !== existing.packageTier

@@ -484,10 +484,7 @@ export default async function handler(req, res) {
 
         let receiptSent = false;
         try {
-            const contractAttachment = contractFileBase64 && contractFileName
-                ? { filename: contractFileName, content: contractFileBase64 }
-                : null;
-            const result = await sendReceiptEmail(receipt, contractAttachment);
+            const result = await sendReceiptEmail(receipt);
             receiptSent = !result?.skipped;
         } catch (err) {
             console.error('[onsite receipt email failed]', receipt.reference, err);

@@ -42,13 +42,21 @@ Failed-payment webhooks also release pending slots. If a customer abandons check
 without returning or a payment event, the hold expires automatically. Appointments
 require at least one hour's notice in South African time.
 
+New booking requests are emailed to the customer and to
+`BOOKING_REQUEST_EMAIL` (default: `bookings@a10tion.co.za`), including any
+contract attachment on the business copy. Approval, decline, and confirmation
+emails go to the customer only; SMS notifications remain separate.
+
 Both checkout forms accept a manually entered service address without a map or
 distance restriction. Optional address suggestions use the free public Photon
 service and send the typed search to it; availability and coverage are not
 guaranteed, and manual entry remains available if lookup fails.
 
-Single-wash promo codes are reserved when checkout starts and redeemed only
-after Yoco confirms payment. The Business Manager continues to manage promo
+Single-wash promo codes are checked live while the customer enters them; a valid
+code immediately updates the displayed total. This preview does not reserve the
+code, which is checked and reserved again when the approved booking is completed.
+Codes are redeemed after Yoco confirms payment or an on-site payment is recorded.
+The Business Manager continues to manage promo
 batches, Monthly Clients, booking requests and calendar availability. Pending
 request and checkout holds expire automatically within three days.
 

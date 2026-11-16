@@ -4,6 +4,13 @@ import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
 import { hasMinimumBookingNotice } from '../api/_lib/booking-time.js';
 import {
+    buildBookingRequestReceivedEmail,
+    buildBookingRequestBusinessEmail,
+    buildBookingApprovedEmail,
+    buildBookingDeclinedEmail,
+} from '../api/_lib/booking-request-email-template.js';
+import { buildReceiptEmailHtml } from '../api/_lib/email-template.js';
+import {
     buildCustomerBookingConfirmationSmsText,
     buildCustomerBookingRequestSmsText,
     buildBookingRequestSmsText,
@@ -17,19 +24,22 @@ import {
     getBookingTimesForDate,
     isBookableBookingTime,
 } from '../../shared/booking-schedule.js';
+import { getMonthlyContractMonths } from '../../shared/monthly-contract.js';
 
 const redis = Object.fromEntries(['get', 'mget', 'set', 'del', 'lrange', 'smembers', 'exists', 'eval'].map((name) => [name, () => {
     throw new Error(`Unexpected Redis call: ${name}`);
 }]));
 mock.module('../api/_lib/redis.js', { exports: { redis } });
 const [{ validateBookingRequest, listBookingRequests, cancelBookedSlotRecords }, { getBookedSlotsInRange, reserveBookingSlot, getMonthlyPackagePriceCents, getMonthlyPackageTotalCents },
-    { default: cancelHandler }, { default: webhookHandler }, { default: calendarHandler }, { default: availabilityHandler }] = await Promise.all([
+    { default: cancelHandler }, { default: webhookHandler }, { default: calendarHandler }, { default: availabilityHandler },
+    { default: promoValidationHandler }] = await Promise.all([
     import('../api/_lib/booking-approval.js'),
     import('../api/_lib/store.js'),
     import('../handlers/bookings-cancel.js'),
     import('../api/payments/yoco/webhook.js'),
     import('../api/admin/calendar.js'),
     import('../handlers/bookings-availability.js'),
+    import('../handlers/promo-validation.js'),
 ]);
 
 function installRedisStub(t) {
@@ -199,6 +209,10 @@ test('business package uses the selected fleet tier and requires that tier', asy
     assert.equal(getMonthlyPackageTotalCents('private-standard', 'Sedan / Hatchback', '', 1, '3-months'), 116000);
     assert.equal(getMonthlyPackageTotalCents('private-premium', 'SUV / Bakkie', '', 1, '3-months'), 362000);
     assert.equal(getMonthlyPackageTotalCents('private-standard', 'Sedan / Hatchback', '', 1, '6-months'), undefined);
+    assert.equal(getMonthlyPackageTotalCents('business-standard', 'Sedan / Hatchback', '6-8', 7, '6-months'), undefined);
+    assert.equal(getMonthlyPackageTotalCents('business-standard', 'Sedan / Hatchback', '6-8', 7, '12-months'), undefined);
+    assert.equal(getMonthlyContractMonths('6-months', 'business-standard'), 6);
+    assert.equal(getMonthlyContractMonths('12-months', 'business-standard'), 12);
 
     const slot = slotDateTime('2026-11-10', '14:30').getTime();
     t.mock.method(Date, 'now', () => slot - 3600000);
@@ -227,12 +241,12 @@ test('business package uses the selected fleet tier and requires that tier', asy
     await assert.rejects(validateBookingRequest({ ...booking, fleetVehicleCount: 9 }), /valid monthly package and vehicle category/);
 });
 
-test('all monthly wash packages and terms validate without requiring a payment', async (t) => {
+test('all online monthly package terms validate without requiring a payment', async (t) => {
     const vehicles = ['Sedan / Hatchback', 'SUV / Bakkie', 'Minibus / Van'];
     const packages = [
         { packageId: 'private-standard', clientType: 'private', packageTier: 'standard', terms: ['1-months', '3-months'] },
         { packageId: 'private-premium', clientType: 'private', packageTier: 'premium', terms: ['1-months', '3-months'] },
-        { packageId: 'business-standard', clientType: 'business', packageTier: 'standard', terms: ['1-months', '3-months', '6-months', '12-months'] },
+        { packageId: 'business-standard', clientType: 'business', packageTier: 'standard', terms: ['1-months', '3-months'] },
     ];
     const date = '2026-11-17';
     const slot = slotDateTime(date, '14:30').getTime();
@@ -279,6 +293,124 @@ test('all monthly wash packages and terms validate without requiring a payment',
             }
         }
     }
+});
+
+test('request and decision emails show server-calculated totals and conditional discounts', async (t) => {
+    const date = '2026-11-17';
+    const slot = slotDateTime(date, '14:30').getTime();
+    t.mock.method(Date, 'now', () => slot - 3600000);
+    const base = {
+        purchaseType: 'single',
+        packageId: 'single-wash',
+        packageName: 'Single Wash',
+        vehicleType: 'SUV / Bakkie',
+        bookingDate: date,
+        bookingTime: '14:30',
+        customer: { firstName: 'Test', surname: 'Customer', mobile: '123', email: 'test@example.com', registration: 'ABC123', address: 'Test address' },
+        termsAccepted: true,
+        requestedPaymentMethod: 'online',
+        pricingSummary: { totalAmountCents: 1 },
+    };
+    const cases = [
+        { booking: base, expected: 'R350.00', label: 'Requested total' },
+        { booking: { ...base, promoCode: 'TESTPROMO' }, expected: 'R175.00', label: 'Estimated total if promo is valid' },
+        { booking: { ...base, purchaseType: 'monthly', packageId: 'private-standard', contractOption: '1-months' }, expected: 'R620.00', label: 'Requested total' },
+        { booking: { ...base, purchaseType: 'monthly', packageId: 'private-premium', contractOption: '3-months', contractAccepted: true, contractFileBase64: 'ZmlsZQ==' }, expected: 'R3620.00', label: 'Requested total' },
+        { booking: { ...base, purchaseType: 'monthly', packageId: 'business-standard', fleetSizeTier: '6-8', fleetVehicleCount: 7, contractOption: '3-months', contractAccepted: true, contractFileBase64: 'ZmlsZQ==' }, expected: 'R6720.00', label: 'Requested total' },
+    ];
+    for (const { booking, expected, label } of cases) {
+        const validated = await validateBookingRequest(booking);
+        const request = { reference: 'TEST123', booking: validated, status: 'pending_approval' };
+        for (const html of [
+            buildBookingRequestReceivedEmail(request, 'https://example.test/status'),
+            buildBookingRequestBusinessEmail(request, 'https://example.test/manager'),
+            buildBookingApprovedEmail(request, 'https://example.test/continue'),
+            buildBookingDeclinedEmail(request),
+        ]) {
+            assert.ok(html.includes(label));
+            assert.ok(html.includes(expected));
+            assert.ok(!html.includes('R0.01'));
+            if (booking.promoCode) assert.match(html, /Not yet verified/);
+        }
+    }
+
+    const coveredRequest = {
+        reference: 'TEST123',
+        booking: { ...base, bookingType: 'monthly-entitlement', pricingSummary: { totalAmountCents: 0, monthlyCovered: true } },
+    };
+    assert.match(buildBookingRequestReceivedEmail(coveredRequest, ''), /R0\.00 \(covered by monthly credits\)/);
+    assert.match(buildBookingDeclinedEmail(coveredRequest), /R0\.00 \(covered by monthly credits\)/);
+    const legacyRequest = { reference: 'OLD123', booking: { ...base, pricingSummary: undefined } };
+    assert.match(buildBookingDeclinedEmail(legacyRequest), /Unavailable for this request/);
+});
+
+test('confirmation receipts distinguish paid, onsite and monthly-credit totals', () => {
+    const receipt = {
+        reference: 'TEST123',
+        bookingDate: '2026-11-17',
+        bookingTime: '14:30',
+        packageName: 'Single Wash',
+        vehicleType: 'SUV / Bakkie',
+        amountZar: 'R175.00',
+        originalAmountZar: 'R350.00',
+        discountZar: 'R175.00',
+        promoApplied: true,
+        promoCode: 'TESTPROMO',
+    };
+    const paid = buildReceiptEmailHtml({ ...receipt, paymentMethod: 'online' });
+    assert.match(paid, /Amount paid/);
+    assert.match(paid, /R175\.00/);
+    assert.match(paid, /R350\.00/);
+    const onsite = buildReceiptEmailHtml({ ...receipt, paymentMethod: 'onsite', paymentStatus: 'unpaid' });
+    assert.match(onsite, /Amount due on-site/);
+    assert.match(onsite, /R175\.00/);
+    const onsitePaid = buildReceiptEmailHtml({ ...receipt, paymentMethod: 'onsite', paymentStatus: 'paid' });
+    assert.match(onsitePaid, /Amount paid/);
+    assert.match(onsitePaid, /R175\.00/);
+    const covered = buildReceiptEmailHtml({ ...receipt, amountZar: 'R0.00', paymentMethod: 'monthly-entitlement' });
+    assert.match(covered, /Amount due/);
+    assert.match(covered, /R0\.00/);
+});
+
+test('live promo verification checks availability without reserving or redeeming codes', async (t) => {
+    const records = new Map([
+        ['promo:shared:active-batch', { pairs: [{ promoCode: 'SAVE50' }] }],
+    ]);
+    let attempts = 0;
+    t.mock.method(redis, 'get', async (key) => records.get(key) || null);
+    t.mock.method(redis, 'eval', async () => ++attempts);
+    const verify = async (promoCode) => {
+        const res = response();
+        await promoValidationHandler({ method: 'POST', headers: {}, body: { promoCode }, socket: { remoteAddress: 'test-ip' } }, res);
+        return res;
+    };
+    const digest = crypto.createHash('sha256').update('SAVE50').digest('hex');
+    let result = await verify(' save50 ');
+    assert.equal(result.statusCode, 200);
+    assert.deepEqual(result.body, { valid: true, discountPercent: 50 });
+    assert.equal(records.size, 1);
+    result = await verify('WRONG');
+    assert.match(result.body.message, /not valid/);
+    records.set(`promo:shared:used:${digest}`, { usedAt: '2026-01-01' });
+    result = await verify('SAVE50');
+    assert.match(result.body.message, /already been redeemed/);
+    records.delete(`promo:shared:used:${digest}`);
+    records.set(`promo:shared:reservation:${digest}`, 'other-checkout');
+    result = await verify('SAVE50');
+    assert.match(result.body.message, /currently being used/);
+    records.delete(`promo:shared:reservation:${digest}`);
+    records.set(`promo:monthly:code:${digest}`, 'monthly-id');
+    records.set('promo:monthly:entitlement:monthly-id', { active: true, currentCodeDigest: digest });
+    result = await verify('SAVE50');
+    assert.match(result.body.message, /Monthly Users/);
+    attempts = 60;
+    result = await verify('SAVE50');
+    assert.equal(result.statusCode, 429);
+    t.mock.method(console, 'error', () => {});
+    redis.eval.mock.mockImplementation(async () => { throw new Error('Storage unavailable'); });
+    result = await verify('SAVE50');
+    assert.equal(result.statusCode, 503);
+    assert.match(result.body.message, /temporarily unavailable/);
 });
 
 test('weekday and Saturday booking slots are accepted, while Sunday and mismatched times are rejected', async (t) => {

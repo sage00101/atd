@@ -7,6 +7,7 @@ import yocoCheckout from '../handlers/yoco-checkout.js';
 import monthlyValidation from '../handlers/monthly-validation.js';
 import bookingRequests from '../handlers/booking-requests.js';
 import bookingRequestsAdmin from '../handlers/booking-requests-admin.js';
+import promoValidation from '../handlers/promo-validation.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -19,6 +20,7 @@ const handlers = {
     'monthly-validate': monthlyValidation,
     'booking-request': bookingRequests,
     'booking-request-admin': bookingRequestsAdmin,
+    'promo-validate': promoValidation,
 };
 
 function getRoute(req) {

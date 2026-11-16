@@ -36,6 +36,7 @@ const TERMS_BOOKLET_URL = `${import.meta.env.BASE_URL}assets/${encodeURIComponen
 const CANCEL_BOOKING_ENDPOINT = `${API_BASE_URL}/api/bookings/cancel`;
 const BOOKING_REQUEST_ENDPOINT = `${API_BASE_URL}/api/bookings/request`;
 const MONTHLY_VALIDATION_ENDPOINT = `${API_BASE_URL}/api/monthly/validate`;
+const PROMO_VALIDATION_ENDPOINT = `${API_BASE_URL}/api/promo/validate`;
 const AVAILABILITY_API_ENDPOINT = `${API_BASE_URL}/api/bookings/availability`;
 const AVAILABILITY_REFRESH_MS = 30_000;
 const BOOKING_CLOCK_REFRESH_MS = 10_000;
@@ -226,6 +227,8 @@ export default function BookingSection() {
             return '';
         }
     });
+    const [promoCheck, setPromoCheck] = useState({ code: '', status: 'idle' });
+    const [promoRetry, setPromoRetry] = useState(0);
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [contractAccepted, setContractAccepted] = useState(false);
     const [contractFiles, setContractFiles] = useState([]);
@@ -250,6 +253,47 @@ export default function BookingSection() {
         window.addEventListener('a10tion-promo-code-updated', syncPromoCode);
         return () => window.removeEventListener('a10tion-promo-code-updated', syncPromoCode);
     }, []);
+
+    useEffect(() => {
+        const code = promoCode.trim().toUpperCase();
+        if (!checkoutOpen || purchaseType !== 'single' || !code) {
+            setPromoCheck({ code: '', status: 'idle' });
+            return undefined;
+        }
+        const controller = new AbortController();
+        setPromoCheck({ code, status: 'checking' });
+        const timer = window.setTimeout(async () => {
+            try {
+                const response = await fetch(PROMO_VALIDATION_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ promoCode: code }),
+                    signal: controller.signal,
+                });
+                if (response.status === 404) {
+                    setPromoCheck({ code, status: 'error', message: 'Promo verification is not available yet. Please contact us.' });
+                    return;
+                }
+                const result = await response.json();
+                if (!response.ok) {
+                    setPromoCheck({ code, status: 'error', message: result.message || 'Promo code could not be verified.' });
+                } else if (result.valid === true && Number.isFinite(result.discountPercent)
+                    && result.discountPercent > 0 && result.discountPercent <= 100) {
+                    setPromoCheck({ code, status: 'valid', discountPercent: result.discountPercent });
+                } else {
+                    setPromoCheck({ code, status: 'error', message: 'Promo code could not be verified. Please try again.' });
+                }
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    setPromoCheck({ code, status: 'error', message: 'Promo verification is temporarily unavailable. Please try again.' });
+                }
+            }
+        }, 400);
+        return () => {
+            window.clearTimeout(timer);
+            controller.abort();
+        };
+    }, [checkoutOpen, purchaseType, promoCode, promoRetry]);
 
     const today = startOfDay(now);
     const todayKey = dateKey(today);
@@ -530,6 +574,10 @@ export default function BookingSection() {
 
     const selectedPackageName = packageNames[selectedPackage] || 'Single Wash';
     const isMonthly = purchaseType === 'monthly';
+    const normalisedPromoCode = promoCode.trim().toUpperCase();
+    const promoApplied = !isMonthly && normalisedPromoCode && promoCheck.code === normalisedPromoCode && promoCheck.status === 'valid';
+    const singleWashPrice = SINGLE_WASH_BASE_PRICES[selectedVehicleType];
+    const promoDiscount = promoApplied && singleWashPrice ? Math.round(singleWashPrice * promoCheck.discountPercent / 100) : 0;
     const requiresMonthlyContract = isMonthly && selectedContract !== '1-months';
     const selectedPackageData = Object.values(packageGroups).flatMap((group) => group.packages).find((item) => item.id === selectedPackage);
     const selectedBusinessRateCents = selectedPackageData?.fleetRates
@@ -547,9 +595,10 @@ export default function BookingSection() {
             return formatZarFromCents(selectedFleetMonthlyTotalCents * Number(term));
         }
         if (term === '1') return pkg?.monthlyPrices?.[vehicleIndex]?.[1] || '';
-        const priceList = term === '3' ? pkg?.threeMonthPrices : term === '6' ? pkg?.sixMonthPrices : term === '12' ? pkg?.twelveMonthPrices : null;
+        const priceList = term === '3' ? pkg?.threeMonthPrices : null;
         return vehicleIndex >= 0 ? priceList?.[vehicleIndex] || '' : '';
     })();
+    const checkoutTotal = isMonthly ? selectedMonthlyTotal : singleWashPrice ? formatZarFromCents(singleWashPrice - promoDiscount) : '';
     const missingSelection = !selectedDate
         ? 'Choose a date to continue'
         : !selectedTime
@@ -587,6 +636,11 @@ export default function BookingSection() {
     const beginSecurePayment = async (event) => {
         event.preventDefault();
         if (missingSelection || isSubmitting) return;
+
+        if (!isMonthly && normalisedPromoCode && !promoApplied) {
+            setPaymentError('Please wait for your promo code to be verified, or remove it to continue at the standard price.');
+            return;
+        }
 
         if (!serviceAddressValid) {
             setPaymentError('Please enter your service address.');
@@ -668,7 +722,7 @@ export default function BookingSection() {
                 businessEmailSent: result.emailStatus?.businessSent,
             });
         } catch (error) {
-            setPaymentError(error instanceof Error ? error.message : 'Secure payment could not be started. Please try again.');
+            setPaymentError(error instanceof Error ? error.message : 'Your booking request could not be submitted. Please try again.');
         } finally {
             setIsSubmitting(false);
         }
@@ -977,15 +1031,15 @@ export default function BookingSection() {
                                 </h2>
 
                                 <p className='mt-4 max-w-md text-[12px] leading-[1.7] text-white/65'>
-                                    Everything you need to get your monthly wash package confirmed and ready for payment.
+                                    Submit your booking request for review before completing your booking.
                                 </p>
 
                                 <div className='mt-9 space-y-4'>
                                     {[
-                                        'Your selected monthly package and appointment.',
+                                        isMonthly ? 'Your selected monthly package and appointment.' : 'Your selected single wash and appointment.',
                                         'Your vehicle and service address details.',
-                                        'Your completed package documents.',
-                                        'Secure Yoco checkout or payment on arrival.',
+                                        ...(requiresMonthlyContract ? ['Your completed package documents.'] : []),
+                                        'After approval, complete your booking and pay online or on arrival.',
                                     ].map((step, index) => (
                                         <div key={step} className='flex items-start gap-3'>
                                             <span className='grid h-7 w-7 shrink-0 place-items-center rounded-full border border-white/15 bg-white/[0.06] text-[8px] font-semibold text-[#c9ddce]'>
@@ -1035,15 +1089,15 @@ export default function BookingSection() {
 
                                 <div className='mt-4 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center rounded-2xl border border-sage/20 bg-[#edf4ee] p-3.5'>
                                     <div className='min-w-0'>
-                                        <p className='text-[8px] font-semibold uppercase tracking-[0.11em] text-sage'>Monthly package selected</p>
+                                        <p className='text-[8px] font-semibold uppercase tracking-[0.11em] text-sage'>{isMonthly ? 'Monthly package selected' : 'Single wash selected'}</p>
                                         <p className='mt-1 truncate text-[11px] font-semibold text-ink sm:text-[12px]'>{selectedPackageName}</p>
+                                        {!isMonthly && selectedVehicleType && <p className='mt-0.5 text-[9px] text-body'>{selectedVehicleType}</p>}
                                         {selectedPackage === 'business-standard' && selectedFleetSizeTier && (
                                             <>
                                                 <p className='mt-0.5 text-[9px] text-body'>{selectedFleetVehicleCount} vehicles · {selectedFleetSizeTier} tier · {selectedVehicleType}</p>
                                                 {selectedBusinessRateCents && <p className='mt-1 text-[9px] text-body'>{formatZarFromCents(selectedBusinessRateCents)} per vehicle / month · Fleet monthly total: {formatZarFromCents(selectedFleetMonthlyTotalCents)}</p>}
                                             </>
                                         )}
-                                        {selectedMonthlyTotal && <p className='mt-1 text-[10px] font-semibold text-sagedeep'>Amount due at checkout ({getContractLabel(selectedContract)}): {selectedMonthlyTotal}</p>}
                                     </div>
                                     <div className='rounded-xl border border-sage/15 bg-white/65 px-3 py-2 text-left sm:text-right'>
                                         <p className='text-[8px] font-medium text-body'>Appointment</p>
@@ -1051,6 +1105,18 @@ export default function BookingSection() {
                                             {dateFormatter.format(selectedDate)} · {selectedTime}
                                         </p>
                                     </div>
+                                </div>
+
+                                <div className='mt-3 rounded-2xl bg-gradient-to-br from-[#183b29] to-[#315f41] p-5 text-white shadow-[0_12px_30px_-18px_rgba(20,49,29,.7)]' aria-live='polite' aria-atomic='true'>
+                                    <p className='text-[10px] font-bold uppercase tracking-[0.14em] text-[#c8dfcd]'>Total:</p>
+                                    <p className='mt-1 text-3xl font-bold tracking-tight tabular-nums sm:text-4xl'>{checkoutTotal || 'Select a package'}</p>
+                                    {promoApplied ? (
+                                        <p className='mt-2 text-xs font-semibold text-[#d9f4dc]'>Promo applied: {promoCheck.discountPercent}% off · You save {formatZarFromCents(promoDiscount)}</p>
+                                    ) : isMonthly ? (
+                                        <p className='mt-2 text-xs text-[#d3e6d6]'>{getContractLabel(selectedContract)} package total</p>
+                                    ) : !normalisedPromoCode ? (
+                                        <p className='mt-2 text-xs text-[#d3e6d6]'>Single wash · {selectedVehicleType}</p>
+                                    ) : null}
                                 </div>
 
                                 <form className='mt-4 flex flex-1 flex-col text-left' onSubmit={beginSecurePayment}>
@@ -1098,19 +1164,33 @@ export default function BookingSection() {
                                     </div>
 
                                     {!isMonthly && (
-                                        <label className='mt-3.5 block text-left'>
+                                        <div className='mt-3.5 text-left'>
+                                            <label className='block'>
                                             <span className='mb-1 block text-[8.5px] font-semibold text-ink sm:text-[9.5px]'>Promo code <span className='font-normal text-body/55'>(optional)</span></span>
                                             <input
                                                 className={`${fieldClassName} uppercase`}
                                                 name='promoCode'
                                                 value={promoCode}
-                                                onChange={(event) => setPromoCode(event.target.value)}
+                                                onChange={(event) => { setPromoCode(event.target.value); setPaymentError(''); }}
                                                 placeholder='Paste your unlocked code'
                                                 autoCapitalize='characters'
                                                 autoComplete='off'
                                             />
                                             <span className='mt-1 block text-[8px] leading-[1.45] text-body/65 sm:text-[9px]'>Single-wash codes give 50% off once. Monthly Clients should use the dedicated monthly booking flow.</span>
-                                        </label>
+                                            {normalisedPromoCode && (
+                                                <span role='status' aria-live='polite' className={`mt-2 block text-xs font-semibold ${promoApplied ? 'text-emerald-700' : promoCheck.code === normalisedPromoCode && promoCheck.status === 'error' ? 'text-red-700' : 'text-body'}`}>
+                                                    {promoApplied
+                                                        ? `Promo code verified - ${promoCheck.discountPercent}% deducted.`
+                                                        : promoCheck.code === normalisedPromoCode && promoCheck.status === 'error'
+                                                            ? promoCheck.message
+                                                            : 'Checking promo code…'}
+                                                </span>
+                                            )}
+                                            </label>
+                                            {normalisedPromoCode && promoCheck.code === normalisedPromoCode && promoCheck.status === 'error' && (
+                                                <button type='button' onClick={() => setPromoRetry((current) => current + 1)} className='mt-2 text-xs font-semibold text-sagedeep underline underline-offset-2'>Retry promo check</button>
+                                            )}
+                                        </div>
                                     )}
 
                                     <AddressPicker address={customer.address} onAddressChange={updateAddress} onLocationChange={setServiceLocation} />
@@ -1212,7 +1292,7 @@ export default function BookingSection() {
 
                                     <div className='mt-4 flex items-start gap-2 rounded-xl bg-sagelight/65 px-3 py-2.5'>
                                         <ShieldCheck className='mt-0.5 size-3.5 shrink-0 text-sage' />
-                                        <p className='text-[8.5px] leading-[1.45] text-body sm:text-[9.5px]'>Choose secure online payment or pay by card machine on-site. Your booking is confirmed immediately; monthly-client washes covered by an active entitlement require no payment.</p>
+                                        <p className='text-[8.5px] leading-[1.45] text-body sm:text-[9.5px]'>Choose how you would like to pay. After your request is approved, continue to complete your booking and pay online or on arrival.</p>
                                     </div>
 
                                     <fieldset className='mt-3'>
@@ -1253,7 +1333,7 @@ export default function BookingSection() {
                                         >
                                             {isSubmitting
                                                 ? <><LoaderCircle className='size-3.5 animate-spin' /> Confirming booking…</>
-                                                : <>{paymentMethod === 'online' ? 'Continue to secure payment' : 'Confirm booking · pay on arrival'} <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' /></>}
+                                                : <>Submit booking request <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' /></>}
                                         </button>
                                     </div>
                                 </form>

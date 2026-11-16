@@ -4,7 +4,7 @@ import { redis } from './redis.js';
 import { generateReferenceNumber } from './reference.js';
 import { businessFleetRates, getBusinessFleetRateCents, getBusinessFleetTierForCount } from '../../../shared/business-pricing.js';
 import { BOOKING_SLOT_TIMES } from '../../../shared/booking-schedule.js';
-import { getMonthlyContractMonths } from '../../../shared/monthly-contract.js';
+import { getOnlineMonthlyContractMonths } from '../../../shared/monthly-contract.js';
 
 const PENDING_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 3; // 3 days — abandoned checkouts expire
 const CONFIRMED_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year — keep the slot blocked long-term
@@ -125,7 +125,7 @@ export function getMonthlyPackagePriceCents(packageId, vehicleType, fleetSizeTie
 }
 
 export function getMonthlyPackageTotalCents(packageId, vehicleType, fleetSizeTier, fleetVehicleCount, contractOption = '1-months') {
-    const contractMonths = getMonthlyContractMonths(contractOption, packageId);
+    const contractMonths = getOnlineMonthlyContractMonths(contractOption, packageId);
     if (!contractMonths) return undefined;
     const pricePerVehicle = getMonthlyPackagePriceCents(packageId, vehicleType, fleetSizeTier, fleetVehicleCount);
     if (!pricePerVehicle) return undefined;

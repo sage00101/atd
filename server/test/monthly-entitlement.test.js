@@ -9,7 +9,30 @@ const redis = {
     async exists(key) {
         return values.has(key) ? 1 : 0;
     },
+    async set(key, value) {
+        values.set(key, value);
+    },
+    async zrange() {
+        return [];
+    },
+    async lrange() {
+        return [];
+    },
     async eval(script, keys, args) {
+        if (script.includes("entitlement.creditsAvailable ~= nil and entitlement.creditsReserved ~= nil")) {
+            return ['OK', values.get(keys[0])];
+        }
+        if (script.includes("local nextRecord = cjson.decode(ARGV[1])")) {
+            values.set(keys[0], JSON.parse(args[0]));
+            return 'OK';
+        }
+        if (script.includes("local nextRecord = cjson.decode(ARGV[2])")) {
+            const next = JSON.parse(args[1]);
+            next.creditsAvailable = Number(args[3]);
+            next.creditsReserved = 0;
+            values.set(keys[0], next);
+            return ['OK', next];
+        }
         if (script.includes("local existingPurchase = redis.call('GET', KEYS[5])")) {
             const entitlement = JSON.parse(args[0]);
             values.set(keys[0], entitlement);
@@ -45,7 +68,13 @@ mock.module('../api/_lib/email.js', {
     },
 });
 
-const { provisionMonthlyEntitlementFromPaidPurchase } = await import('../api/_lib/monthly-promos.js');
+const {
+    provisionMonthlyEntitlementFromPaidPurchase,
+    createMonthlyEntitlement,
+    updateMonthlyEntitlement,
+    changeMonthlyEntitlementPackage,
+    recordMonthlyEntitlementPayment,
+} = await import('../api/_lib/monthly-promos.js');
 
 test('paid package provisioning grants term credits minus the initial website wash', async () => {
     const dateParts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
@@ -99,5 +128,71 @@ test('paid package provisioning grants term credits minus the initial website wa
             assert.ok(entitlement.code);
             if (entitlement.creditsAvailable > 0) assert.equal(result.emailStatus, 'accepted');
         }
+    }
+});
+
+test('new manual business packages and payments reject legacy terms while existing records remain editable', async () => {
+    const existing = {
+        id: 'existing-client',
+        customerName: 'Test Customer',
+        firstName: 'Test',
+        surname: 'Customer',
+        email: 'monthly-test@example.test',
+        customerPhone: '0712345678',
+        clientType: 'business',
+        packageTier: 'standard',
+        packageId: 'business-standard',
+        vehicleType: 'Sedan / Hatchback',
+        contractOption: '6-months',
+        monthlyAllowance: 1,
+        validFrom: '2025-01-01',
+        validUntil: '2025-06-30',
+        creditsAvailable: 0,
+        creditsReserved: 0,
+        active: true,
+        archived: false,
+        code: 'ATDM-TESTCODE',
+    };
+    values.clear();
+    values.set(`promo:monthly:entitlement:${existing.id}`, existing);
+
+    const updated = await updateMonthlyEntitlement(existing.id, { businessName: 'Updated business' });
+    assert.equal(updated.contractOption, '6-months');
+    assert.equal(updated.businessName, 'Updated business');
+
+    for (const contractOption of ['6-months', '12-months']) {
+        await assert.rejects(createMonthlyEntitlement({ ...existing, contractOption }), /1 or 3 months/);
+        await assert.rejects(changeMonthlyEntitlementPackage({
+            entitlementId: existing.id,
+            clientType: 'business',
+            packageTier: 'standard',
+            vehicleType: existing.vehicleType,
+            contractOption,
+            amountCents: 50000,
+            paymentDate: '2025-01-01',
+        }), /1 or 3 months/);
+        await assert.rejects(recordMonthlyEntitlementPayment({
+            entitlementId: existing.id,
+            contractOption,
+            amountCents: 50000,
+            paymentDate: '2025-01-01',
+        }), /1 or 3 months/);
+    }
+
+    await assert.rejects(updateMonthlyEntitlement(existing.id, { contractOption: '12-months' }), /1 or 3 months/);
+
+    for (const months of [1, 3]) {
+        values.set(`promo:monthly:entitlement:${existing.id}`, existing);
+        const changed = await changeMonthlyEntitlementPackage({
+            entitlementId: existing.id,
+            clientType: 'business',
+            packageTier: 'standard',
+            vehicleType: existing.vehicleType,
+            contractOption: `${months}-months`,
+            amountCents: 50000,
+            paymentDate: '2025-01-01',
+        });
+        assert.equal(changed.creditsAvailable, months);
+        assert.equal(changed.contractOption, `${months}-months`);
     }
 });

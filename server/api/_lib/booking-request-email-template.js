@@ -35,6 +35,25 @@ function tableRows(entries) {
         </tr>`).join('');
 }
 
+function pricingEntries(booking) {
+    const pricing = booking.pricingSummary;
+    if (!pricing || !Number.isSafeInteger(pricing.totalAmountCents) || pricing.totalAmountCents < 0) {
+        return [['Requested total', 'Unavailable for this request; please contact us for details.']];
+    }
+    const formatZar = (cents) => `R${(cents / 100).toFixed(2)}`;
+    if (pricing.monthlyCovered) {
+        return [['Requested total', `${formatZar(pricing.totalAmountCents)} (covered by monthly credits)`]];
+    }
+    if (pricing.promoPending && Number.isSafeInteger(pricing.originalAmountCents)) {
+        return [
+            ['Standard price', formatZar(pricing.originalAmountCents)],
+            ['Estimated total if promo is valid', formatZar(pricing.totalAmountCents)],
+            ['Promo status', 'Not yet verified; checked when booking is completed.'],
+        ];
+    }
+    return [['Requested total', formatZar(pricing.totalAmountCents)]];
+}
+
 function bookingEntries(request) {
     const booking = request.booking || {};
     const customer = booking.customer || {};
@@ -75,6 +94,8 @@ function bookingEntries(request) {
         ['Monthly entitlement code', booking.bookingType === 'monthly-entitlement' ? booking.promoCode : ''],
         ['Promo code', booking.bookingType === 'monthly-entitlement' ? '' : booking.promoCode],
         ['Payment method requested', booking.requestedPaymentMethod],
+        ...pricingEntries(booking),
+        ['Pricing note', 'Requested totals are not payment confirmation. Final pricing is confirmed when the booking is completed.'],
         ['Contract accepted', booking.contractAccepted ? 'Yes' : 'No'],
         ['Service area accepted', booking.serviceAreaAccepted == null ? '' : booking.serviceAreaAccepted ? 'Yes' : 'No'],
         ['Booking terms accepted', booking.termsAccepted ? 'Yes' : 'No'],
@@ -83,7 +104,7 @@ function bookingEntries(request) {
         'customer', 'serviceLocation', 'contractFileBase64', 'approvalToken', 'requestedPaymentMethod',
         'bookingDate', 'bookingTime', 'packageName', 'packageId', 'vehicleType', 'monthlyClientType',
         'monthlyPackageTier', 'bookingType', 'purchaseType', 'promoCode', 'contractAccepted',
-        'serviceAreaAccepted', 'termsAccepted', 'fleetSizeTier', 'fleetVehicleCount',
+        'serviceAreaAccepted', 'termsAccepted', 'fleetSizeTier', 'fleetVehicleCount', 'pricingSummary',
     ]);
     for (const [key, value] of Object.entries(booking)) {
         if (!excluded.has(key)) fields.push([key, value]);

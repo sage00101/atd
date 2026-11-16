@@ -81,7 +81,7 @@ export const packageGroups = {
                 imageAlt: 'Business, fleet or family one-wash monthly package',
                 fleetRates: businessFleetRates,
                 monthlyPrices: businessVehicleTypes.map((vehicle) => [vehicle, '']),
-                monthlyNote: 'Rates per car, per wash',
+                monthlyNote: 'Rates per vehicle, per month',
                 fleetNote: 'Do you have different types of vehicles on the same premises?',
                 fleetExample: 'Eg 1x Hatch, 2x Bakkies and 1x Minivan',
                 details: [

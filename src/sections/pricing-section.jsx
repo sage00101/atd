@@ -45,7 +45,7 @@ function readContractDuration() {
     try {
         const storedContract = sessionStorage.getItem('a10tion-selected-contract') || '';
         const months = storedContract.match(/^(\d+)-months$/)?.[1];
-        return months || '';
+        return ['1', '3'].includes(months) ? months : '';
     } catch {
         return '';
     }
@@ -197,8 +197,6 @@ function PackageDetailsModal({ pkg, open, onClose }) {
     const hasPackagePricing = Array.isArray(pkg.monthlyPrices);
     const contractTotalRows = [
         ['3-month contract totals', pkg.threeMonthPrices, pkg.threeMonthNote],
-        ['6-month contract totals', pkg.sixMonthPrices, pkg.sixMonthNote ?? null],
-        ['12-month contract totals', pkg.twelveMonthPrices, pkg.twelveMonthNote ?? null],
     ].filter(([, totals]) => Array.isArray(totals));
 
     return (
@@ -449,7 +447,7 @@ export default function PricingSection() {
     const openContractModal = (pkg, button) => {
         lastButtonRef.current = button;
         setPendingPackage(pkg);
-        setContractMonths(pkg.id.startsWith('private-') ? '3' : readContractDuration());
+        setContractMonths(pkg.id.startsWith('private-') ? '3' : (readContractDuration() || '1'));
         setContractPrompted(false);
         setContractDownloaded(readContractDownloadState());
         setSelectedPackageVehicle(readSingleWashVehicle());
@@ -509,7 +507,7 @@ export default function PricingSection() {
     }, [pendingPackage]);
 
     const activeData = packageGroups[activeGroup];
-    const pendingContractOptions = pendingPackage?.id.startsWith('private-') ? [1, 3] : [1, 3, 6, 12];
+    const pendingContractOptions = pendingPackage ? [1, 3] : [];
 
     return (
         <section id='pricing' className='px-3 pt-10 sm:px-4 sm:pt-12 md:px-8 lg:px-10 lg:pt-14'>
@@ -589,7 +587,15 @@ export default function PricingSection() {
                                 );
                             })}
                         </div>
-                        <p className='mx-auto mt-2 max-w-[540px] text-center text-[10px] font-medium text-body sm:text-[11.5px]'>Package duration options: {activeGroup === 'private' ? '1 or 3 months' : '1, 3, 6, or 12 months'}.</p>
+                        <div className='mx-auto mt-2 flex max-w-[640px] flex-col items-center gap-2 text-center sm:flex-row sm:justify-center'>
+                            <p className='text-[10px] font-medium text-body sm:text-[11.5px]'>Available packages</p>
+                            {activeGroup === 'business' && (
+                                <a href='#contact' className='group inline-flex min-h-9 items-center justify-center gap-2 rounded-full border border-[#cbdace] bg-white px-4 text-[10px] font-semibold text-[#294633] shadow-sm transition hover:border-[#91ae98] hover:bg-[#edf4ee] sm:text-[11px]'>
+                                    Need a different fleet term? Request a quote
+                                    <ArrowRight className='size-3.5 transition-transform group-hover:translate-x-1' />
+                                </a>
+                            )}
+                        </div>
 
                         <div className={`mt-3 grid items-start gap-3 sm:gap-4 ${activeData.packages.length === 1 ? 'sm:mx-auto sm:max-w-xl sm:grid-cols-1' : 'sm:grid-cols-2'}`}>
                             {activeData.packages.map((pkg) => (
@@ -620,7 +626,7 @@ export default function PricingSection() {
                         </div>
 
                         <div className='min-h-0 overflow-y-auto overscroll-contain p-3.5 text-left sm:p-5'>
-                            <p className='text-[13px] leading-[1.5] text-body'>Choose your package length and vehicle. One-month packages do not require the contract or Terms &amp; Conditions PDFs. Longer contracts require the signed contract during checkout.</p>
+                            <p className='text-[13px] leading-[1.5] text-body'>Choose your vehicle and an online 1- or 3-month package. One-month packages need no contract PDFs. For a 3-month package, download both PDFs and upload your completed, signed supplier contract. You must still accept the website Terms &amp; Conditions.</p>
 
                             {Array.isArray(pendingPackage.fleetRates) && (
                                 <div className={`mt-3 rounded-[12px] border border-line bg-[#fafcfb] p-3 ${contractPrompted && !selectedFleetSizeTier ? 'ring-2 ring-sage/30 ring-offset-2' : ''}`}>
@@ -736,8 +742,6 @@ export default function PricingSection() {
                                         : vehicleIndex >= 0 ? pendingPackage.monthlyPrices[vehicleIndex][1] : '';
                                     const totalsByMonths = {
                                         3: pendingPackage.threeMonthPrices,
-                                        6: pendingPackage.sixMonthPrices,
-                                        12: pendingPackage.twelveMonthPrices,
                                     };
                                     const fleetMonthlyTotalCents = fleetRate * selectedFleetVehicleCount;
                                     const contractTotal = fleetRate
