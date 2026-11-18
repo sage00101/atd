@@ -101,7 +101,7 @@ const faqGroups = [
             {
                 question: 'What areas do you cover?',
                 answer:
-                    'Greater Southern Suburbs – Muizenberg, Plumstead, Newlands, Claremont, Tokai, Constantia, Bergvleit, Bishops Court.'
+                    'Selected Cape Town areas only. All bookings are subject to confirmation. A10tion to Detail reserves the right to confirm or decline any booking based on availability and location'
             }
         ],
     },
