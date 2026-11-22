@@ -783,7 +783,17 @@ export async function getMonthlyPromoForCode(code) {
 }
 
 export async function createMonthlyEntitlement(input) {
-    const details = validateEntitlementInput({ ...input, requireSeparateName: true });
+    const validated = validateEntitlementInput({ ...input, requireSeparateName: true });
+    const contractMonths = getAvailableMonthlyContractMonths(
+        validated.contractOption,
+        `${validated.clientType}-${validated.packageTier}`,
+    );
+    // The full contract's credits are granted up front; the monthly booking cap is unchanged.
+    const creditsPurchased = validated.monthlyAllowance * contractMonths;
+    const details = {
+        ...validated,
+        validUntil: validated.validUntil || addDays(addMonthsClamped(validated.validFrom, contractMonths), -1),
+    };
     const id = crypto.randomUUID();
     const code = await createUniqueCode();
     const now = new Date().toISOString();
@@ -795,11 +805,11 @@ export async function createMonthlyEntitlement(input) {
         codeDigests: [digest(code)],
         codes: [{ code, digest: digest(code), createdAt: now }],
         billingAnchor: details.validFrom,
-        billingCyclesPaid: getBillingCycleCount(details.validFrom, details.validUntil) || 1,
-        creditsAvailable: details.monthlyAllowance,
+        billingCyclesPaid: getBillingCycleCount(details.validFrom, details.validUntil) || contractMonths,
+        creditsAvailable: creditsPurchased,
         creditsReserved: 0,
         creditsUsedTotal: 0,
-        creditsGrantedTotal: details.monthlyAllowance,
+        creditsGrantedTotal: creditsPurchased,
         contractOption: details.contractOption,
         paymentHistory: [],
         active: true,
@@ -807,7 +817,7 @@ export async function createMonthlyEntitlement(input) {
         createdAt: now,
         updatedAt: now,
         codeHistory: [],
-        auditHistory: [{ action: 'created', createdAt: now }],
+        auditHistory: [{ action: 'created', creditsAdded: creditsPurchased, contractOption: details.contractOption, createdAt: now }],
     };
     const result = await redis.eval(CREATE_ENTITLEMENT_SCRIPT, [
         entitlementKey(id),

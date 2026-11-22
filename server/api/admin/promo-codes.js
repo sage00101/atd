@@ -424,8 +424,16 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
     <label class="field-label">Package type<select class="manager-select" name="clientType" required><option value="private">Private Client</option><option value="business">Business / Fleet / Family</option></select></label>
     <label class="field-label">Package level<select class="manager-select" name="packageTier" required><option value="standard">Standard · 2 washes per calendar month</option><option value="premium">Premium · 4 washes per calendar month</option></select></label>
     <label class="field-label">Vehicle category<select class="manager-select" name="vehicleType" required><option value="">Choose vehicle…</option><option>Sedan / Hatchback</option><option>SUV / Bakkie</option><option>Minibus / Van</option></select></label>
+    <div class="field-label field-full">Contract length
+      <input id="monthlyContractOption" name="contractOption" type="hidden" value="1-months">
+      <div id="monthlyContractTabs" class="promo-tabs" role="tablist" aria-label="Contract length" style="margin:6px 0 0">
+        <button class="promo-tab" type="button" role="tab" data-contract="1-months" aria-selected="true">1 month contract</button>
+        <button class="promo-tab" type="button" role="tab" data-contract="3-months" aria-selected="false">3 month contract</button>
+      </div>
+      <span id="monthlyContractHint" class="hint"></span>
+    </div>
     <label class="field-label">Active from<input class="manager-input" name="validFrom" type="date" required></label>
-    <label class="field-label">Active until <span class="optional">(optional)</span><input class="manager-input" name="validUntil" type="date"></label>
+    <label class="field-label">Active until <span class="optional">(auto-filled from contract; adjust if needed)</span><input class="manager-input" name="validUntil" type="date"></label>
     <div class="field-full manager-form-actions">
       <button id="monthlySubmit" type="submit">Save client</button>
       <button id="monthlyCancel" class="secondary" type="button">Cancel</button>
@@ -715,6 +723,8 @@ const monthlyStatsNode=document.getElementById('monthlyStats');
 const connStateNode=document.getElementById('connState');
 const monthlyEmpty=document.getElementById('monthlyEmpty');
 const monthlySubmit=document.getElementById('monthlySubmit');
+const monthlyContractOption=document.getElementById('monthlyContractOption');
+const monthlyContractHint=document.getElementById('monthlyContractHint');
 const monthlyFormNotice=document.getElementById('monthlyFormNotice');
 const bulkEmailNotice=document.getElementById('bulkEmailNotice');
 const monthlyCancel=document.getElementById('monthlyCancel');
@@ -1174,12 +1184,34 @@ async function loadMonthlyEntitlements(){
     setStatus(error.message,'error');
   }finally{monthlyCards.removeAttribute('aria-busy');}
 }
+function monthlyAllowanceFor(){
+  return monthlyForm.elements.clientType.value==='business'?1:monthlyForm.elements.packageTier.value==='premium'?4:2;
+}
+function computeContractEnd(from,months){
+  const [y,m,d]=from.split('-').map(Number);
+  if(!y||!m||!d)return '';
+  const idx=y*12+m-1+months;
+  const ty=Math.floor(idx/12),tm=idx%12;
+  const day=Math.min(d,new Date(Date.UTC(ty,tm+1,0)).getUTCDate());
+  const end=new Date(Date.UTC(ty,tm,day-1));
+  return end.toISOString().slice(0,10);
+}
+function setMonthlyContract(value,{updateEnd=true}={}){
+  const months=value==='3-months'?3:1;
+  monthlyContractOption.value=months+'-months';
+  document.querySelectorAll('#monthlyContractTabs .promo-tab').forEach(tab=>tab.setAttribute('aria-selected',String(tab.dataset.contract===monthlyContractOption.value)));
+  const allowance=monthlyAllowanceFor();
+  monthlyContractHint.textContent=months+' month'+(months===1?'':'s')+' · '+(allowance*months)+' wash credits granted now · booking cap '+allowance+' per calendar month';
+  if(updateEnd&&monthlyForm.elements.validFrom.value)monthlyForm.elements.validUntil.value=computeContractEnd(monthlyForm.elements.validFrom.value,months);
+}
 function resetMonthlyForm(){
   monthlyForm.reset();
   syncMonthlyPackageTierOptions();
   document.getElementById('monthlyId').value='';
   const now=new Date();
   monthlyForm.elements.validFrom.value=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');
+  document.querySelectorAll('#monthlyContractTabs .promo-tab').forEach(tab=>tab.disabled=false);
+  setMonthlyContract('1-months');
   document.getElementById('monthlyFormTitle').textContent='Create monthly entitlement';
   monthlySubmit.textContent='Save client';
   monthlyCancel.hidden=false;
@@ -1205,6 +1237,9 @@ function editMonthlyEntitlement(record){
   monthlyForm.elements.vehicleType.value=record.vehicleType||'';
   monthlyForm.elements.validFrom.value=record.validFrom;
   monthlyForm.elements.validUntil.value=record.validUntil||'';
+  monthlyContractOption.value=record.contractOption||'1-months';
+  document.querySelectorAll('#monthlyContractTabs .promo-tab').forEach(tab=>{tab.disabled=true;tab.setAttribute('aria-selected',String(tab.dataset.contract===monthlyContractOption.value));});
+  monthlyContractHint.textContent='Contract length is fixed for existing clients. Use Record payment or New Package to add a term.';
   document.getElementById('monthlyFormTitle').textContent='Edit monthly entitlement';
   monthlySubmit.textContent='Save changes';
   monthlyForm.scrollIntoView({behavior:'smooth',block:'start'});
@@ -1287,6 +1322,16 @@ monthlyForm.addEventListener('submit',async event=>{
   finally{monthlySubmit.disabled=false;}
 });
 monthlyCancel.addEventListener('click',resetMonthlyForm);
+document.getElementById('monthlyContractTabs').addEventListener('click',event=>{
+  const tab=event.target.closest('.promo-tab');
+  if(tab&&!tab.disabled)setMonthlyContract(tab.dataset.contract);
+});
+monthlyForm.elements.validFrom.addEventListener('change',()=>{
+  if(!document.getElementById('monthlyId').value)setMonthlyContract(monthlyContractOption.value);
+});
+['clientType','packageTier'].forEach(name=>monthlyForm.elements[name].addEventListener('change',()=>{
+  if(!document.getElementById('monthlyId').value)setMonthlyContract(monthlyContractOption.value,{updateEnd:false});
+}));
 monthlyForm.elements.clientType.addEventListener('change',()=>{
   syncMonthlyPackageTierOptions();
   if(monthlyForm.elements.clientType.value==='business'&&monthlyForm.elements.packageTier.value==='premium')monthlyForm.elements.packageTier.value='standard';
