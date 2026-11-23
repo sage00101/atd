@@ -180,6 +180,8 @@ export default async function handler(req, res) {
         customerMobile: meta.customerMobile || pending?.customer?.mobile,
         address: pending?.customer?.address,
         monthlyCode: monthlyProvisioning?.monthlyCode || '',
+        monthlyPurchaseNeedsReview: monthlyProvisioning?.status === 'needs_manager',
+        receiptIdempotencyKey: monthlyProvisioning ? `monthly-paid-receipt-${paidBooking.reference}` : undefined,
         originalAmountZar: formatZar(originalAmountCents),
         discountZar: discountCents > 0 ? formatZar(discountCents) : null,
         amountZar: formatZar(amountCents),
@@ -190,9 +192,14 @@ export default async function handler(req, res) {
     };
 
     try {
-        await sendReceiptEmail(receipt);
+        const result = await sendReceiptEmail(receipt);
+        if (monthlyProvisioning && result?.skipped) throw new Error('Monthly purchase receipt email is not configured.');
     } catch (err) {
         console.error('[receipt email failed]', receipt.reference, err);
+        if (monthlyProvisioning) {
+            res.status(503).send('monthly receipt email failed');
+            return;
+        }
     }
 
     // Keep the slot durably blocked (booking stays, just flipped to "paid").

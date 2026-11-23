@@ -241,6 +241,7 @@ export async function sendReceiptEmail(receipt) {
             subject,
             html,
             replyTo: BOOKINGS_EMAIL,
+            idempotencyKey: receipt.receiptIdempotencyKey,
         })
         : Promise.resolve({ skipped: true });
 

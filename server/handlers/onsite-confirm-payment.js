@@ -21,9 +21,9 @@ export default async function handler(req, res) {
         return;
     }
 
-    const expectedKey = process.env.ADMIN_API_KEY;
+    const expectedKeys = [process.env.ADMIN_API_KEY, process.env.CALENDAR_API_KEY].filter(Boolean);
     const suppliedKey = req.headers['x-admin-key'];
-    if (!expectedKey || !suppliedKey || !safeEqual(suppliedKey, expectedKey)) {
+    if (!suppliedKey || !expectedKeys.some((key) => safeEqual(suppliedKey, key))) {
         res.status(401).json({ message: 'Admin key is missing or invalid.' });
         return;
     }
@@ -40,19 +40,13 @@ export default async function handler(req, res) {
             res.status(404).json({ message: 'Onsite booking not found.' });
             return;
         }
-        if (booking.status === 'paid') {
-            let monthlyProvisioning = null;
-            if (booking.purchaseType === 'monthly') {
-                monthlyProvisioning = await provisionMonthlyEntitlementFromPaidPurchase(booking);
-                if (monthlyProvisioning.status === 'needs_manager') {
-                    console.error('[monthly purchase requires manager action]', reference, monthlyProvisioning.existingEntitlementId || '');
-                }
-            }
-            res.status(200).json({ paid: true, alreadyConfirmed: true, receiptSent: false, monthlyProvisioned: monthlyProvisioning?.status === 'created' || monthlyProvisioning?.status === 'already_provisioned' });
+        if (!['confirmed_unpaid', 'paid'].includes(booking.status)) {
+            res.status(409).json({ message: 'This on-site booking is not awaiting payment confirmation.' });
             return;
         }
 
-        if (booking.appliedPromo && booking.promoReservationId) {
+        const alreadyConfirmed = booking.status === 'paid';
+        if (!alreadyConfirmed && booking.appliedPromo && booking.promoReservationId) {
             const redeemed = await markSharedPromoCodeUsed(booking.appliedPromo, booking.promoReservationId);
             if (!redeemed) {
                 res.status(409).json({ message: 'The promo reservation is no longer valid. Resolve the booking before confirming payment.' });
@@ -60,7 +54,7 @@ export default async function handler(req, res) {
             }
         }
 
-        const paidBooking = await markOnsiteBookingPaid(reference);
+        const paidBooking = alreadyConfirmed ? booking : await markOnsiteBookingPaid(reference);
         if (!paidBooking) {
             res.status(409).json({ message: 'Could not mark the onsite booking as paid.' });
             return;
@@ -90,6 +84,8 @@ export default async function handler(req, res) {
             customerMobile: customer.mobile,
             address: customer.address,
             monthlyCode: monthlyProvisioning?.monthlyCode || '',
+            monthlyPurchaseNeedsReview: monthlyProvisioning?.status === 'needs_manager',
+            receiptIdempotencyKey: `onsite-paid-receipt-${reference}`,
             originalAmountZar: formatZar(originalAmountCents),
             discountZar: discountCents > 0 ? formatZar(discountCents) : null,
             amountZar: formatZar(amountCents),
@@ -110,8 +106,10 @@ export default async function handler(req, res) {
         res.status(200).json({
             paid: true,
             reference,
+            alreadyConfirmed,
             receiptSent,
             monthlyProvisioned: monthlyProvisioning?.status === 'created' || monthlyProvisioning?.status === 'already_provisioned',
+            monthlyNeedsReview: monthlyProvisioning?.status === 'needs_manager',
         });
     } catch (error) {
         console.error('[onsite payment confirmation failed]', reference, error);

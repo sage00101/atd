@@ -23,14 +23,15 @@ import {
     isBookableBookingTime,
 } from '../../shared/booking-schedule.js';
 import { getMonthlyContractMonths } from '../../shared/monthly-contract.js';
+import vm from 'node:vm';
 
 const redis = Object.fromEntries(['get', 'mget', 'set', 'del', 'lrange', 'smembers', 'exists', 'eval'].map((name) => [name, () => {
     throw new Error(`Unexpected Redis call: ${name}`);
 }]));
 mock.module('../api/_lib/redis.js', { exports: { redis } });
-const [{ validateBookingRequest, listBookingRequests, cancelBookedSlotRecords }, { getBookedSlotsInRange, reserveBookingSlot, getMonthlyPackagePriceCents, getMonthlyPackageTotalCents },
+const [{ validateBookingRequest, listBookingRequests, cancelBookedSlotRecords }, { getBookedSlotsInRange, reserveBookingSlot, getMonthlyPackagePriceCents, getMonthlyPackageTotalCents, markOnsiteBookingPaid },
     { default: cancelHandler }, { default: webhookHandler }, { default: calendarHandler }, { default: availabilityHandler },
-    { default: promoValidationHandler }] = await Promise.all([
+    { default: promoValidationHandler }, { default: promoManagerHandler }] = await Promise.all([
     import('../api/_lib/booking-approval.js'),
     import('../api/_lib/store.js'),
     import('../handlers/bookings-cancel.js'),
@@ -38,6 +39,7 @@ const [{ validateBookingRequest, listBookingRequests, cancelBookedSlotRecords },
     import('../api/admin/calendar.js'),
     import('../handlers/bookings-availability.js'),
     import('../handlers/promo-validation.js'),
+    import('../api/admin/promo-codes.js'),
 ]);
 
 function installRedisStub(t) {
@@ -72,6 +74,16 @@ function installRedisStub(t) {
                 sets.get(keys[2])?.delete(args[3]);
             }
             return ['CANCELLED', JSON.stringify(cancelled)];
+        }
+        if (script.includes("booking.paymentMethod ~= 'onsite'")) {
+            const booking = values.get(keys[0]);
+            if (!booking) return ['NOT_FOUND'];
+            if (booking.paymentMethod !== 'onsite') return ['NOT_FOUND'];
+            if (booking.status === 'paid') return ['OK', JSON.stringify(booking)];
+            if (booking.status !== 'confirmed_unpaid') return ['INVALID_STATUS'];
+            const updated = { ...booking, status: 'paid', paidAt: args[0] };
+            values.set(keys[0], updated);
+            return ['OK', JSON.stringify(updated)];
         }
         if (script.includes("request.status = ARGV[2]")) {
             const request = values.get(keys[0]);
@@ -219,11 +231,12 @@ test('business package uses the selected fleet tier and requires that tier', asy
         fleetSizeTier: '6-8', fleetVehicleCount: 7,
         bookingDate: '2026-11-10', bookingTime: '14:30', contractOption: '3-months',
         contractAccepted: true, contractFileBase64: 'ZmlsZQ==',
-        customer: { firstName: 'Test', surname: 'Customer', mobile: '123', email: 'test@example.com', registration: 'ABC123', address: 'Test address' },
+        customer: { firstName: 'Test', surname: 'Customer', mobile: '0821234567', email: 'test@example.com', registration: 'ABC123', address: 'Test address' },
         serviceLocation: { latitude: -33.978, longitude: 18.444 },
         serviceAreaAccepted: true, termsAccepted: true, requestedPaymentMethod: 'online',
     };
     await assert.doesNotReject(validateBookingRequest(booking));
+    await assert.rejects(validateBookingRequest({ ...booking, customer: { ...booking.customer, mobile: '123' } }), /valid customer contact number/);
     await assert.doesNotReject(validateBookingRequest({
         ...booking,
         contractOption: '1-months',
@@ -278,7 +291,7 @@ test('all online monthly package terms validate without requiring a payment', as
                     customer: {
                         firstName: 'Test',
                         surname: 'Customer',
-                        mobile: '123',
+                        mobile: '0821234567',
                         email: 'test@example.com',
                         registration: 'ABC123',
                         address: 'Test address',
@@ -304,7 +317,7 @@ test('request and decision emails show server-calculated totals and conditional 
         vehicleType: 'SUV / Bakkie',
         bookingDate: date,
         bookingTime: '14:30',
-        customer: { firstName: 'Test', surname: 'Customer', mobile: '123', email: 'test@example.com', registration: 'ABC123', address: 'Test address' },
+        customer: { firstName: 'Test', surname: 'Customer', mobile: '0821234567', email: 'test@example.com', registration: 'ABC123', address: 'Test address' },
         termsAccepted: true,
         requestedPaymentMethod: 'online',
         pricingSummary: { totalAmountCents: 1 },
@@ -368,6 +381,48 @@ test('confirmation receipts distinguish paid, onsite and monthly-credit totals',
     const covered = buildReceiptEmailHtml({ ...receipt, amountZar: 'R0.00', paymentMethod: 'monthly-entitlement' });
     assert.match(covered, /Amount due/);
     assert.match(covered, /R0\.00/);
+    const monthly = buildReceiptEmailHtml({ ...receipt, monthlyCode: 'CODE123', monthlyPurchaseNeedsReview: true });
+    assert.match(monthly, /CODE123/);
+    assert.match(monthly, /awaiting manager review/i);
+    const reviewWithoutCode = buildReceiptEmailHtml({ ...receipt, monthlyPurchaseNeedsReview: true });
+    assert.match(reviewWithoutCode, /awaiting manager review/i);
+});
+
+test('on-site payment transitions are retryable and reject cancelled or invalid bookings', async (t) => {
+    const db = installRedisStub(t);
+    assert.equal(await markOnsiteBookingPaid('missing'), null);
+    db.values.set('booking:onsite1', { status: 'confirmed_unpaid', paymentMethod: 'onsite' });
+    const first = await markOnsiteBookingPaid('onsite1');
+    assert.equal(first.status, 'paid');
+    assert.ok(first.paidAt);
+    const retry = await markOnsiteBookingPaid('onsite1');
+    assert.equal(retry.status, 'paid');
+    assert.equal(retry.paidAt, first.paidAt);
+    db.values.set('booking:cancelled1', { status: 'cancelled', paymentMethod: 'onsite' });
+    assert.equal(await markOnsiteBookingPaid('cancelled1'), null);
+    db.values.set('booking:online1', { status: 'confirmed_unpaid', paymentMethod: 'online' });
+    assert.equal(await markOnsiteBookingPaid('online1'), null);
+});
+
+test('manager activity receives on-site monthly payment status and its script parses', async (t) => {
+    const db = installRedisStub(t);
+    db.lists.set('booking:requests:index', ['request1']);
+    db.values.set('booking:request:request1', {
+        id: 'request1', reference: 'REF1', status: 'confirmed',
+        booking: { purchaseType: 'monthly', requestedPaymentMethod: 'onsite' },
+    });
+    db.values.set('booking:REF1', { paymentMethod: 'onsite', status: 'confirmed_unpaid' });
+    assert.equal((await listBookingRequests())[0].onsitePaymentStatus, 'confirmed_unpaid');
+    db.values.set('booking:REF1', { paymentMethod: 'onsite', status: 'paid' });
+    assert.equal((await listBookingRequests())[0].onsitePaymentStatus, 'paid');
+
+    const res = response();
+    await promoManagerHandler({ method: 'GET', headers: { accept: 'text/html' } }, res);
+    const script = res.body.match(/<script>([\s\S]*?)<\/script>/);
+    assert.ok(script);
+    assert.doesNotThrow(() => new vm.Script(script[1]));
+    assert.match(script[1], /Confirm on-site payment/);
+    assert.match(script[1], /Retry paid receipt/);
 });
 
 test('live promo verification checks availability without reserving or redeeming codes', async (t) => {

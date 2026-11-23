@@ -29,11 +29,26 @@ if booking.status == 'paid' then return {'DUPLICATE'} end
 if booking.status ~= 'pending' then return {booking.status} end
 booking.status = 'paid'
 booking.confirmedAt = ARGV[1]
+booking.paidAt = ARGV[1]
 redis.call('SET', KEYS[1], cjson.encode(booking), 'EX', ARGV[2])
 if ARGV[3] ~= '' and ARGV[4] ~= '' then
   redis.call('EXPIRE', KEYS[2], ARGV[2])
 end
 return {'OK', cjson.encode(booking)}
+`;
+const MARK_ONSITE_BOOKING_PAID_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return {'NOT_FOUND'} end
+local booking = cjson.decode(raw)
+if booking.paymentMethod ~= 'onsite' then return {'NOT_FOUND'} end
+if booking.status == 'paid' then return {'OK', raw} end
+if booking.status ~= 'confirmed_unpaid' then return {'INVALID_STATUS'} end
+booking.status = 'paid'
+booking.paidAt = ARGV[1]
+local encoded = cjson.encode(booking)
+redis.call('SET', KEYS[1], encoded, 'EX', ARGV[2])
+if KEYS[2] ~= '' then redis.call('EXPIRE', KEYS[2], ARGV[2]) end
+return {'OK', encoded}
 `;
 const CANCEL_PENDING_BOOKING_SCRIPT = `
 local raw = redis.call('GET', KEYS[1])
@@ -361,12 +376,12 @@ export async function saveOnsiteBooking(reference, booking) {
 export async function markOnsiteBookingPaid(reference) {
     const booking = await redis.get(bookingKey(reference));
     if (!booking || booking.paymentMethod !== 'onsite') return null;
-    const updated = { ...booking, status: 'paid', paidAt: new Date().toISOString() };
-    await redis.set(bookingKey(reference), updated, { ex: CONFIRMED_BOOKING_TTL_SECONDS });
-    if (booking.bookingDate && booking.bookingTime) {
-        await redis.expire(slotKey(booking.bookingDate, booking.bookingTime), CONFIRMED_BOOKING_TTL_SECONDS);
-    }
-    return updated;
+    const result = await redis.eval(MARK_ONSITE_BOOKING_PAID_SCRIPT, [
+        bookingKey(reference),
+        booking.bookingDate && booking.bookingTime ? slotKey(booking.bookingDate, booking.bookingTime) : '',
+    ], [new Date().toISOString(), String(CONFIRMED_BOOKING_TTL_SECONDS)]);
+    if (result?.[0] !== 'OK') return null;
+    return typeof result[1] === 'string' ? JSON.parse(result[1]) : result[1];
 }
 
 /** Marks a booking as paid once the webhook confirms it — extends the slot hold long-term. */

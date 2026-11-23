@@ -34,8 +34,18 @@ const redis = {
             return ['OK', next];
         }
         if (script.includes("local existingPurchase = redis.call('GET', KEYS[5])")) {
+            const purchase = values.get(keys[4]);
+            if (purchase) return ['PURCHASE_EXISTS', purchase];
+            const customer = values.get(keys[2]);
+            if (customer) {
+                const pending = JSON.parse(args[2]);
+                values.set(keys[4], `pending:${pending.reference}`);
+                values.set(keys[5], pending);
+                return ['EMAIL_EXISTS', customer];
+            }
             const entitlement = JSON.parse(args[0]);
             values.set(keys[0], entitlement);
+            values.set(keys[2], args[1]);
             values.set(keys[3], args[1]);
             values.set(keys[4], args[1]);
             return ['OK'];
@@ -126,9 +136,38 @@ test('paid package provisioning grants term credits minus the initial website wa
             assert.equal(entitlement.paymentHistory[0].initialWashCreditUsed, 1);
             assert.equal(entitlement.contractOption, `${months}-months`);
             assert.ok(entitlement.code);
-            if (entitlement.creditsAvailable > 0) assert.equal(result.emailStatus, 'accepted');
+            assert.equal(result.monthlyCode, entitlement.code);
+            assert.equal(entitlement.firstName, 'Test');
+            assert.equal(entitlement.surname, 'Customer');
+            assert.equal(entitlement.customerPhone, '0712345678');
+            assert.equal(entitlement.vehicleType, 'Sedan / Hatchback');
+            assert.equal(result.emailStatus, 'accepted');
         }
     }
+});
+
+test('repeat paid purchases remain pending and retain only an active existing code on retries', async () => {
+    values.clear();
+    const booking = {
+        purchaseType: 'monthly', reference: 'INITIAL-1', amountCents: 42000,
+        paidAt: new Date().toISOString(), contractOption: '1-months',
+        packageId: 'private-standard', packageName: 'Standard', vehicleType: 'Sedan / Hatchback',
+        bookingDate: '2026-11-23', bookingTime: '14:30', paymentMethod: 'online',
+        customer: { firstName: 'Mary Jane', surname: 'Smith', email: 'monthly-test@example.test', mobile: '0712345678', registration: 'ABC123' },
+    };
+    const first = await provisionMonthlyEntitlementFromPaidPurchase(booking);
+    assert.equal(first.entitlement.firstName, 'Mary Jane');
+    assert.equal(first.entitlement.surname, 'Smith');
+    const repeatBooking = { ...booking, reference: 'RENEWAL-1', contractOption: '3-months' };
+    const repeat = await provisionMonthlyEntitlementFromPaidPurchase(repeatBooking);
+    const retry = await provisionMonthlyEntitlementFromPaidPurchase(repeatBooking);
+    assert.equal(repeat.status, 'needs_manager');
+    assert.equal(retry.status, 'needs_manager');
+    assert.equal(repeat.monthlyCode, first.monthlyCode);
+    assert.equal(retry.monthlyCode, first.monthlyCode);
+    assert.equal((await redis.get(`promo:monthly:entitlement:${first.entitlement.id}`)).creditsAvailable, 1);
+    values.set(`promo:monthly:entitlement:${first.entitlement.id}`, { ...first.entitlement, active: false });
+    assert.equal((await provisionMonthlyEntitlementFromPaidPurchase(repeatBooking)).monthlyCode, '');
 });
 
 test('new manual business packages and payments reject legacy terms while existing records remain editable', async () => {

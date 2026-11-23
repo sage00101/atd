@@ -67,7 +67,11 @@ customer's profile, generates an access code, and includes the code in the
 payment receipt. Website purchases grant all credits for the selected
 term, less one credit for the initial booked wash. Each booking reserves one
 credit and confirmation consumes it; cancelled or expired reservations restore
-the credit.
+the credit. Receipts for later washes booked with a monthly code also show that
+code. An on-site booking is initially unpaid: after receiving the full payment
+(including by card machine), use **Confirm on-site payment** in the Business Manager's
+Activity list to create the profile and send the paid receipt. If receipt sending
+fails, use **Retry paid receipt**; confirming again does not grant credits twice.
 
 The booking cap is 1 wash per calendar month for Business Standard, 2 for
 Private Standard, and 4 for Private Premium. It resets on the first of each

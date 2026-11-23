@@ -467,6 +467,7 @@ export default async function handler(req, res) {
                 customerEmail: customer.email,
                 customerMobile: customer.mobile,
                 address: customer.address,
+                monthlyCode: String(promoCode || '').trim().toUpperCase(),
                 bookingType: 'monthly-entitlement',
                 customerType: monthlyEntitlementDetails?.clientType === 'business' ? 'Business / Fleet / Family' : 'Private Client',
                 monthlyPackageTier: monthlyEntitlementDetails?.packageTier || null,

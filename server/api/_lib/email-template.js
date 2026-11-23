@@ -57,6 +57,9 @@ export function buildReceiptEmailHtml(receipt) {
         row(isOnsiteUnpaid ? 'Amount due on-site' : isMonthlyCovered ? 'Amount due' : 'Amount paid', receipt.amountZar),
     ].join('');
 
+    const reviewNotice = receipt.monthlyPurchaseNeedsReview
+        ? `<div style="margin:0 0 20px;padding:14px 16px;background:#FBF3DC;border:1px solid #F0DFA5;border-radius:10px;color:#5B4B14;font-size:12.5px;line-height:1.55;">Your monthly purchase is awaiting manager review before its credits are added.${receipt.monthlyCode ? ' The code shown belongs to your existing account.' : ' Your access code will be provided after the review.'}</div>`
+        : '';
     const paymentNotice = isMonthlyCovered
         ? `
                             <div style="margin:0 0 20px;padding:14px 16px;background:#EAF0E9;border:1px solid #D4E3D7;border-radius:10px;">
@@ -101,6 +104,7 @@ export function buildReceiptEmailHtml(receipt) {
                                 <p style="margin:4px 0 0;color:${BRAND.ink};font-size:20px;font-weight:700;letter-spacing:.04em;">${escapeHtml(receipt.reference)}</p>
                             </div>
                             ${paymentNotice}
+                            ${reviewNotice}
                             ${isOnsitePaid ? '<div style="margin:0 0 20px;padding:12px 16px;background:#EAF0E9;border-radius:10px;color:#1E3128;font-size:12px;font-weight:700;">On-site payment received. Thank you.</div>' : ''}
                             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                                 ${rows}

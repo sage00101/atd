@@ -19,7 +19,7 @@ import {
     releaseBookingSlotIfOwned,
     reserveBookingSlot,
 } from './store.js';
-import { checkMonthlyWashAvailability, refundMonthlyWashForCancelledBooking } from './monthly-promos.js';
+import { checkMonthlyWashAvailability, refundMonthlyWashForCancelledBooking, validateMonthlyPurchaseDetails } from './monthly-promos.js';
 
 const REQUEST_TTL_SECONDS = 60 * 60 * 24 * 365;
 const REQUEST_SLOT_TTL_SECONDS = 60 * 60 * 24 * 3;
@@ -268,6 +268,13 @@ export async function validateBookingRequest(booking) {
         || !getMonthlyPackageTotalCents(booking.packageId, booking.vehicleType, booking.fleetSizeTier, booking.fleetVehicleCount, booking.contractOption))) {
         throw new BookingRequestError('Choose a valid monthly package and vehicle category.');
     }
+    if (booking.purchaseType === 'monthly') {
+        try {
+            validateMonthlyPurchaseDetails(booking);
+        } catch (error) {
+            throw new BookingRequestError(error instanceof Error ? error.message : 'Invalid monthly customer details.');
+        }
+    }
     if (booking.purchaseType === 'monthly' && monthlyContractMonths > 1
         && (!booking.contractAccepted || !booking.contractFileBase64)) {
         throw new BookingRequestError('Attach the completed monthly contract and accept the contract terms.');
@@ -394,7 +401,14 @@ export async function listBookingRequests() {
     const ids = await redis.lrange(REQUEST_INDEX_KEY, 0, 999);
     const records = await Promise.all(ids.map(async (id) => {
         const request = await expireRequestIfNeeded(await redis.get(requestKey(id)));
-        return request && !request.hiddenFromAdmin ? publicRequest(request) : null;
+        if (!request || request.hiddenFromAdmin) return null;
+        const visible = publicRequest(request);
+        if (request.status === 'confirmed' && request.booking?.purchaseType === 'monthly'
+            && request.booking?.requestedPaymentMethod === 'onsite') {
+            const booking = await getBooking(request.reference);
+            visible.onsitePaymentStatus = booking?.paymentMethod === 'onsite' ? booking.status : null;
+        }
+        return visible;
     }));
     return records.filter(Boolean);
 }

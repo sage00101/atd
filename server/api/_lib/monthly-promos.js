@@ -855,6 +855,28 @@ export async function generateMonthlyEntitlementCode(id) {
     return typeof result[1] === 'string' ? JSON.parse(result[1]) : result[1];
 }
 
+export function validateMonthlyPurchaseDetails(booking, validFrom = getSouthAfricanDate()) {
+    const customer = booking.customer || {};
+    const packageId = String(booking.packageId || '');
+    const [, clientType, packageTier] = packageId.match(/^(private|business)-(standard|premium)$/) || [];
+    if (!clientType || !packageTier || (clientType === 'business' && packageTier === 'premium')) {
+        throw new Error('The paid monthly package is not recognized.');
+    }
+    return validateEntitlementInput({
+        firstName: customer.firstName,
+        surname: customer.surname,
+        email: customer.email,
+        customerPhone: customer.mobile,
+        businessName: customer.businessName || '',
+        clientType,
+        packageTier,
+        vehicleType: booking.vehicleType,
+        contractOption: booking.contractOption,
+        validFrom,
+        requireSeparateName: true,
+    }, { allowLegacyTerm: true });
+}
+
 export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
     if (booking?.purchaseType !== 'monthly') return { status: 'not_monthly' };
     const reference = String(booking.reference || '').trim();
@@ -878,17 +900,7 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
 
     const paidAt = String(booking.paidAt || new Date().toISOString());
     const paidDate = getSouthAfricanDate(new Date(paidAt));
-    const customerName = `${customer.firstName || ''} ${customer.surname || ''}`.trim();
-    const details = validateEntitlementInput({
-        customerName,
-        email: customer.email,
-        customerPhone: customer.mobile,
-        businessName: customer.businessName || '',
-        clientType,
-        packageTier,
-        contractOption,
-        validFrom: paidDate,
-    }, { allowLegacyTerm: true });
+    const details = validateMonthlyPurchaseDetails(booking, paidDate);
     const monthlyAllowance = details.monthlyAllowance;
     const creditsPurchased = monthlyAllowance * contractMonths;
     const initialWashPeriod = getBillingPeriod(booking.bookingDate || paidDate);
@@ -1002,17 +1014,28 @@ export async function provisionMonthlyEntitlementFromPaidPurchase(booking) {
     if (!Array.isArray(result)) throw new Error('Could not provision the paid monthly entitlement.');
     if (result[0] === 'EMAIL_EXISTS') {
         const existingEntitlement = await redis.get(entitlementKey(String(result[1] || '')));
+        const validCode = existingEntitlement?.code && await getMonthlyPromoForCode(existingEntitlement.code);
         return {
             status: 'needs_manager',
             reference,
             existingEntitlementId: String(result[1] || ''),
-            monthlyCode: existingEntitlement?.code || '',
+            monthlyCode: validCode && validCode.id === existingEntitlement?.id ? existingEntitlement.code : '',
         };
     }
     if (result[0] === 'PURCHASE_EXISTS') {
         const owner = String(result[1] || '');
         if (owner.startsWith('pending:')) {
-            return { status: 'needs_manager', reference };
+            const pending = await redis.get(pendingPurchaseKey(reference));
+            if (!pending) throw new Error('The pending monthly purchase could not be found.');
+            const entitlementId = await redis.get(customerKey(pending.email));
+            const existingEntitlement = entitlementId && await redis.get(entitlementKey(entitlementId));
+            const validCode = existingEntitlement?.code && await getMonthlyPromoForCode(existingEntitlement.code);
+            return {
+                status: 'needs_manager',
+                reference,
+                existingEntitlementId: entitlementId || '',
+                monthlyCode: validCode && validCode.id === existingEntitlement?.id ? existingEntitlement.code : '',
+            };
         }
         const existingEntitlement = await redis.get(entitlementKey(owner));
         if (!existingEntitlement) throw new Error('The paid monthly purchase points to a missing entitlement.');
@@ -1648,7 +1671,7 @@ async function sendMonthlyClientCode(entitlementId, idempotencyKey, distribution
     if (!entitlement) throw new Error('Monthly entitlement not found.');
     const today = getSouthAfricanDate();
     const status = getEntitlementStatus(entitlement, today);
-    if (status !== 'Active') throw new Error(`Cannot email a monthly code while the entitlement is ${status.toLowerCase()}.`);
+    if (status !== 'Active' && status !== 'No credits') throw new Error(`Cannot email a monthly code while the entitlement is ${status.toLowerCase()}.`);
     if (!looksLikeEmail(entitlement.email) || !isValidPhone(entitlement.customerPhone)) {
         throw new Error('The client needs a valid email address and contact number before a code can be sent.');
     }

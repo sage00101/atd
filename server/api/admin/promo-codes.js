@@ -921,6 +921,8 @@ function renderBookingRequestCard(record,showActions=false){
       ?'<div class="booking-request-actions"><button type="button" data-request-action="accept" data-id="'+escapeHtml(record.id)+'">Accept Booking</button><button type="button" class="danger" data-request-action="decline" data-id="'+escapeHtml(record.id)+'">Decline Booking</button></div>'
       :showActions&&['approved','awaiting_completion','declined'].includes(record.status)
         ?'<div class="booking-request-actions"><button type="button" data-request-action="resend-email" data-id="'+escapeHtml(record.id)+'">Resend customer decision email</button></div>'
+        :!showActions&&['confirmed_unpaid','paid'].includes(record.onsitePaymentStatus)
+          ?'<div class="booking-request-actions"><button type="button" data-request-action="confirm-onsite-payment" data-id="'+escapeHtml(record.id)+'">'+(record.onsitePaymentStatus==='paid'?'Retry paid receipt':'Confirm on-site payment')+'</button></div>'
         :'';
     const occurredAt=record.approvedAt||record.declinedAt||record.updatedAt||record.submittedAt;
     return '<article class="booking-request-card" data-id="'+escapeHtml(record.id)+'"><div class="entitlement-top"><div><h3>'+escapeHtml(identity)+'</h3><p class="booking-request-meta">'+escapeHtml(customer.email||'')+' · '+escapeHtml(record.reference)+'</p></div><span class="top-end"><span class="status-pill">'+escapeHtml(record.publicStatus||record.status)+'</span>'+(showActions?'':'<button type="button" class="bin-button" data-request-action="delete" data-id="'+escapeHtml(record.id)+'" aria-label="Delete permanently" title="Delete permanently">'+binIcon+'</button>')+'</span></div>'+(showActions?'':'<p class="booking-request-meta">Activity · '+escapeHtml(occurredAt||'')+'</p>')+'<details><summary>Open full request details</summary><dl class="booking-request-details">'+details+'</dl></details>'+actions+'</article>';
@@ -1679,6 +1681,26 @@ async function handleRequestDelete(event){
 }
 expiredRequestCards.addEventListener('click',handleRequestDelete);
 activityCards.addEventListener('click',handleRequestDelete);
+activityCards.addEventListener('click',async event=>{
+  const button=event.target.closest('button[data-request-action="confirm-onsite-payment"]');
+  if(!button||button.disabled)return;
+  const record=bookingRequests.find(item=>item.id===button.dataset.id);
+  if(!record)return;
+  const alreadyPaid=record.onsitePaymentStatus==='paid';
+  if(!window.confirm(alreadyPaid?'Retry the paid receipt for this booking?':'Confirm that the full on-site card-machine payment has been received?'))return;
+  button.disabled=true;
+  try{
+    const response=await fetch('/api/bookings/onsite/confirm-payment',{method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json','x-admin-key':keyInput.value.trim()},body:JSON.stringify({reference:record.reference})});
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(result.message||'Payment confirmation failed.');
+    await loadBookingRequests();
+    if(result.monthlyNeedsReview)await loadMonthlyEntitlements();
+    if(!result.receiptSent)setStatus('Payment recorded, but the paid receipt was not sent. Retry the paid receipt from Activity.','error');
+    else if(result.monthlyNeedsReview)setStatus('Payment recorded; the email provider accepted the receipt. Apply this purchase under Paid purchases needing review.','ok');
+    else setStatus('Payment recorded and monthly profile updated; the email provider accepted the receipt.','ok');
+  }catch(error){setStatus(error.message+' The payment may already be recorded; refresh Activity before retrying.','error');}
+  finally{button.disabled=false;}
+});
 document.getElementById('activityClearAll').addEventListener('click',async()=>{
   if(!await askYesNo('Clear ALL activity, including booking activity and code email activity? This permanently removes it and cannot be undone.'))return;
   const button=document.getElementById('activityClearAll');
