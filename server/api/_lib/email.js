@@ -4,7 +4,6 @@ import { buildSupportEmailHtml } from './support-email-template.js';
 import { buildMonthlyCodeEmailHtml } from './monthly-code-email-template.js';
 import { buildPassphraseEmailHtml } from './passphrase-email-template.js';
 import { buildDistributionReportHtml } from './distribution-report-template.js';
-import { buildCustomerBookingConfirmationSmsText, sendSms } from './sms.js';
 import {
     buildBookingApprovedEmail,
     buildBookingCancelledEmail,
@@ -17,15 +16,6 @@ const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const BOOKINGS_EMAIL = process.env.BUSINESS_EMAIL || 'bookings@a10tion.co.za';
 const BOOKING_REQUEST_EMAIL = process.env.BOOKING_REQUEST_EMAIL || 'bookings@a10tion.co.za';
 const SUPPORT_EMAIL = 'support@a10tion.co.za';
-async function sendCustomerBookingSms(receipt) {
-    return sendSms({
-        to: receipt.customerMobile,
-        message: buildCustomerBookingConfirmationSmsText(receipt),
-        campaign: 'Customer booking updates',
-        dataField: receipt.reference,
-    });
-}
-
 async function sendViaResend({ to, bcc, subject, html, replyTo, attachments, safeFailure = false, idempotencyKey }) {
     const apiKey = process.env.RESEND_API_KEY;
     const from = process.env.RESEND_FROM_EMAIL;
@@ -238,7 +228,7 @@ export async function sendBookingCancelledEmail(request, reason, retryId = '') {
     });
 }
 
-/** Sends the booking receipt and confirmation SMS to the customer. */
+/** Sends the booking receipt to the customer. */
 export async function sendReceiptEmail(receipt) {
     const html = buildReceiptEmailHtml(receipt);
     const isMonthlyBooking = receipt.bookingType === 'monthly-entitlement'
@@ -254,13 +244,9 @@ export async function sendReceiptEmail(receipt) {
         })
         : Promise.resolve({ skipped: true });
 
-    const [emailResult, customerSms] = await Promise.allSettled([
-        emailJob, sendCustomerBookingSms(receipt),
-    ]);
-    if (customerSms.status === 'rejected') console.error('[customer receipt sms failed]', receipt.reference, customerSms.reason);
-    if (emailResult.status === 'rejected') throw emailResult.reason;
+    const emailResult = await emailJob;
     if (!receipt.customerEmail) console.warn('[email] no customer email on receipt', receipt.reference);
-    return emailResult.value;
+    return emailResult;
 }
 
 /** Emails a newly approved customer confirming their vehicle registration now works as a promo code. */

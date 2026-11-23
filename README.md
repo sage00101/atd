@@ -108,7 +108,8 @@ The business receives one booking-enquiry SMS, with the customer and address
 shortened if needed to fit one GSM SMS segment; full details remain in the
 booking-request email and Business Manager. When a request is accepted, only
 the customer receives an approval SMS, and the approval email contains the link
-to complete the booking. Booking confirmations do not send a business SMS.
+to complete the booking. Booking confirmations are emailed to the customer,
+without sending a confirmation SMS to the customer or business.
 The manager reports any notification failure; provider acceptance does not
 guarantee delivery.
 When a request is declined, the customer receives an email with the reason and

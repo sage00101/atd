@@ -55,9 +55,7 @@ test('only booking requests send a business copy to the booking inbox', async (t
         customerMobile: '123',
         amountZar: 'R250.00',
     });
-    assert.equal(smsCalls.length, 1);
-    assert.equal(smsCalls[0].to, '123');
-    assert.equal(smsCalls[0].message, 'Customer SMS');
+    assert.equal(smsCalls.length, 0);
     assert.equal(sent.length, 3);
     for (const email of sent) {
         assert.deepEqual(email.to, ['customer@example.com']);
@@ -65,7 +63,7 @@ test('only booking requests send a business copy to the booking inbox', async (t
     }
 });
 
-test('receipt email failure is not reported as success when SMS succeeds', async (t) => {
+test('receipt email failures are reported', async (t) => {
     t.mock.method(globalThis, 'fetch', async () => ({
         ok: false,
         status: 400,

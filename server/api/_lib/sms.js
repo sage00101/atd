@@ -167,31 +167,12 @@ export function sendCustomerBookingDeclinedSms(request) {
     });
 }
 
-export function buildCustomerBookingConfirmationSmsText(receipt) {
-    return [
-        `A10tion: Your booking is confirmed, ${String(receipt.customerName || 'thank you').trim()}.`,
-        `Ref: ${receipt.reference || '—'}`,
-        `Date: ${`${receipt.bookingDate || ''} ${receipt.bookingTime || ''}`.trim() || '—'}`,
-        `Vehicle: ${receipt.registration || '—'}`,
-        `Amount: ${receipt.amountZar || '—'}`,
-    ].join('\n');
-}
-
 export async function sendCustomerBookingRequestSms(request, statusUrl = '') {
     return sendSms({
         to: request.booking?.customer?.mobile,
         message: buildCustomerBookingRequestSmsText(request, statusUrl),
         campaign: 'Customer booking updates',
         dataField: request.reference,
-    });
-}
-
-export async function sendCustomerBookingConfirmationSms(receipt) {
-    return sendSms({
-        to: receipt.customerMobile,
-        message: buildCustomerBookingConfirmationSmsText(receipt),
-        campaign: 'Customer booking updates',
-        dataField: receipt.reference,
     });
 }
 

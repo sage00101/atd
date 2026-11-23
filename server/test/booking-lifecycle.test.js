@@ -11,12 +11,10 @@ import {
 } from '../api/_lib/booking-request-email-template.js';
 import { buildReceiptEmailHtml } from '../api/_lib/email-template.js';
 import {
-    buildCustomerBookingConfirmationSmsText,
     buildCustomerBookingRequestSmsText,
     buildBookingRequestSmsText,
     isSmsConfigured,
     sendBookingRequestSms,
-    sendCustomerBookingConfirmationSms,
     sendCustomerBookingRequestSms,
 } from '../api/_lib/sms.js';
 import { MIN_LEAD_TIME_MS, slotDateTime } from '../../src/utils/booking-time.js';
@@ -492,20 +490,6 @@ test('customer booking SMS targets the supplied mobile and includes request trac
     assert.equal(JSON.parse(calls[0].options.body).recipientNumber, '27821234567');
     assert.match(JSON.parse(calls[0].options.body).message, /Your request is pending review/);
 
-    const receipt = {
-        customerMobile: '+27 82 123 4567',
-        customerName: 'Test Customer',
-        reference: 'CONF456',
-        bookingDate: '2026-11-20',
-        bookingTime: '10:30',
-        registration: 'ABC123',
-        amountZar: 'R220,00',
-    };
-    assert.match(buildCustomerBookingConfirmationSmsText(receipt), /Your booking is confirmed/);
-    assert.equal((await sendCustomerBookingConfirmationSms(receipt)).sent, true);
-    assert.equal(calls.length, 2);
-    assert.equal(JSON.parse(calls[1].options.body).recipientNumber, '27821234567');
-    assert.match(JSON.parse(calls[1].options.body).message, /CONF456/);
 });
 
 test('business booking enquiry SMS contains the requested details in one GSM-safe segment', async (t) => {
