@@ -82,28 +82,37 @@ function normaliseGsmField(value) {
         .trim();
 }
 
-export function buildBusinessBookingSmsText({ name, email, address, packageName }) {
-    const safeName = normaliseGsmField(name) || 'Customer';
-    const safeEmail = normaliseGsmField(email) || 'Not provided';
-    const safeAddress = normaliseGsmField(address) || 'Not provided';
-    const safePackage = normaliseGsmField(packageName) || 'Wash package';
-    const prefix = `A10tion; N:${safeName}; E:${safeEmail}; A:`;
-    const suffix = `; P:${safePackage}`;
-    const addressLimit = Math.max(0, 160 - prefix.length - suffix.length);
-    const clippedAddress = safeAddress.slice(0, addressLimit).trimEnd();
-    return `${prefix}${clippedAddress}${suffix}`.slice(0, 160);
+function bookingSmsDateTime(request) {
+    const date = String(request.booking?.bookingDate || '');
+    const time = String(request.booking?.bookingTime || '');
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    if (!match || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+        throw new Error('Booking date and time are required for the SMS.');
+    }
+    return `${match[3]}.${match[2]}.${match[1]} at ${time}`;
+}
+
+function shortenSmsField(value, limit) {
+    if (value.length <= limit) return value;
+    return `${value.slice(0, limit - 3).trimEnd()}...`;
 }
 
 export function buildBookingRequestSmsText(request) {
-    const booking = request.booking || {};
-    const customer = booking.customer || {};
-    const name = `${customer.firstName || ''} ${customer.surname || ''}`.trim() || 'Customer';
-    return buildBusinessBookingSmsText({
-        name,
-        email: customer.email,
-        address: customer.address,
-        packageName: booking.packageName || booking.packageId,
-    });
+    const customer = request.booking?.customer || {};
+    const name = normaliseGsmField(`${customer.firstName || ''} ${customer.surname || ''}`) || 'Customer';
+    const address = normaliseGsmField(customer.address) || 'Not provided';
+    const dateTime = bookingSmsDateTime(request);
+    const header = 'A10tion To Detail: Booking Request\nCustomer: ';
+    const middle = `\nDate/Time: ${dateTime}\nAddress: `;
+    const available = 160 - header.length - middle.length;
+    let nameLimit = name.length;
+    let addressLimit = address.length;
+    if (nameLimit + addressLimit > available) {
+        nameLimit = Math.min(name.length, Math.floor(available / 2));
+        addressLimit = Math.min(address.length, available - nameLimit);
+        nameLimit = Math.min(name.length, available - addressLimit);
+    }
+    return `${header}${shortenSmsField(name, nameLimit)}${middle}${shortenSmsField(address, addressLimit)}`;
 }
 
 export function buildCustomerBookingRequestSmsText(request, statusUrl = '') {
@@ -119,46 +128,11 @@ export function buildCustomerBookingRequestSmsText(request, statusUrl = '') {
     ].filter(Boolean).join('\n');
 }
 
-function bookingApprovalDetails(request) {
-    const booking = request.booking || {};
-    const customer = booking.customer || {};
-    const details = {
-        firstName: String(customer.firstName || '').trim(),
-        surname: String(customer.surname || '').trim(),
-        mobile: String(customer.mobile || '').trim(),
-        date: String(booking.bookingDate || '').trim(),
-        time: String(booking.bookingTime || '').trim(),
-        wash: String(booking.packageName || booking.packageId || '').trim(),
-        address: String(customer.address || '').trim(),
-    };
-    if (Object.values(details).some((value) => !value)) {
-        throw new Error('Booking details required for the approval SMS are missing.');
-    }
-    return details;
-}
-
 export function buildCustomerBookingApprovalSmsText(request) {
-    const details = bookingApprovalDetails(request);
     return [
-        `A10tion To Detail: Hi ${details.firstName}, your booking request has been approved.`,
-        `Date: ${details.date}`,
-        `Time: ${details.time}`,
-        `Wash: ${details.wash}`,
-        `Address: ${details.address}`,
+        'A10tion To Detail: Booking Request Approved!',
+        `Date/Time: ${bookingSmsDateTime(request)}`,
         'Please complete your booking using the link in your email.',
-    ].join('\n');
-}
-
-export function buildBusinessBookingApprovalSmsText(request) {
-    const details = bookingApprovalDetails(request);
-    return [
-        'A10tion To Detail: Booking request approved.',
-        `Customer: ${details.firstName} ${details.surname}`,
-        `Phone: ${details.mobile}`,
-        `Date: ${details.date}`,
-        `Time: ${details.time}`,
-        `Wash: ${details.wash}`,
-        `Address: ${details.address}`,
     ].join('\n');
 }
 
@@ -173,14 +147,6 @@ export function sendCustomerBookingApprovalSms(request) {
     return sendBookingApprovalSms(
         request.booking?.customer?.mobile,
         buildCustomerBookingApprovalSmsText(request),
-        request.reference,
-    );
-}
-
-export function sendBusinessBookingApprovalSms(request) {
-    return sendBookingApprovalSms(
-        getBusinessSmsNumber(),
-        buildBusinessBookingApprovalSmsText(request),
         request.reference,
     );
 }

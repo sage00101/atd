@@ -1003,13 +1003,10 @@ async function processBookingRequest(action,id,reason=''){
     if(action==='accept'||action==='decline'){
       if(!result.customerSms?.sent)problems.push('Customer SMS: '+(result.customerSms?.problem||'provider acceptance was not confirmed')+'.');
     }
-    if(action==='accept'){
-      if(!result.businessSms?.sent)problems.push('Business SMS: '+(result.businessSms?.problem||'provider acceptance was not confirmed')+'.');
-    }
     if(problems.length){
       setStatus('Request updated, but notifications need attention. '+problems.join(' ')+' Check the provider before retrying an unconfirmed SMS.','error');
     }else{
-      setStatus(action==='accept'?'Booking approved; the email was sent and both approval SMS messages were accepted by the provider.':action==='decline'?'Booking declined; the email was sent and the customer SMS was accepted by the provider.':'Customer email sent.','ok');
+      setStatus(action==='accept'?'Booking approved; the email was sent and the customer approval SMS was accepted by the provider.':action==='decline'?'Booking declined; the email was sent and the customer SMS was accepted by the provider.':'Customer email sent.','ok');
     }
   }catch(error){
     await loadBookingRequests();

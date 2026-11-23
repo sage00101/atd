@@ -14,8 +14,8 @@ import {
     buildCustomerBookingConfirmationSmsText,
     buildCustomerBookingRequestSmsText,
     buildBookingRequestSmsText,
-    buildBusinessBookingSmsText,
     isSmsConfigured,
+    sendBookingRequestSms,
     sendCustomerBookingConfirmationSms,
     sendCustomerBookingRequestSms,
 } from '../api/_lib/sms.js';
@@ -508,43 +508,58 @@ test('customer booking SMS targets the supplied mobile and includes request trac
     assert.match(JSON.parse(calls[1].options.body).message, /CONF456/);
 });
 
-test('business booking SMS includes requested details in one GSM-safe segment', () => {
+test('business booking enquiry SMS contains the requested details in one GSM-safe segment', async (t) => {
     const request = {
+        reference: 'REQ123',
         booking: {
-            packageName: 'Business / Fleet / Family - Standard Package',
+            bookingDate: '2026-11-20',
+            bookingTime: '14:30',
             customer: {
                 firstName: 'Jane',
                 surname: 'Doe',
-                email: 'jane.doe@example.com',
                 address: '12 Main Road, Cape Town',
             },
         },
     };
-    const requestText = buildBookingRequestSmsText(request);
-    const confirmationText = buildBusinessBookingSmsText({
-        name: 'Jane Doe',
-        email: 'jane.doe@example.com',
-        address: '12 Main Road, Cape Town',
-        packageName: 'Business / Fleet / Family - Standard Package',
-    });
+    assert.equal(buildBookingRequestSmsText(request), [
+        'A10tion To Detail: Booking Request',
+        'Customer: Jane Doe',
+        'Date/Time: 20.11.2026 at 14:30',
+        'Address: 12 Main Road, Cape Town',
+    ].join('\n'));
 
-    for (const message of [requestText, confirmationText]) {
-        assert.ok(message.length <= 160);
-        assert.match(message, /N:Jane Doe/);
-        assert.match(message, /E:jane\.doe@example\.com/);
-        assert.match(message, /A:12 Main Road, Cape Town/);
-        assert.match(message, /P:Business \/ Fleet \/ Family - Standard Package/);
-        assert.doesNotMatch(message, /[^\x20-\x7E]/);
-    }
+    const longRequest = {
+        ...request,
+        booking: {
+            ...request.booking,
+            customer: { firstName: 'É'.repeat(100), surname: 'Doe', address: 'Long [road] '.repeat(30) },
+        },
+    };
+    const message = buildBookingRequestSmsText(longRequest);
+    assert.ok(message.length <= 160);
+    assert.match(message, /Customer: E+\.\.\.\nDate\/Time: 20\.11\.2026 at 14:30\nAddress: Long road/);
+    assert.match(message, /\.\.\.$/);
+    assert.doesNotMatch(message, /[^A-Za-z0-9 @._,+()'/:;\-\n]/);
+    assert.throws(() => buildBookingRequestSmsText({ booking: { bookingDate: 'invalid' } }), /date and time/);
 
-    const longAddress = buildBusinessBookingSmsText({
-        name: 'Jane Doe',
-        email: 'jane.doe@example.com',
-        address: '123 Very Long Street Name, A Large Suburb, Cape Town, Western Cape, South Africa',
-        packageName: 'Business / Fleet / Family - Standard Package',
+    const keys = ['SMSMESSENGER_EMAIL', 'SMSMESSENGER_API_KEY', 'BUSINESS_SMS'];
+    const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    t.after(() => keys.forEach((key) => {
+        if (previous[key] === undefined) delete process.env[key];
+        else process.env[key] = previous[key];
+    }));
+    process.env.SMSMESSENGER_EMAIL = 'sms-test@example.com';
+    process.env.SMSMESSENGER_API_KEY = 'test-token';
+    process.env.BUSINESS_SMS = '0831234567';
+    const calls = [];
+    t.mock.method(globalThis, 'fetch', async (_url, options) => {
+        calls.push(JSON.parse(options.body));
+        return new Response(JSON.stringify({ messageId: 'message-123' }), { status: 200 });
     });
-    assert.ok(longAddress.length <= 160);
-    assert.match(longAddress, /P:Business \/ Fleet \/ Family - Standard Package$/);
+    assert.equal((await sendBookingRequestSms(request)).sent, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].recipientNumber, '27831234567');
+    assert.equal(calls[0].message, buildBookingRequestSmsText(request));
 });
 
 test('cancelled checkout releases the slot and appears in manager records, including on retry', async (t) => {

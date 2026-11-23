@@ -4,7 +4,7 @@ import { buildSupportEmailHtml } from './support-email-template.js';
 import { buildMonthlyCodeEmailHtml } from './monthly-code-email-template.js';
 import { buildPassphraseEmailHtml } from './passphrase-email-template.js';
 import { buildDistributionReportHtml } from './distribution-report-template.js';
-import { buildBusinessBookingSmsText, buildCustomerBookingConfirmationSmsText, getBusinessSmsNumber, sendSms } from './sms.js';
+import { buildCustomerBookingConfirmationSmsText, sendSms } from './sms.js';
 import {
     buildBookingApprovedEmail,
     buildBookingCancelledEmail,
@@ -17,20 +17,6 @@ const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const BOOKINGS_EMAIL = process.env.BUSINESS_EMAIL || 'bookings@a10tion.co.za';
 const BOOKING_REQUEST_EMAIL = process.env.BOOKING_REQUEST_EMAIL || 'bookings@a10tion.co.za';
 const SUPPORT_EMAIL = 'support@a10tion.co.za';
-async function sendBusinessBookingSms(receipt) {
-    return sendSms({
-        to: getBusinessSmsNumber(),
-        message: buildBusinessBookingSmsText({
-            name: receipt.customerName,
-            email: receipt.customerEmail,
-            address: receipt.address,
-            packageName: receipt.packageName,
-        }),
-        campaign: 'Confirmed bookings',
-        dataField: receipt.reference,
-    });
-}
-
 async function sendCustomerBookingSms(receipt) {
     return sendSms({
         to: receipt.customerMobile,
@@ -252,7 +238,7 @@ export async function sendBookingCancelledEmail(request, reason, retryId = '') {
     });
 }
 
-/** Sends the booking receipt to the customer and confirmation SMS notifications. */
+/** Sends the booking receipt and confirmation SMS to the customer. */
 export async function sendReceiptEmail(receipt) {
     const html = buildReceiptEmailHtml(receipt);
     const isMonthlyBooking = receipt.bookingType === 'monthly-entitlement'
@@ -268,11 +254,10 @@ export async function sendReceiptEmail(receipt) {
         })
         : Promise.resolve({ skipped: true });
 
-    const [emailResult, customerSms, businessSms] = await Promise.allSettled([
-        emailJob, sendCustomerBookingSms(receipt), sendBusinessBookingSms(receipt),
+    const [emailResult, customerSms] = await Promise.allSettled([
+        emailJob, sendCustomerBookingSms(receipt),
     ]);
     if (customerSms.status === 'rejected') console.error('[customer receipt sms failed]', receipt.reference, customerSms.reason);
-    if (businessSms.status === 'rejected') console.error('[business receipt sms failed]', receipt.reference, businessSms.reason);
     if (emailResult.status === 'rejected') throw emailResult.reason;
     if (!receipt.customerEmail) console.warn('[email] no customer email on receipt', receipt.reference);
     return emailResult.value;

@@ -56,7 +56,7 @@ function response() {
     };
 }
 
-test('accepting a request sends the approved templates and reports each SMS result', async (t) => {
+test('accepting a request sends the approval SMS only to the customer and reports its result', async (t) => {
     const keys = ['ADMIN_API_KEY', 'CALENDAR_API_KEY', 'SMSMESSENGER_EMAIL', 'SMSMESSENGER_API_KEY', 'BUSINESS_SMS'];
     const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
     t.after(() => keys.forEach((key) => {
@@ -91,37 +91,25 @@ test('accepting a request sends the approved templates and reports each SMS resu
     const approved = await perform('accept');
     assert.equal(approved.statusCode, 200);
     assert.equal(approved.body.customerSms.sent, true);
-    assert.equal(approved.body.businessSms.sent, true);
-    const customer = calls.find((call) => call.recipientNumber === '27821234567');
-    const business = calls.find((call) => call.recipientNumber === '27831234567');
+    assert.equal(approved.body.businessSms, undefined);
+    assert.equal(calls.length, 1);
+    const customer = calls[0];
+    assert.equal(customer.recipientNumber, '27821234567');
     assert.equal(customer.message, [
-        'A10tion To Detail: Hi Jane, your booking request has been approved.',
-        'Date: 2026-11-20',
-        'Time: 10:30',
-        'Wash: Standard Wash',
-        'Address: 1 Main Road, Cape Town',
+        'A10tion To Detail: Booking Request Approved!',
+        'Date/Time: 20.11.2026 at 10:30',
         'Please complete your booking using the link in your email.',
     ].join('\n'));
-    assert.equal(business.message, [
-        'A10tion To Detail: Booking request approved.',
-        'Customer: Jane Doe',
-        'Phone: 082 123 4567',
-        'Date: 2026-11-20',
-        'Time: 10:30',
-        'Wash: Standard Wash',
-        'Address: 1 Main Road, Cape Town',
-    ].join('\n'));
+    assert.ok(customer.message.length <= 160);
 
     failedRecipient = '27821234567';
     const partial = await perform('accept');
     assert.equal(partial.statusCode, 200);
     assert.equal(partial.body.customerSms.sent, false);
     assert.match(partial.body.customerSms.problem, /Insufficient credit/);
-    assert.equal(partial.body.businessSms.sent, true);
-    const beforeLongRequest = calls.length;
-    const longRequest = { ...request, booking: { ...request.booking, customer: { ...request.booking.customer, address: 'x'.repeat(612) } } };
-    assert.throws(() => sms.sendCustomerBookingApprovalSms(longRequest), /612-character limit/);
-    assert.equal(calls.length, beforeLongRequest);
+    assert.equal(partial.body.businessSms, undefined);
+    assert.equal(calls.length, 2);
+    assert.throws(() => sms.sendCustomerBookingApprovalSms({ booking: { bookingDate: 'invalid' } }), /date and time/);
 });
 
 test('declining a request sends email and SMS independently and reports failures', async (t) => {

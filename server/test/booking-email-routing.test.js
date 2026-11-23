@@ -6,12 +6,11 @@ process.env.RESEND_FROM_EMAIL = 'Test <test@example.com>';
 process.env.BUSINESS_EMAIL = 'other@example.com';
 delete process.env.BOOKING_REQUEST_EMAIL;
 
+const smsCalls = [];
 mock.module('../api/_lib/sms.js', {
     exports: {
-        buildBusinessBookingSmsText: () => 'Business SMS',
         buildCustomerBookingConfirmationSmsText: () => 'Customer SMS',
-        getBusinessSmsNumber: () => '123',
-        sendSms: async () => ({ sent: true }),
+        sendSms: async (args) => { smsCalls.push(args); return { sent: true }; },
     },
 });
 
@@ -33,6 +32,7 @@ const request = {
 };
 
 test('only booking requests send a business copy to the booking inbox', async (t) => {
+    smsCalls.length = 0;
     const sent = [];
     t.mock.method(globalThis, 'fetch', async (_url, options) => {
         sent.push(JSON.parse(options.body));
@@ -55,6 +55,9 @@ test('only booking requests send a business copy to the booking inbox', async (t
         customerMobile: '123',
         amountZar: 'R250.00',
     });
+    assert.equal(smsCalls.length, 1);
+    assert.equal(smsCalls[0].to, '123');
+    assert.equal(smsCalls[0].message, 'Customer SMS');
     assert.equal(sent.length, 3);
     for (const email of sent) {
         assert.deepEqual(email.to, ['customer@example.com']);

@@ -104,10 +104,13 @@ For SMS alerts, configure `SMSMESSENGER_EMAIL`, `SMSMESSENGER_API_KEY`, and
 `BUSINESS_SMS` in the backend's Vercel environment and redeploy after changes.
 In Business Manager, open **Promo codes** and use **Send test SMS** with the
 requested details. The result confirms provider acceptance, not delivery to the phone.
-When a booking request is accepted, approval SMS messages go to the customer
-and business numbers. They describe the requested wash and remind the customer
-to complete the booking using the email link. The manager reports any notification
-failure; provider acceptance does not guarantee delivery.
+The business receives one booking-enquiry SMS, with the customer and address
+shortened if needed to fit one GSM SMS segment; full details remain in the
+booking-request email and Business Manager. When a request is accepted, only
+the customer receives an approval SMS, and the approval email contains the link
+to complete the booking. Booking confirmations do not send a business SMS.
+The manager reports any notification failure; provider acceptance does not
+guarantee delivery.
 When a request is declined, the customer receives an email with the reason and
 an SMS directing them to that email. The manager reports failures independently.
 

@@ -13,7 +13,7 @@ import {
     sendBookingRequestApprovedEmail,
     sendBookingRequestDeclinedEmail,
 } from '../api/_lib/email.js';
-import { sendBusinessBookingApprovalSms, sendCustomerBookingApprovalSms, sendCustomerBookingDeclinedSms } from '../api/_lib/sms.js';
+import { sendCustomerBookingApprovalSms, sendCustomerBookingDeclinedSms } from '../api/_lib/sms.js';
 
 function safeEqual(left, right) {
     const leftDigest = crypto.createHash('sha256').update(String(left)).digest();
@@ -69,20 +69,18 @@ export default async function handler(req, res) {
         const adminName = String(req.body?.adminName || '').trim();
         if (action === 'accept') {
             const { request, continuationToken } = await acceptBookingRequest(id, adminName);
-            const [email, customerSms, businessSms] = await Promise.all([
+            const [email, customerSms] = await Promise.all([
                 sendBookingRequestApprovedEmail(request, getContinuationUrl(continuationToken)).catch((error) => {
                     console.error('[approval email failed]', error);
                     return { skipped: true, failed: true, reason: error instanceof Error ? error.message : String(error) };
                 }),
                 sendDecisionSms(sendCustomerBookingApprovalSms, request, 'customer', 'approval'),
-                sendDecisionSms(sendBusinessBookingApprovalSms, request, 'business', 'approval'),
             ]);
             res.status(200).json({
                 request: getPublicBookingRequest(request),
                 emailSent: !email?.skipped,
                 emailProblem: email?.failed ? email.reason : (email?.skipped ? 'Email is not configured on the server (RESEND_API_KEY / RESEND_FROM_EMAIL missing).' : ''),
                 customerSms,
-                businessSms,
             });
             return;
         }
