@@ -13,7 +13,7 @@ const POLL_MS = 20_000;
 const STATUS_COPY = {
     'Pending Approval': {
         title: 'Request pending review',
-        text: 'Our team is reviewing your booking request. This stays here and updates automatically until we respond. You will also be emailed the outcome.',
+        text: 'The team is reviewing your booking request. You will be emailed the outcome.',
         Icon: Clock3,
         tone: 'text-amber-700 bg-amber-50',
     },
