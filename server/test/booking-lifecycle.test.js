@@ -425,6 +425,69 @@ test('manager activity receives on-site monthly payment status and its script pa
     assert.match(script[1], /Retry paid receipt/);
 });
 
+test('manager deactivation and permanent deletion require an explicit yes', async () => {
+    const res = response();
+    await promoManagerHandler({ method: 'GET', headers: { accept: 'text/html' } }, res);
+    const script = res.body.match(/<script>([\s\S]*?)<\/script>/)[1];
+    function button() {
+        const listeners = new Map();
+        return {
+            disabled: false,
+            addEventListener(event, callback) { listeners.set(event, callback); },
+            removeEventListener(event) { listeners.delete(event); },
+            click() { listeners.get('click')(); },
+        };
+    }
+    const yes = button();
+    const no = button();
+    const dialog = {
+        open: false, addEventListener() {}, removeEventListener() {},
+        showModal() { this.open = true; }, close() { this.open = false; },
+    };
+    const message = {};
+    const requests = [];
+    const record = { id: 'client', firstName: 'Jean', customerName: 'Jean Smith', active: true };
+    const context = vm.createContext({
+        confirmDialog: dialog, confirmMessage: message,
+        document: { getElementById: (id) => id === 'confirmYes' ? yes : no },
+        monthlyEntitlements: [record],
+        isArchivedRecord: (client) => Boolean(client.archived) || client.active === false,
+        monthlyRequest: async (...args) => { requests.push(args); },
+        loadMonthlyEntitlements: async () => {}, setStatus() {}, managerAdminName: () => 'Admin',
+    });
+    const confirmation = script.slice(script.indexOf('function askYesNo('), script.indexOf('const dismissedStorageKey='));
+    const action = script.slice(script.indexOf('async function handleMonthlyCardAction('), script.indexOf("monthlyCards.addEventListener('click',handleMonthlyCardAction)"));
+    vm.runInContext(`${confirmation}\n${action}`, context);
+    const actionButton = { disabled: false, dataset: { action: 'toggle' }, closest: () => ({ dataset: { id: 'client' } }) };
+    const event = { target: { closest: () => actionButton } };
+    let pending = context.handleMonthlyCardAction(event);
+    assert.equal(dialog.open, true);
+    assert.match(message.textContent, /deactivate Jean's account/i);
+    assert.match(message.textContent, /removed from the active list/i);
+    no.click();
+    await pending;
+    assert.equal(requests.length, 0);
+    pending = context.handleMonthlyCardAction(event);
+    yes.click();
+    await pending;
+    assert.equal(requests[0][0], 'DELETE');
+    assert.equal(requests[0][1].id, 'client');
+    record.active = false;
+    record.archived = true;
+    actionButton.dataset.action = 'delete-permanent';
+    pending = context.handleMonthlyCardAction(event);
+    assert.match(message.textContent, /separate booking, payment and email activity records may remain/i);
+    no.click();
+    await pending;
+    assert.equal(requests.length, 1);
+    pending = context.handleMonthlyCardAction(event);
+    yes.click();
+    await pending;
+    assert.equal(requests[1][0], 'POST');
+    assert.equal(requests[1][1].action, 'delete-permanently');
+    assert.match(script, /data-action="delete-permanent"/);
+});
+
 test('live promo verification checks availability without reserving or redeeming codes', async (t) => {
     const records = new Map([
         ['promo:shared:active-batch', { pairs: [{ promoCode: 'SAVE50' }] }],

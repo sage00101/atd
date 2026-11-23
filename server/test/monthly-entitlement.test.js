@@ -1,7 +1,9 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 
 const values = new Map();
+let beforeUpdate;
 const redis = {
     async get(key) {
         return values.has(key) ? structuredClone(values.get(key)) : null;
@@ -18,11 +20,30 @@ const redis = {
     async lrange() {
         return [];
     },
+    async keys(pattern) {
+        const prefix = pattern.slice(0, -1);
+        return [...values.keys()].filter((key) => key.startsWith(prefix));
+    },
+    async srem() {},
+    async del(...keys) {
+        keys.forEach((key) => values.delete(key));
+    },
     async eval(script, keys, args) {
         if (script.includes("entitlement.creditsAvailable ~= nil and entitlement.creditsReserved ~= nil")) {
             return ['OK', values.get(keys[0])];
         }
         if (script.includes("local nextRecord = cjson.decode(ARGV[1])")) {
+            if (beforeUpdate) {
+                beforeUpdate();
+                beforeUpdate = null;
+            }
+            const existing = values.get(keys[0]);
+            if ((existing.updatedAt || '') !== args[6]) return 'STALE';
+            if (args[5] === '1') {
+                for (const digest of [...(existing.codeDigests || []), existing.currentCodeDigest].filter(Boolean)) {
+                    values.delete(`promo:monthly:code:${digest}`);
+                }
+            }
             values.set(keys[0], JSON.parse(args[0]));
             return 'OK';
         }
@@ -84,7 +105,83 @@ const {
     updateMonthlyEntitlement,
     changeMonthlyEntitlementPackage,
     recordMonthlyEntitlementPayment,
+    lookupMonthlyCodeProfile,
+    checkMonthlyWashAvailability,
+    reserveMonthlyWash,
+    deleteMonthlyEntitlementPermanently,
 } = await import('../api/_lib/monthly-promos.js');
+
+test('deactivation revokes every code and prevents using retained credits; deletion removes the account', async () => {
+    values.clear();
+    const created = await provisionMonthlyEntitlementFromPaidPurchase({
+        purchaseType: 'monthly', reference: 'DEACTIVATE-1', amountCents: 42000,
+        paidAt: new Date().toISOString(), contractOption: '3-months',
+        packageId: 'private-standard', vehicleType: 'Sedan / Hatchback',
+        bookingDate: '2026-11-23', bookingTime: '14:30', paymentMethod: 'online',
+        customer: { firstName: 'Test', surname: 'Client', email: 'client@example.test', mobile: '0712345678' },
+    });
+    const { entitlement } = created;
+    const code = entitlement.code;
+    const secondCode = 'ATDM-SECOND';
+    const secondDigest = crypto.createHash('sha256').update(secondCode).digest('hex');
+    values.set(`promo:monthly:entitlement:${entitlement.id}`, {
+        ...entitlement,
+        codeDigests: [...entitlement.codeDigests, secondDigest],
+        codes: [...entitlement.codes, { code: secondCode, digest: secondDigest }],
+    });
+    values.set(`promo:monthly:code:${secondDigest}`, entitlement.id);
+    assert.equal((await lookupMonthlyCodeProfile({ promoCode: code })).status, 'OK');
+    assert.equal((await lookupMonthlyCodeProfile({ promoCode: secondCode })).status, 'OK');
+    const archived = await updateMonthlyEntitlement(entitlement.id, {
+        active: false, archived: true, deactivationReason: 'Deactivated by admin',
+    });
+    assert.equal(archived.creditsAvailable, 5);
+    assert.equal(archived.code, null);
+    assert.equal((await lookupMonthlyCodeProfile({ promoCode: code })).status, 'NOT_FOUND');
+    assert.equal((await lookupMonthlyCodeProfile({ promoCode: secondCode })).status, 'NOT_FOUND');
+    assert.equal((await checkMonthlyWashAvailability({ promoCode: code, email: entitlement.email, bookingDate: '2026-12-01' })).status, 'NOT_FOUND');
+    assert.equal((await reserveMonthlyWash({ promoCode: code, email: entitlement.email, bookingDate: '2026-12-01' })).status, 'NOT_FOUND');
+    const restored = await updateMonthlyEntitlement(entitlement.id, {
+        active: true, archived: false, deactivationReason: 'Restored by admin',
+    });
+    assert.equal(restored.creditsAvailable, 5);
+    assert.equal((await lookupMonthlyCodeProfile({ promoCode: code })).status, 'NOT_FOUND');
+    await assert.rejects(deleteMonthlyEntitlementPermanently(entitlement.id), /Deactivate this account first/);
+    await updateMonthlyEntitlement(entitlement.id, {
+        active: false, archived: true, deactivationReason: 'Deactivated by admin',
+    });
+    await deleteMonthlyEntitlementPermanently(entitlement.id);
+    assert.equal(await redis.get(`promo:monthly:entitlement:${entitlement.id}`), null);
+    assert.equal(await redis.get('promo:monthly:purchase:DEACTIVATE-1'), entitlement.id);
+});
+
+test('a concurrent account change cannot be overwritten by a stale deactivation', async () => {
+    values.clear();
+    const created = await provisionMonthlyEntitlementFromPaidPurchase({
+        purchaseType: 'monthly', reference: 'STALE-1', amountCents: 42000,
+        paidAt: new Date().toISOString(), contractOption: '1-months',
+        packageId: 'private-standard', vehicleType: 'Sedan / Hatchback',
+        bookingDate: '2026-11-23', customer: {
+            firstName: 'Test', surname: 'Client', email: 'client@example.test', mobile: '0712345678',
+        },
+    });
+    const key = `promo:monthly:entitlement:${created.entitlement.id}`;
+    beforeUpdate = () => values.set(key, { ...values.get(key), updatedAt: 'changed', creditsAvailable: 0 });
+    await assert.rejects(updateMonthlyEntitlement(created.entitlement.id, {
+        active: false, archived: true, deactivationReason: 'Deactivated by admin',
+    }), /changed while being updated/);
+    assert.equal((await redis.get(key)).creditsAvailable, 0);
+    assert.equal((await redis.get(key)).active, true);
+});
+
+test('permanent deletion fails without removing the account when cleanup lookup fails', async (t) => {
+    values.clear();
+    const key = 'promo:monthly:entitlement:archived';
+    values.set(key, { id: 'archived', email: 'client@example.test', active: false, archived: true });
+    t.mock.method(redis, 'keys', async () => { throw new Error('Redis lookup failed'); });
+    await assert.rejects(deleteMonthlyEntitlementPermanently('archived'), /Redis lookup failed/);
+    assert.ok(await redis.get(key));
+});
 
 test('paid package provisioning grants term credits minus the initial website wash', async () => {
     const dateParts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {

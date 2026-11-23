@@ -117,6 +117,9 @@ return {'OK', cjson.encode(entitlement)}
 const UPDATE_ENTITLEMENT_SCRIPT = `
 if redis.call('EXISTS', KEYS[1]) == 0 then return 'NOT_FOUND' end
 local existing = cjson.decode(redis.call('GET', KEYS[1]))
+local version = existing.updatedAt
+if not version or version == cjson.null then version = '' end
+if version ~= ARGV[7] then return 'STALE' end
 local nextRecord = cjson.decode(ARGV[1])
 local auditEntry = cjson.decode(ARGV[4])
 if KEYS[2] ~= KEYS[3] then
@@ -1450,9 +1453,10 @@ export async function updateMonthlyEntitlement(id, input) {
         customerKey(existing.email),
         customerKey(details.email),
         codeKey(code),
-    ], [JSON.stringify(next), id, replaceCode ? '1' : '0', JSON.stringify(auditEntry), maskCode(existing.code), revokeCodes ? '1' : '0']);
+    ], [JSON.stringify(next), id, replaceCode ? '1' : '0', JSON.stringify(auditEntry), maskCode(existing.code), revokeCodes ? '1' : '0', existing.updatedAt || '']);
     if (result === 'NOT_FOUND') throw new Error('Monthly entitlement not found.');
     if (result === 'EMAIL_EXISTS') throw new Error('Another customer already has an entitlement for that email.');
+    if (result === 'STALE') throw new Error('This monthly account changed while being updated. Refresh and try again.');
     if (result !== 'OK') throw new Error('Could not update the monthly entitlement.');
     return next;
 }
@@ -1474,13 +1478,13 @@ export async function deleteMonthlyEntitlementPermanently(id) {
     ]);
     const digests = new Set([...(existing.codeDigests || []), existing.currentCodeDigest].filter(Boolean));
     digests.forEach((codeDigest) => keys.add(`promo:monthly:code:${codeDigest}`));
-    const reservationIds = await redis.zrange(allReservationsKey(entitlementId), 0, -1).catch(() => []);
+    const reservationIds = await redis.zrange(allReservationsKey(entitlementId), 0, -1);
     (reservationIds || []).forEach((reservationId) => keys.add(reservationKey(reservationId)));
     for (const pattern of [`promo:monthly:used:${entitlementId}:*`, `promo:monthly:reservations:${entitlementId}:*`]) {
-        const matches = await redis.keys(pattern).catch(() => []);
+        const matches = await redis.keys(pattern);
         (matches || []).forEach((key) => keys.add(key));
     }
-    const dispatchIds = await redis.lrange(emailDispatchIndexKey(entitlementId), 0, -1).catch(() => []);
+    const dispatchIds = await redis.lrange(emailDispatchIndexKey(entitlementId), 0, -1);
     (dispatchIds || []).forEach((dispatchId) => keys.add(emailDispatchKey(dispatchId)));
     // The customer key may now belong to a different record; only drop it when it still points here.
     const customerOwner = await redis.get(customerKey(existing.email));

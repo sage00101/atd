@@ -1352,7 +1352,7 @@ async function handleMonthlyCardAction(event){
       return;
     }
     if(button.dataset.action==='delete-permanent'){
-      if(!await askYesNo('This will permanently delete '+record.customerName+' and all of their saved information from the system. This cannot be undone.'))return;
+      if(!await askYesNo('Permanently delete '+record.customerName+"'s monthly account and remaining credits? This cannot be undone. Separate booking, payment and email activity records may remain."))return;
       await monthlyRequest('POST',{action:'delete-permanently',id:record.id});
       await loadMonthlyEntitlements();
       setStatus(record.customerName+' was permanently deleted.','ok');
@@ -1393,7 +1393,8 @@ async function handleMonthlyCardAction(event){
         await monthlyRequest('PUT',{id:record.id,active:true,archived:false,deactivationReason:'Restored and reactivated by '+managerAdminName()+'.'});
         setStatus('Client restored to Monthly clients. Old codes remain invalid; generate a new code to issue access.','ok');
       }else{
-        if(!window.confirm("Are you sure? This will deactivate this user's account, revoke every code already issued to them and move them to the Archived tab."))return;
+        const firstName=record.firstName||String(record.customerName||'').trim().split(/\\s+/)[0]||'this client';
+        if(!await askYesNo("Are you sure you would like to deactivate "+firstName+"'s account? It will be removed from the active list, its codes revoked, and its credits kept in Archived."))return;
         await monthlyRequest('DELETE',{id:record.id,deactivationReason:'Deactivated by '+managerAdminName()+'.'});
         setStatus('Client deactivated, all issued codes were revoked and the account moved to the Archived tab.','ok');
       }

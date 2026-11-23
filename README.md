@@ -92,6 +92,12 @@ allowance for the current calendar month; older pre-migration periods are not
 reconstructed as additional credits. Email delivery requires the configured
 Resend integration.
 
+Deactivating a monthly account removes it from the active list and revokes all
+its codes, so its credits cannot be used. The account and balance remain in
+Archived; restoring it requires a newly generated code. The permanent-delete
+button in Archived removes the monthly account and its credits, while separate
+booking, payment and email activity records may remain.
+
 The protected Business Manager calendar shows the customer's email on booked
 slots when available. Public availability calendars never receive these emails.
 Existing bookings can be cancelled there even if their time is no longer offered;
