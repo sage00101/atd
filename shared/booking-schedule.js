@@ -28,7 +28,9 @@ export function isBookableBookingDate(date) {
 
 export function getBookingTimesForDate(date) {
     const dateKey = date instanceof Date
-        ? (Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10))
+        ? (Number.isNaN(date.getTime())
+            ? ''
+            : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`)
         : String(date || '');
     const day = getDayOfWeek(date);
     const regularTimes = day === 6
