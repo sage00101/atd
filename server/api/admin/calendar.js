@@ -10,7 +10,7 @@ import {
     getCalendarHistory,
     setCalendarBlockRange,
 } from '../_lib/store.js';
-import { DATE_BOOKING_TIME_OVERRIDES, SATURDAY_BOOKING_TIMES, WEEKDAY_BOOKING_TIMES } from '../../../shared/booking-schedule.js';
+import { DATE_BOOKING_TIME_ADDITIONS, SATURDAY_BOOKING_TIMES, WEEKDAY_BOOKING_TIMES } from '../../../shared/booking-schedule.js';
 
 function safeEqual(left, right) {
     const leftDigest = crypto.createHash('sha256').update(String(left)).digest();
@@ -224,7 +224,7 @@ const adminPage = `<!doctype html>
 <script>
   const weekdaySlots = ${JSON.stringify(WEEKDAY_BOOKING_TIMES)};
   const saturdaySlots = ${JSON.stringify(SATURDAY_BOOKING_TIMES)};
-  const dateSlotOverrides = ${JSON.stringify(DATE_BOOKING_TIME_OVERRIDES)};
+  const dateSlotAdditions = ${JSON.stringify(DATE_BOOKING_TIME_ADDITIONS)};
   const keyInput = document.getElementById('adminKey');
   const loginKeyInput = document.getElementById('loginKeyInput');
   const calendarNode = document.getElementById('calendar');
@@ -269,11 +269,10 @@ const adminPage = `<!doctype html>
   }
 
   function slotsForDate(value) {
-    if (Object.prototype.hasOwnProperty.call(dateSlotOverrides, value)) return dateSlotOverrides[value];
     const day = dateFromIso(value).getDay();
-    if (day === 6) return saturdaySlots;
-    if (day >= 1 && day <= 5) return weekdaySlots;
-    return [];
+    const regularSlots = day === 6 ? saturdaySlots : day >= 1 && day <= 5 ? weekdaySlots : [];
+    const additionalSlots = dateSlotAdditions[value] || [];
+    return [...new Set([...regularSlots, ...additionalSlots])].sort();
   }
 
   function buildDateRange(days = 30) {
