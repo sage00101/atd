@@ -13,8 +13,10 @@ import {
 import {
   DATE_BOOKING_TIME_ADDITIONS,
   DATE_BOOKING_TIME_REMOVALS,
+  LEGACY_WEEKDAY_BOOKING_TIMES,
   SATURDAY_BOOKING_TIMES,
   WEEKDAY_BOOKING_TIMES,
+  WEEKDAY_BOOKING_TIMES_EFFECTIVE_DATE,
 } from '../../../shared/booking-schedule.js';
 
 function safeEqual(left, right) {
@@ -228,6 +230,8 @@ const adminPage = `<!doctype html>
 </div>
 <script>
   const weekdaySlots = ${JSON.stringify(WEEKDAY_BOOKING_TIMES)};
+  const legacyWeekdaySlots = ${JSON.stringify(LEGACY_WEEKDAY_BOOKING_TIMES)};
+  const weekdaySlotsEffectiveDate = ${JSON.stringify(WEEKDAY_BOOKING_TIMES_EFFECTIVE_DATE)};
   const saturdaySlots = ${JSON.stringify(SATURDAY_BOOKING_TIMES)};
   const dateSlotAdditions = ${JSON.stringify(DATE_BOOKING_TIME_ADDITIONS)};
   const dateSlotRemovals = ${JSON.stringify(DATE_BOOKING_TIME_REMOVALS)};
@@ -276,12 +280,17 @@ const adminPage = `<!doctype html>
 
   function slotsForDate(value) {
     const day = dateFromIso(value).getDay();
-    const regularSlots = day === 6 ? saturdaySlots : day >= 1 && day <= 5 ? weekdaySlots : [];
+    const regularSlots = day === 6
+      ? saturdaySlots
+      : day >= 1 && day <= 5
+        ? value < weekdaySlotsEffectiveDate ? legacyWeekdaySlots : weekdaySlots
+        : [];
     const additionalSlots = dateSlotAdditions[value] || [];
     const removedSlots = new Set(dateSlotRemovals[value] || []);
-    return [...new Set([...regularSlots, ...additionalSlots])]
-      .filter((time) => !removedSlots.has(time))
-      .sort();
+    const scheduledSlots = [...new Set([...regularSlots, ...additionalSlots])]
+      .filter((time) => !removedSlots.has(time));
+    const occupiedSlots = [...(state.bookedSlots[value] || []), ...(state.blockedSlots[value] || [])];
+    return [...new Set([...scheduledSlots, ...occupiedSlots])].sort();
   }
 
   function buildDateRange(days = 30) {

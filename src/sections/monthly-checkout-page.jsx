@@ -141,7 +141,9 @@ export default function MonthlyCheckoutPage() {
     const previousMonthDisabled = month <= firstOfCurrentMonth;
     const nextMonthDisabled = month >= firstOfNextMonth;
     const selectedDateKey = selectedDate ? dateKey(selectedDate) : '';
-    const bookingSlots = selectedDate ? getBookingTimesForDate(selectedDate) : WEEKDAY_BOOKING_TIMES;
+    const bookingSlots = selectedDate
+        ? [...new Set([...getBookingTimesForDate(selectedDate), ...(bookedSlots[selectedDateKey] || [])])].sort()
+        : WEEKDAY_BOOKING_TIMES;
 
     useEffect(() => {
         const timer = window.setInterval(() => setNow(new Date()), 30_000);

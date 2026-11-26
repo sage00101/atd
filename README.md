@@ -33,15 +33,17 @@ webhook signing secret as `RESEND_WEBHOOK_SECRET` in the deployment environment.
 ## Booking workflow
 
 Customers submit a booking request and choose secure Yoco checkout or payment on
-arrival. Requests reserve their chosen slot while awaiting review. Once approved,
-on-site bookings are confirmed automatically, with no payment taken until arrival.
-Covered Monthly Clients washes are confirmed when the customer continues; online
-bookings are confirmed by the Yoco payment webhook. Booking
-receipts are sent after confirmation. Returning from a cancelled or failed online
-checkout releases its pending slot and updates the request in the Business Manager.
-Failed-payment webhooks also release pending slots. If a customer abandons checkout
-without returning or a payment event, the hold expires automatically. Appointments
-require at least one hour's notice in South African time.
+arrival. On-site requests hold their chosen slot immediately and, once approved,
+are confirmed with no payment taken until arrival. Online requests and checkouts
+do not hold the slot; the successful Yoco payment webhook atomically claims it
+and updates public availability. If another booking claims the slot before that
+payment completes, the paid checkout is flagged for manual review. Covered Monthly
+Clients washes are confirmed when the customer continues. Booking receipts are
+sent after confirmation. Returning from a cancelled or failed online checkout
+updates the request in the Business Manager. Appointments require at least one
+hour's notice in South African time. Weekday slots change to 09:00, 11:30, 14:00,
+16:30, and 19:00 from 30 November 2026; existing reservations remain at their
+original times.
 
 New booking requests are emailed to the customer and to
 `BOOKING_REQUEST_EMAIL` (default: `bookings@a10tion.co.za`), including any

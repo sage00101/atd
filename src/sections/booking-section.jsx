@@ -374,6 +374,9 @@ export default function BookingSection() {
                 });
                 return;
             }
+            if (status === 'success') {
+                window.dispatchEvent(new Event('a10tion-booking-availability-refresh'));
+            }
             params.delete('payment');
             params.delete('ref');
             params.delete('cancelToken');
@@ -556,7 +559,9 @@ export default function BookingSection() {
     }, [checkoutOpen]);
 
     const selectedDateKey = selectedDate ? dateKey(selectedDate) : null;
-    const bookingSlots = selectedDate ? getBookingTimesForDate(selectedDate) : WEEKDAY_BOOKING_TIMES;
+    const bookingSlots = selectedDate
+        ? [...new Set([...getBookingTimesForDate(selectedDate), ...(bookedSlots[selectedDateKey] || [])])].sort()
+        : WEEKDAY_BOOKING_TIMES;
     const blockedTimes = selectedDateKey
         ? [...new Set([...(unavailableSlots[selectedDateKey] || []), ...(bookedSlots[selectedDateKey] || [])])]
         : [];

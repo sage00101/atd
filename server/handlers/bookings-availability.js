@@ -6,6 +6,7 @@ import { getBlockedSlotsInRange, getBookedSlotsInRange } from '../api/_lib/store
 // website updates instantly whenever a booking or calendar block changes.
 export default async function handler(req, res) {
     if (applyCors(req, res)) return;
+    res.setHeader('Cache-Control', 'no-store');
     if (req.method !== 'GET') {
         res.status(405).json({ message: 'Method not allowed.' });
         return;

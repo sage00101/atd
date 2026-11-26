@@ -19,6 +19,7 @@ import {
 } from '../api/_lib/monthly-promos.js';
 import {
     claimUniqueReferenceNumber,
+    getBookingSlotOwner,
     getSharedPromoCodeStatus,
     looksLikeEmail,
     looksLikeVehicleRegistration,
@@ -70,6 +71,7 @@ export default async function handler(req, res) {
             await releaseUnapprovedBookingSlot(date, time);
             return;
         }
+        if (approvalRequest.booking.bookingType !== 'monthly-entitlement') return;
         const remainingTtl = Math.ceil((Number(approvalRequest.approvalExpiresAt) - Date.now()) / 1000);
         if (remainingTtl > 0) {
             await reserveBookingSlot(date, time, approvalRequest.reference, remainingTtl);
@@ -205,12 +207,20 @@ export default async function handler(req, res) {
             res.status(409).json({ message: 'This checkout has expired. Please submit a new booking request.' });
             return;
         }
-        if (!await reserveBookingSlot(bookingDate, bookingTime, reference, remainingCheckoutTtl)) {
-            res.status(409).json({ message: 'That time slot was just booked by someone else. Please choose another.' });
-            return;
+        if (isMonthlyWashBooking) {
+            if (!await reserveBookingSlot(bookingDate, bookingTime, reference, remainingCheckoutTtl)) {
+                res.status(409).json({ message: 'That time slot was just booked by someone else. Please choose another.' });
+                return;
+            }
+            reservedSlotDate = bookingDate;
+            reservedSlotTime = bookingTime;
+        } else {
+            const slotOwner = await getBookingSlotOwner(bookingDate, bookingTime);
+            if (slotOwner && slotOwner !== reference) {
+                res.status(409).json({ message: 'That time slot was just booked by someone else. Please choose another.' });
+                return;
+            }
         }
-        reservedSlotDate = bookingDate;
-        reservedSlotTime = bookingTime;
 
         let contractFileBase64 = null;
         let contractFileName = null;

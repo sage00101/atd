@@ -6,7 +6,7 @@ import { businessFleetRates, getBusinessFleetRateCents, getBusinessFleetTierForC
 import { BOOKING_SLOT_TIMES } from '../../../shared/booking-schedule.js';
 import { getOnlineMonthlyContractMonths } from '../../../shared/monthly-contract.js';
 
-export const PENDING_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 5; // 5 days — abandoned checkouts expire
+export const PENDING_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 5; // 5 days — abandoned checkout records expire
 const CONFIRMED_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year — keep the slot blocked long-term
 const DATE_INDEX_TTL_SECONDS = 60 * 60 * 24 * 90; // 90 days — bookings are never made further out than this
 const WEBHOOK_DEDUPE_TTL_SECONDS = 60 * 60 * 24 * 3; // 3 days — longer than Yoco's retry window
@@ -27,12 +27,19 @@ if not raw then return {'NOT_FOUND'} end
 local booking = cjson.decode(raw)
 if booking.status == 'paid' then return {'DUPLICATE'} end
 if booking.status ~= 'pending' then return {booking.status} end
+if ARGV[3] ~= '' and ARGV[4] ~= '' then
+  local owner = redis.call('GET', KEYS[2])
+  if owner and owner ~= booking.reference then return {'SLOT_TAKEN'} end
+  redis.call('SET', KEYS[2], booking.reference, 'EX', ARGV[2])
+  redis.call('SADD', KEYS[3], booking.bookingTime)
+  redis.call('EXPIRE', KEYS[3], ARGV[5])
+end
 booking.status = 'paid'
 booking.confirmedAt = ARGV[1]
 booking.paidAt = ARGV[1]
 redis.call('SET', KEYS[1], cjson.encode(booking), 'EX', ARGV[2])
-if ARGV[3] ~= '' and ARGV[4] ~= '' then
-  redis.call('EXPIRE', KEYS[2], ARGV[2])
+if booking.cancellationToken and booking.cancellationToken ~= '' then
+  redis.call('EXPIRE', KEYS[4], ARGV[2])
 end
 return {'OK', cjson.encode(booking)}
 `;
@@ -330,15 +337,10 @@ export async function markSharedPromoCodeUsed(promoCode, reservationId) {
 }
 
 // ---------------------------------------------------------------------------
-// Bookings (pending checkout -> confirmed payment) + per-date slot index
-//
-// Each slot has its own key (`booking-slot:<date>:<time>`) with a TTL tied to
-// its real lifecycle: short-lived while pending (so an abandoned checkout —
-// one that never gets a webhook at all — self-releases automatically after
-// PENDING_BOOKING_TTL_SECONDS) and long-lived once paid. The per-date SET is
-// only a cheap candidate list; getBookedSlotsInRange cross-checks each
-// candidate's slot key before reporting it as taken, so stale/expired
-// candidates never block a real customer.
+// Each slot has its own key (`booking-slot:<date>:<time>`). Yoco online
+// checkouts claim it atomically when payment is confirmed; onsite requests may
+// hold it earlier. The per-date SET is only a candidate list, and
+// getBookedSlotsInRange cross-checks each slot key before reporting it as taken.
 // ---------------------------------------------------------------------------
 
 const bookingKey = (checkoutId) => `booking:${checkoutId}`;
@@ -391,11 +393,14 @@ export async function markBookingConfirmed(checkoutId) {
     const result = await redis.eval(MARK_BOOKING_CONFIRMED_SCRIPT, [
         bookingKey(checkoutId),
         slotKey(booking.bookingDate, booking.bookingTime),
+        dateIndexKey(booking.bookingDate),
+        booking.cancellationToken ? cancellationTokenKey(booking.cancellationToken) : 'booking-cancel-token:none',
     ], [
         new Date().toISOString(),
         String(CONFIRMED_BOOKING_TTL_SECONDS),
         booking.bookingDate || '',
         booking.bookingTime || '',
+        String(DATE_INDEX_TTL_SECONDS),
     ]);
     return result?.[0] === 'OK' ? (typeof result[1] === 'string' ? JSON.parse(result[1]) : result[1]) : null;
 }
@@ -462,7 +467,7 @@ export async function releaseBookingSlotIfOwned(bookingDate, bookingTime, token)
     ], [token, bookingTime]));
 }
 
-/** Returns { [date]: [time, ...] } for every slot still actively held (pending or paid) in the given date range. */
+/** Returns { [date]: [time, ...] } for every held or paid slot in the date range. */
 export async function getBookedSlotsInRange(fromDate, toDate) {
     const bookedSlots = {};
     if (!fromDate || !toDate) return bookedSlots;

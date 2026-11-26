@@ -10,6 +10,7 @@ let provisionCalls;
 let receipts;
 let receiptFailure;
 let processed;
+let slotReservationCalls;
 
 mock.module('../api/_lib/booking-cancellation.js', { exports: {
     finishPendingBookingCancellation: async () => {},
@@ -45,6 +46,7 @@ mock.module('../api/_lib/booking-approval.js', { exports: {
 } });
 mock.module('../api/_lib/store.js', { exports: {
     getBooking: async () => booking,
+    getBookingSlotOwner: async () => null,
     markOnsiteBookingPaid: async () => {
         if (booking.status !== 'confirmed_unpaid') return null;
         booking = { ...booking, status: 'paid', paidAt: '2026-11-23T12:00:00Z' };
@@ -70,7 +72,7 @@ mock.module('../api/_lib/store.js', { exports: {
     releaseBookingSlot: async () => {},
     releaseBookingSlotIfOwned: async () => {},
     releaseSharedPromoCode: async () => {},
-    reserveBookingSlot: async () => true,
+    reserveBookingSlot: async () => { slotReservationCalls += 1; return true; },
     reserveSharedPromoCode: async () => true,
     savePendingBooking: async () => {},
     saveOnsiteBooking: async () => {},
@@ -111,6 +113,7 @@ function reset() {
     receipts = [];
     receiptFailure = false;
     processed = false;
+    slotReservationCalls = 0;
 }
 
 test('on-site card payments provision after confirmation and include the code on the paid receipt', async (t) => {
@@ -190,6 +193,7 @@ test('online checkout requests a five-day Yoco expiry', async (t) => {
     await online(req, res);
     assert.equal(res.body.redirectUrl, 'https://example.test/checkout');
     assert.equal(Date.parse(payload.expiresAt), now + 5 * 86400000);
+    assert.equal(slotReservationCalls, 0);
 });
 
 test('online monthly receipts include the issued code and retry if email delivery fails', async (t) => {

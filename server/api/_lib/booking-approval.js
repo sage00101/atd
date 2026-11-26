@@ -264,7 +264,7 @@ function getRequestError(status) {
     return messages[status] || 'This booking request is no longer available.';
 }
 
-export async function validateBookingRequest(booking) {
+export async function validateBookingRequest(booking, { existingSlotReference = '' } = {}) {
     const customer = booking?.customer || {};
     const bookingDate = String(booking?.bookingDate || '');
     const bookingTime = String(booking?.bookingTime || '');
@@ -273,7 +273,11 @@ export async function validateBookingRequest(booking) {
     if (booking.bookingType === 'monthly-entitlement' && booking.purchaseType !== 'single') {
         throw new BookingRequestError('Monthly entitlement washes must be submitted as single washes.');
     }
-    if (!isValidDate(bookingDate) || !isBookableBookingTime(bookingDate, bookingTime)) {
+    const validDate = isValidDate(bookingDate);
+    const validTime = validDate && isBookableBookingTime(bookingDate, bookingTime);
+    const isExistingHeldSlot = validDate && existingSlotReference
+        && await getBookingSlotOwner(bookingDate, bookingTime) === existingSlotReference;
+    if (!validDate || (!validTime && !isExistingHeldSlot)) {
         throw new BookingRequestError('Choose a valid booking date and time.');
     }
     if (!hasMinimumBookingNotice(bookingDate, bookingTime)) {
@@ -369,14 +373,19 @@ export async function createBookingRequest(booking) {
     const now = Date.now();
     const statusToken = createToken();
     const expiresAt = now + REQUEST_SLOT_TTL_SECONDS * 1000;
-    const slotClaimed = await reserveBookingSlot(
-        validatedBooking.bookingDate,
-        validatedBooking.bookingTime,
-        reference,
-        REQUEST_SLOT_TTL_SECONDS,
-    );
-    if (!slotClaimed) {
-        throw new BookingRequestError('That time slot was just requested by someone else. Please choose another.');
+    const shouldHoldSlot = validatedBooking.requestedPaymentMethod !== 'online';
+    if (shouldHoldSlot) {
+        const slotClaimed = await reserveBookingSlot(
+            validatedBooking.bookingDate,
+            validatedBooking.bookingTime,
+            reference,
+            REQUEST_SLOT_TTL_SECONDS,
+        );
+        if (!slotClaimed) {
+            throw new BookingRequestError('That time slot was just requested by someone else. Please choose another.');
+        }
+    } else if (await getBookingSlotOwner(validatedBooking.bookingDate, validatedBooking.bookingTime)) {
+        throw new BookingRequestError('That time slot is no longer available. Please choose another.');
     }
 
     const request = {
@@ -497,13 +506,10 @@ export async function acceptBookingRequest(id, adminName) {
         && request.booking?.bookingType !== 'monthly-entitlement') {
         return { request: await acceptOnsiteBookingRequest(request, name), continuationToken: null };
     }
-    const slotClaimed = await reserveBookingSlot(
-        request.booking.bookingDate,
-        request.booking.bookingTime,
-        request.reference,
-        APPROVAL_TTL_SECONDS,
-    );
-    if (!slotClaimed) throw new Error('The requested time slot is no longer available.');
+    const slotOwner = await getBookingSlotOwner(request.booking.bookingDate, request.booking.bookingTime);
+    if (slotOwner && slotOwner !== request.reference) {
+        throw new Error('The requested time slot is no longer available.');
+    }
     const continuationToken = createToken();
     const now = Date.now();
     const approvalExpiresAt = now + APPROVAL_TTL_SECONDS * 1000;
@@ -531,7 +537,7 @@ export async function acceptBookingRequest(id, adminName) {
 async function acceptOnsiteBookingRequest(request, adminName) {
     if (request.status !== 'pending_approval') throw new Error(getRequestError(request.status));
     if (Number(request.requestExpiresAt) <= Date.now()) throw new Error(getRequestError('EXPIRED'));
-    const booking = await validateBookingRequest(request.booking);
+    const booking = await validateBookingRequest(request.booking, { existingSlotReference: request.reference });
     if (booking.purchaseType === 'monthly' && booking.promoCode) {
         throw new Error('Promo codes are available for single washes only.');
     }

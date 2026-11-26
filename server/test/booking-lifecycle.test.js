@@ -30,7 +30,7 @@ const redis = Object.fromEntries(['get', 'mget', 'set', 'del', 'lrange', 'lpush'
     throw new Error(`Unexpected Redis call: ${name}`);
 }]));
 mock.module('../api/_lib/redis.js', { exports: { redis } });
-const [{ validateBookingRequest, createBookingRequest, acceptBookingRequest, beginBookingContinuation, completeBookingContinuation, listBookingRequests, cancelBookedSlotRecords }, { getBookedSlotsInRange, reserveBookingSlot, savePendingBooking, getMonthlyPackagePriceCents, getMonthlyPackageTotalCents, markOnsiteBookingPaid },
+const [{ validateBookingRequest, createBookingRequest, acceptBookingRequest, beginBookingContinuation, completeBookingContinuation, listBookingRequests, cancelBookedSlotRecords }, { getBookedSlotsInRange, reserveBookingSlot, savePendingBooking, getMonthlyPackagePriceCents, getMonthlyPackageTotalCents, markBookingConfirmed, markOnsiteBookingPaid },
     { default: cancelHandler }, { default: webhookHandler }, { default: calendarHandler }, { default: availabilityHandler },
     { default: promoValidationHandler }, { default: promoManagerHandler }] = await Promise.all([
     import('../api/_lib/booking-approval.js'),
@@ -60,6 +60,23 @@ function installRedisStub(t) {
     replace('smembers', async (key) => [...(sets.get(key) || [])]);
     replace('exists', async (key) => values.has(key) ? 1 : 0);
     replace('eval', async (script, keys, args) => {
+        if (script.includes('booking.confirmedAt = ARGV[1]')) {
+            const booking = values.get(keys[0]);
+            if (!booking) return ['NOT_FOUND'];
+            if (booking.status === 'paid') return ['DUPLICATE'];
+            if (booking.status !== 'pending') return [booking.status];
+            if (args[2] && args[3]) {
+                const owner = values.get(keys[1]);
+                if (owner && owner !== booking.reference) return ['SLOT_TAKEN'];
+                values.set(keys[1], booking.reference);
+                ttls.set(keys[1], Number(args[1]));
+                if (!sets.has(keys[2])) sets.set(keys[2], new Set());
+                sets.get(keys[2]).add(booking.bookingTime);
+            }
+            const confirmed = { ...booking, status: 'paid', confirmedAt: args[0], paidAt: args[0] };
+            values.set(keys[0], confirmed);
+            return ['OK', JSON.stringify(confirmed)];
+        }
         if (script.includes("request.booking.pricingSummary = cjson.decode(ARGV[7])")) {
             const request = values.get(keys[0]);
             if (!request) return ['NOT_FOUND'];
@@ -157,7 +174,7 @@ function installRedisStub(t) {
     return { values, sets, lists, ttls };
 }
 
-test('requests and online checkout holds last five days at each stage', async (t) => {
+test('online booking requests and checkout do not hold a slot before payment', async (t) => {
     const db = installRedisStub(t);
     const start = slotDateTime('2026-11-10', '14:30').getTime() - 10 * 86400000;
     t.mock.method(Date, 'now', () => start);
@@ -170,29 +187,66 @@ test('requests and online checkout holds last five days at each stage', async (t
     const slot = 'booking-slot:2026-11-10:14:30';
     const fiveDays = 5 * 86400;
     assert.equal(request.requestExpiresAt, start + fiveDays * 1000);
-    assert.equal(db.ttls.get(slot), fiveDays);
+    assert.equal(db.values.has(slot), false);
+    assert.deepEqual(await getBookedSlotsInRange('2026-11-10', '2026-11-10'), {});
     Date.now.mock.mockImplementation(() => start + fiveDays * 1000 - 1);
     assert.equal((await listBookingRequests())[0].status, 'pending_approval');
     const approved = await acceptBookingRequest(request.id, 'Manager');
     assert.equal(Number(approved.request.approvalExpiresAt), Date.now() + fiveDays * 1000);
-    assert.equal(db.ttls.get(slot), fiveDays);
+    assert.equal(db.values.has(slot), false);
     const tokenKey = `booking:request-continuation:${approved.request.continuationTokenDigest}`;
     assert.equal(db.ttls.get(tokenKey), fiveDays);
     const continuation = await beginBookingContinuation(approved.continuationToken);
     assert.equal(Number(continuation.request.checkoutExpiresAt), Date.now() + fiveDays * 1000);
     assert.equal((await beginBookingContinuation(approved.continuationToken)).request.checkoutExpiresAt, continuation.request.checkoutExpiresAt);
 
-    await reserveBookingSlot(booking.bookingDate, booking.bookingTime, request.reference);
-    await savePendingBooking('checkout', { cancellationToken: 'cancel-token' });
-    assert.equal(db.ttls.get(slot), fiveDays);
+    await savePendingBooking('checkout', {
+        ...booking,
+        reference: request.reference,
+        cancellationToken: 'cancel-token',
+        status: 'pending',
+    });
+    assert.equal(db.values.has(slot), false);
     assert.equal(db.ttls.get('booking:checkout'), fiveDays);
     assert.equal(db.ttls.get('booking-cancel-token:cancel-token'), fiveDays);
+    assert.deepEqual(await getBookedSlotsInRange('2026-11-10', '2026-11-10'), {});
     assert.equal(await completeBookingContinuation(request.id, { status: 'awaiting_completion', checkoutId: 'checkout' }), true);
     assert.equal(db.ttls.get(tokenKey), fiveDays);
     Date.now.mock.mockImplementation(() => start + 2 * fiveDays * 1000 - 2);
     assert.equal((await listBookingRequests())[0].status, 'awaiting_completion');
     Date.now.mock.mockImplementation(() => start + 2 * fiveDays * 1000 - 1);
     assert.equal((await listBookingRequests())[0].status, 'expired');
+});
+
+test('successful online payment atomically claims its slot and exposes it as booked', async (t) => {
+    const db = installRedisStub(t);
+    const booking = {
+        reference: 'PAID123',
+        bookingDate: '2026-11-10',
+        bookingTime: '14:30',
+        status: 'pending',
+    };
+    db.values.set('booking:checkout-paid', booking);
+    assert.deepEqual(await getBookedSlotsInRange(booking.bookingDate, booking.bookingDate), {});
+
+    const paid = await markBookingConfirmed('checkout-paid');
+    assert.equal(paid.status, 'paid');
+    assert.equal(db.values.get('booking-slot:2026-11-10:14:30'), booking.reference);
+    assert.deepEqual(await getBookedSlotsInRange(booking.bookingDate, booking.bookingDate), {
+        '2026-11-10': ['14:30'],
+    });
+    const availability = response();
+    await availabilityHandler({
+        method: 'GET',
+        headers: {},
+        query: { from: booking.bookingDate, to: booking.bookingDate },
+    }, availability);
+    assert.deepEqual(availability.body.bookedSlots, { '2026-11-10': ['14:30'] });
+
+    db.values.set('booking:checkout-conflict', { ...booking, reference: 'OTHER123', status: 'pending' });
+    assert.equal(await markBookingConfirmed('checkout-conflict'), null);
+    assert.equal(db.values.get('booking:checkout-conflict').status, 'pending');
+    assert.equal(db.values.get('booking-slot:2026-11-10:14:30'), booking.reference);
 });
 
 test('unapproved requests expire at the five-day boundary', async (t) => {
@@ -210,6 +264,25 @@ test('unapproved requests expire at the five-day boundary', async (t) => {
     assert.equal((await listBookingRequests())[0].status, 'expired');
     assert.equal(db.values.has('booking-slot:2026-11-10:14:30'), false);
     await assert.rejects(acceptBookingRequest(request.id, 'Manager'), /expired/);
+});
+
+test('onsite requests hold their slot immediately', async (t) => {
+    installRedisStub(t);
+    const now = slotDateTime('2026-11-10', '14:30').getTime() - 7200000;
+    t.mock.method(Date, 'now', () => now);
+    const { request } = await createBookingRequest({
+        purchaseType: 'single',
+        vehicleType: 'Sedan / Hatchback',
+        bookingDate: '2026-11-10',
+        bookingTime: '14:30',
+        customer: { firstName: 'Jane', surname: 'Doe', mobile: '0821234567', email: 'jane@example.com', registration: 'ABC123', address: '1 Main Road' },
+        termsAccepted: true,
+        requestedPaymentMethod: 'onsite',
+    });
+    assert.deepEqual(await getBookedSlotsInRange('2026-11-10', '2026-11-10'), {
+        '2026-11-10': ['14:30'],
+    });
+    assert.equal(request.status, 'pending_approval');
 });
 
 test('onsite approval confirms the booking and calendar without collecting payment', async (t) => {
@@ -340,6 +413,7 @@ test('calendar emails follow the current slot owner and stay out of public avail
 
     const publicResponse = response();
     await availabilityHandler({ method: 'GET', headers: {}, query }, publicResponse);
+    assert.equal(publicResponse.headers['Cache-Control'], 'no-store');
     assert.deepEqual(publicResponse.body.bookedSlots[date], ['09:00', '10:00', '11:00', '12:00']);
     assert.equal(JSON.stringify(publicResponse.body).includes('@example.com'), false);
 });
@@ -740,6 +814,27 @@ test('weekday and Saturday booking slots are accepted, while Sunday and mismatch
     await assert.doesNotReject(validateBookingRequest(booking));
     await assert.rejects(validateBookingRequest({ ...booking, bookingTime: '09:30' }), /valid booking date and time/);
     await assert.rejects(validateBookingRequest({ ...booking, bookingDate: '2026-11-15' }), /valid booking date and time/);
+});
+
+test('existing held weekday appointments remain valid at their original time', async (t) => {
+    installRedisStub(t);
+    const date = '2026-12-09';
+    const time = '12:00';
+    const slot = slotDateTime(date, time).getTime();
+    t.mock.method(Date, 'now', () => slot - 2 * 3600000);
+    await reserveBookingSlot(date, time, 'EXISTING123');
+    const booking = {
+        purchaseType: 'single',
+        vehicleType: 'Sedan / Hatchback',
+        bookingDate: date,
+        bookingTime: time,
+        customer: { firstName: 'Test', surname: 'Customer', mobile: '123', email: 'test@example.com', registration: 'ABC123', address: 'Test address' },
+        termsAccepted: true,
+        requestedPaymentMethod: 'onsite',
+    };
+
+    await assert.doesNotReject(validateBookingRequest(booking, { existingSlotReference: 'EXISTING123' }));
+    await assert.rejects(validateBookingRequest(booking), /valid booking date and time/);
 });
 
 test('booking requests accept manual and distant addresses without coverage confirmation', async (t) => {

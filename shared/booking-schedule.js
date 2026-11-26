@@ -1,4 +1,6 @@
-export const WEEKDAY_BOOKING_TIMES = ['09:30', '12:00', '14:30', '16:00', '18:30'];
+export const WEEKDAY_BOOKING_TIMES = ['09:00', '11:30', '14:00', '16:30', '19:00'];
+export const LEGACY_WEEKDAY_BOOKING_TIMES = ['09:30', '12:00', '14:30', '16:00', '18:30'];
+export const WEEKDAY_BOOKING_TIMES_EFFECTIVE_DATE = '2026-11-30';
 export const SATURDAY_BOOKING_TIMES = ['09:00', '11:30', '13:30'];
 export const DATE_BOOKING_TIME_ADDITIONS = {
     '2026-11-26': ['09:00', '11:30', '14:00', '16:30', '19:00'],
@@ -8,6 +10,7 @@ export const DATE_BOOKING_TIME_REMOVALS = {
 };
 export const BOOKING_SLOT_TIMES = [...new Set([
     ...WEEKDAY_BOOKING_TIMES,
+    ...LEGACY_WEEKDAY_BOOKING_TIMES,
     ...SATURDAY_BOOKING_TIMES,
     ...Object.values(DATE_BOOKING_TIME_ADDITIONS).flat(),
 ])];
@@ -39,7 +42,9 @@ export function getBookingTimesForDate(date) {
     const regularTimes = day === 6
         ? SATURDAY_BOOKING_TIMES
         : day >= 1 && day <= 5
-            ? WEEKDAY_BOOKING_TIMES
+            ? dateKey < WEEKDAY_BOOKING_TIMES_EFFECTIVE_DATE
+                ? LEGACY_WEEKDAY_BOOKING_TIMES
+                : WEEKDAY_BOOKING_TIMES
             : [];
     const additionalTimes = DATE_BOOKING_TIME_ADDITIONS[dateKey] || [];
     const removedTimes = new Set(DATE_BOOKING_TIME_REMOVALS[dateKey] || []);
