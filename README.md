@@ -34,8 +34,9 @@ webhook signing secret as `RESEND_WEBHOOK_SECRET` in the deployment environment.
 
 Customers submit a booking request and choose secure Yoco checkout or payment on
 arrival. Requests reserve their chosen slot while awaiting review. Once approved,
-on-site bookings and covered Monthly Clients washes are confirmed when the customer
-continues; online bookings are confirmed by the Yoco payment webhook. Booking
+on-site bookings are confirmed automatically, with no payment taken until arrival.
+Covered Monthly Clients washes are confirmed when the customer continues; online
+bookings are confirmed by the Yoco payment webhook. Booking
 receipts are sent after confirmation. Returning from a cancelled or failed online
 checkout releases its pending slot and updates the request in the Business Manager.
 Failed-payment webhooks also release pending slots. If a customer abandons checkout
@@ -116,14 +117,20 @@ In Business Manager, open **Promo codes** and use **Send test SMS** with the
 requested details. The result confirms provider acceptance, not delivery to the phone.
 The business receives one booking-enquiry SMS, with the customer and address
 shortened if needed to fit one GSM SMS segment; full details remain in the
-booking-request email and Business Manager. When a request is accepted, only
-the customer receives an approval SMS, and the approval email contains the link
-to complete the booking. Booking confirmations are emailed to the customer,
-without sending a confirmation SMS to the customer or business.
+booking-request email and Business Manager. When an on-site request is accepted, the customer receives a booking confirmation
+email and SMS. For other requests, the approval email contains a link to complete
+the booking and the customer receives an approval SMS.
 The manager reports any notification failure; provider acceptance does not
 guarantee delivery.
 When a request is declined, the customer receives an email with the reason and
 an SMS directing them to that email. The manager reports failures independently.
+
+After approving a request, use **Open WhatsApp** to open a pre-filled
+message to the customer's booking number. The same action is available in
+**Activity**. Review the message and press Send in WhatsApp; it is not sent
+automatically. Messages reflect whether the booking still needs online payment,
+monthly-credit completion, or has already been confirmed. Continuation links are
+private and expire; the manager reports an error if a link or number is invalid.
 
 Google review ages are calculated from Google's original publication timestamp
 when the website loads. Use **Fetch Google reviews** in Business Manager to

@@ -129,10 +129,18 @@ export function buildCustomerBookingRequestSmsText(request, statusUrl = '') {
 }
 
 export function buildCustomerBookingApprovalSmsText(request) {
+    if (request.status === 'confirmed' && request.booking?.requestedPaymentMethod === 'onsite') {
+        return [
+            'A10tion To Detail: Your booking is confirmed!',
+            `Date/Time: ${bookingSmsDateTime(request)}`,
+            `Ref: ${request.reference}`,
+            'Pay on arrival by Yoco card machine. Check your email for details.',
+        ].join('\n');
+    }
     return [
         'A10tion To Detail: Booking Request Approved!',
         `Date/Time: ${bookingSmsDateTime(request)}`,
-        'Please complete your booking using the link in your email.',
+        'Please complete your booking using the link in your email, or WhatsApp.',
     ].join('\n');
 }
 

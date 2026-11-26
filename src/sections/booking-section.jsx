@@ -1292,7 +1292,7 @@ export default function BookingSection() {
 
                                     <div className='mt-4 flex items-start gap-2 rounded-xl bg-sagelight/65 px-3 py-2.5'>
                                         <ShieldCheck className='mt-0.5 size-3.5 shrink-0 text-sage' />
-                                        <p className='text-[8.5px] leading-[1.45] text-body sm:text-[9.5px]'>Choose how you would like to pay. After your request is approved, continue to complete your booking and pay online or on arrival.</p>
+                                        <p className='text-[8.5px] leading-[1.45] text-body sm:text-[9.5px]'>Choose how you would like to pay. Pay-on-arrival bookings are confirmed on approval. Online bookings require secure payment after approval.</p>
                                     </div>
 
                                     <fieldset className='mt-3'>
@@ -1354,7 +1354,7 @@ export default function BookingSection() {
                         <div className='mx-auto grid size-12 place-items-center rounded-full bg-[#edf4ee] text-[#31553c]'><CheckCircle2 className='size-6' /></div>
                         <h2 id='booking-request-received-title' className='mt-4 font-display text-2xl font-semibold text-[#1e3128]'>Booking Request Received!</h2>
                         <p className='mt-3 text-sm leading-6 text-[#5b6560]'>Thank you for submitting your booking request. Your details have been sent to our team for review.</p>
-                        <p className='mt-2 text-sm leading-6 text-[#5b6560]'>We’ll notify you by email as soon as your request has been reviewed. Once approved, you’ll receive a link to continue and complete your booking.</p>
+                        <p className='mt-2 text-sm leading-6 text-[#5b6560]'>We’ll notify you when your request has been reviewed. Pay-on-arrival bookings are confirmed on approval; online bookings require payment after approval.</p>
                         <p className='mt-4 text-sm font-semibold text-[#35483b]'>Reference: {requestConfirmation.reference}</p>
                         {!requestConfirmation.emailSent && <p className='mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900'>We could not confirm email delivery. Save this private status link to check your request.</p>}
                         {!requestConfirmation.businessEmailSent && <p className='mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900'>Our team notification email could not be confirmed. Please contact us if you do not hear back.</p>}

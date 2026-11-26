@@ -51,7 +51,8 @@ function pricingEntries(booking) {
             ['Promo status', 'Not yet verified; checked when booking is completed.'],
         ];
     }
-    return [['Requested total', formatZar(pricing.totalAmountCents)]];
+    return [[booking.requestedPaymentMethod === 'onsite' && !pricing.promoPending && booking.confirmedOnsite
+        ? 'Amount due on-site' : 'Requested total', formatZar(pricing.totalAmountCents)]];
 }
 
 function bookingEntries(request) {
@@ -95,7 +96,9 @@ function bookingEntries(request) {
         ['Promo code', booking.bookingType === 'monthly-entitlement' ? '' : booking.promoCode],
         ['Payment method requested', booking.requestedPaymentMethod],
         ...pricingEntries(booking),
-        ['Pricing note', 'Requested totals are not payment confirmation. Final pricing is confirmed when the booking is completed.'],
+        ['Pricing note', request.status === 'confirmed' && booking.requestedPaymentMethod === 'onsite'
+            ? 'No payment has been taken; payment is due on arrival.'
+            : 'Requested totals are not payment confirmation. Final pricing is confirmed when the booking is completed.'],
         ['Contract accepted', booking.contractAccepted ? 'Yes' : 'No'],
         ['Service area accepted', booking.serviceAreaAccepted == null ? '' : booking.serviceAreaAccepted ? 'Yes' : 'No'],
         ['Booking terms accepted', booking.termsAccepted ? 'Yes' : 'No'],
@@ -104,7 +107,7 @@ function bookingEntries(request) {
         'customer', 'serviceLocation', 'contractFileBase64', 'approvalToken', 'requestedPaymentMethod',
         'bookingDate', 'bookingTime', 'packageName', 'packageId', 'vehicleType', 'monthlyClientType',
         'monthlyPackageTier', 'bookingType', 'purchaseType', 'promoCode', 'contractAccepted',
-        'serviceAreaAccepted', 'termsAccepted', 'fleetSizeTier', 'fleetVehicleCount', 'pricingSummary',
+        'serviceAreaAccepted', 'termsAccepted', 'fleetSizeTier', 'fleetVehicleCount', 'pricingSummary', 'confirmedOnsite',
     ]);
     for (const [key, value] of Object.entries(booking)) {
         if (!excluded.has(key)) fields.push([key, value]);
@@ -187,6 +190,16 @@ export function buildBookingApprovedEmail(request, continueUrl) {
         buttonLabel: 'Continue With My Booking',
         buttonUrl: continueUrl,
         footerNote: 'The booking is not fully confirmed until payment or monthly entitlement completion has been processed.',
+    });
+}
+
+export function buildOnsiteBookingConfirmedEmail(request) {
+    return renderEmail({
+        title: 'Booking confirmed — pay on arrival',
+        greeting: `Hi ${request.booking.customer.firstName || 'there'},`,
+        message: 'Your booking request has been approved and your slot is confirmed. No payment has been taken yet. Please pay our technician on arrival using the Yoco card machine.',
+        request: { ...request, booking: { ...request.booking, confirmedOnsite: true } },
+        footerNote: 'Please have your vehicle available at the service address. If any details are incorrect, reply to this email.',
     });
 }
 

@@ -18,6 +18,7 @@ const {
     sendBookingRequestReceivedEmails,
     sendBookingRequestApprovedEmail,
     sendBookingRequestDeclinedEmail,
+    sendOnsiteBookingConfirmedEmail,
     sendReceiptEmail,
 } = await import('../api/_lib/email.js');
 
@@ -48,6 +49,10 @@ test('only booking requests send a business copy to the booking inbox', async (t
     sent.length = 0;
 
     await sendBookingRequestApprovedEmail(request, 'https://example.com/continue');
+    await sendOnsiteBookingConfirmedEmail({ ...request, status: 'confirmed', booking: {
+        ...request.booking, requestedPaymentMethod: 'onsite',
+        pricingSummary: { totalAmountCents: 25000 },
+    } });
     await sendBookingRequestDeclinedEmail(request);
     await sendReceiptEmail({
         reference: 'TEST123',
@@ -56,7 +61,8 @@ test('only booking requests send a business copy to the booking inbox', async (t
         amountZar: 'R250.00',
     });
     assert.equal(smsCalls.length, 0);
-    assert.equal(sent.length, 3);
+    assert.equal(sent.length, 4);
+    assert.match(sent[1].html, /slot is confirmed/);
     for (const email of sent) {
         assert.deepEqual(email.to, ['customer@example.com']);
         assert.equal(email.bcc, undefined);

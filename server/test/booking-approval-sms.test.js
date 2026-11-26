@@ -20,7 +20,15 @@ let declineError = '';
 let declineEmailError = '';
 let declineEmailCalls = 0;
 let declinedEmailRequest;
+let approvalEmailCalls = 0;
+let confirmationEmailCalls = 0;
+let confirmationEmailError = '';
+let storedBookingStatus = 'confirmed_unpaid';
+let continuationValid = true;
 
+mock.module('../api/_lib/store.js', { exports: {
+    getBooking: async () => ({ status: storedBookingStatus }),
+} });
 mock.module('../api/_lib/booking-approval.js', { exports: {
     acceptBookingRequest: async () => ({ request, continuationToken: 'test-token' }),
     declineBookingRequest: async (_id, _adminName, reason) => {
@@ -29,12 +37,18 @@ mock.module('../api/_lib/booking-approval.js', { exports: {
     },
     clearBookingActivityFromAdmin: async () => ({}),
     deleteBookingRequestFromAdmin: async () => ({}),
+    getBookingRequestByContinuationToken: async () => continuationValid ? request : null,
     getBookingRequestForAdmin: async () => request,
     getPublicBookingRequest: (record) => record,
     listBookingRequests: async () => [],
 } });
 mock.module('../api/_lib/email.js', { exports: {
-    sendBookingRequestApprovedEmail: async () => ({ sent: true }),
+    sendBookingRequestApprovedEmail: async () => { approvalEmailCalls += 1; return { sent: true }; },
+    sendOnsiteBookingConfirmedEmail: async () => {
+        confirmationEmailCalls += 1;
+        if (confirmationEmailError) throw new Error(confirmationEmailError);
+        return { sent: true };
+    },
     sendBookingRequestDeclinedEmail: async (record) => {
         declineEmailCalls += 1;
         declinedEmailRequest = record;
@@ -110,6 +124,139 @@ test('accepting a request sends the approval SMS only to the customer and report
     assert.equal(partial.body.businessSms, undefined);
     assert.equal(calls.length, 2);
     assert.throws(() => sms.sendCustomerBookingApprovalSms({ booking: { bookingDate: 'invalid' } }), /date and time/);
+});
+
+test('onsite acceptance sends a confirmation rather than a continuation link', async (t) => {
+    const keys = ['ADMIN_API_KEY', 'SMSMESSENGER_EMAIL', 'SMSMESSENGER_API_KEY'];
+    const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    process.env.ADMIN_API_KEY = 'admin-test-key';
+    process.env.SMSMESSENGER_EMAIL = 'sms-test@example.com';
+    process.env.SMSMESSENGER_API_KEY = 'test-token';
+    request.status = 'confirmed';
+    request.booking.requestedPaymentMethod = 'onsite';
+    t.after(() => {
+        keys.forEach((key) => {
+            if (previous[key] === undefined) delete process.env[key];
+            else process.env[key] = previous[key];
+        });
+        delete request.status;
+        delete request.booking.requestedPaymentMethod;
+        confirmationEmailError = '';
+        storedBookingStatus = 'confirmed_unpaid';
+    });
+    t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ messageId: 'message-123' }), { status: 200 }));
+    const expectedSms = sms.buildCustomerBookingApprovalSmsText(request);
+    assert.match(expectedSms, /booking is confirmed/i);
+    assert.match(expectedSms, /Pay on arrival by Yoco card machine/);
+    assert.doesNotMatch(expectedSms, /complete your booking/);
+    const res = response();
+    const oldApprovalCalls = approvalEmailCalls;
+    const oldConfirmationCalls = confirmationEmailCalls;
+    await handler({ method: 'POST', headers: { 'x-admin-key': 'admin-test-key' },
+        body: { action: 'accept', id: request.id, adminName: 'Manager' } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.request.status, 'confirmed');
+    assert.equal(res.body.customerSms.sent, true);
+    assert.equal(approvalEmailCalls, oldApprovalCalls);
+    assert.equal(confirmationEmailCalls, oldConfirmationCalls + 1);
+    confirmationEmailError = 'Email provider failed';
+    const failed = response();
+    await handler({ method: 'POST', headers: { 'x-admin-key': 'admin-test-key' },
+        body: { action: 'accept', id: request.id, adminName: 'Manager' } }, failed);
+    assert.equal(failed.body.request.status, 'confirmed');
+    assert.equal(failed.body.emailSent, false);
+    assert.match(failed.body.emailProblem, /Email provider failed/);
+    assert.equal(failed.body.customerSms.sent, true);
+    confirmationEmailError = '';
+    const resend = response();
+    await handler({ method: 'POST', headers: { 'x-admin-key': 'admin-test-key' },
+        body: { action: 'resend-email', id: request.id } }, resend);
+    assert.equal(resend.body.emailSent, true);
+    storedBookingStatus = 'paid';
+    const paidResend = response();
+    await handler({ method: 'POST', headers: { 'x-admin-key': 'admin-test-key' },
+        body: { action: 'resend-email', id: request.id } }, paidResend);
+    assert.equal(paidResend.statusCode, 409);
+});
+
+test('WhatsApp action prepares state-specific messages for the booking customer', async (t) => {
+    const previousKey = process.env.ADMIN_API_KEY;
+    const previousSite = process.env.SITE_URL;
+    process.env.ADMIN_API_KEY = 'admin-test-key';
+    process.env.SITE_URL = 'https://example.com/';
+    request.status = 'approved';
+    request.continuationToken = 'private-token';
+    request.booking.requestedPaymentMethod = 'online';
+    t.after(() => {
+        if (previousKey === undefined) delete process.env.ADMIN_API_KEY;
+        else process.env.ADMIN_API_KEY = previousKey;
+        if (previousSite === undefined) delete process.env.SITE_URL;
+        else process.env.SITE_URL = previousSite;
+        delete request.status;
+        delete request.continuationToken;
+        delete request.booking.requestedPaymentMethod;
+        delete request.booking.bookingType;
+        request.booking.customer.mobile = '082 123 4567';
+        continuationValid = true;
+        storedBookingStatus = 'confirmed_unpaid';
+    });
+    async function prepare(key = 'admin-test-key') {
+        const res = response();
+        await handler({ method: 'POST', headers: { 'x-admin-key': key },
+            body: { action: 'whatsapp-approval', id: request.id } }, res);
+        return res;
+    }
+    assert.equal((await prepare('wrong-key')).statusCode, 401);
+    const online = await prepare();
+    assert.equal(online.statusCode, 200);
+    const url = new URL(online.body.url);
+    assert.equal(url.origin, 'https://wa.me');
+    assert.equal(url.pathname, '/27821234567');
+    const text = url.searchParams.get('text');
+    assert.match(text, /^Dear client,/);
+    assert.match(text, /secure Yoco checkout/);
+    assert.match(text, /https:\/\/example\.com\/\?booking-continuation=private-token/);
+    assert.match(text, /confirmed once payment has been completed/);
+
+    request.booking.customer.mobile = '+44 7700 900123';
+    const international = new URL((await prepare()).body.url);
+    assert.equal(international.pathname, '/447700900123');
+    request.booking.customer.mobile = '082 123 4567';
+    request.booking.bookingType = 'monthly-entitlement';
+    request.booking.requestedPaymentMethod = 'monthly';
+    const monthly = new URL((await prepare()).body.url).searchParams.get('text');
+    assert.match(monthly, /verify your monthly wash entitlement/);
+    assert.doesNotMatch(monthly, /Yoco checkout|payment has been completed/);
+
+    delete request.booking.bookingType;
+    request.booking.requestedPaymentMethod = 'onsite';
+    const legacyOnsite = new URL((await prepare()).body.url).searchParams.get('text');
+    assert.match(legacyOnsite, /complete this step/);
+    assert.match(legacyOnsite, /booking-continuation=private-token/);
+    request.status = 'confirmed';
+    let onsite = new URL((await prepare()).body.url).searchParams.get('text');
+    assert.match(onsite, /approved and confirmed/);
+    assert.match(onsite, /pay our technician on arrival/);
+    assert.doesNotMatch(onsite, /private-token/);
+    storedBookingStatus = 'paid';
+    onsite = new URL((await prepare()).body.url).searchParams.get('text');
+    assert.match(onsite, /Thank you for your on-site payment/);
+    assert.doesNotMatch(onsite, /pay our technician/);
+    request.booking.requestedPaymentMethod = 'online';
+    const confirmedOnline = new URL((await prepare()).body.url).searchParams.get('text');
+    assert.match(confirmedOnline, /approved and confirmed/);
+    assert.doesNotMatch(confirmedOnline, /private-token|Yoco checkout|pay our technician/);
+
+    request.status = 'approved';
+    request.booking.requestedPaymentMethod = 'online';
+    continuationValid = false;
+    assert.match((await prepare()).body.message, /missing or expired/);
+    continuationValid = true;
+    request.booking.customer.mobile = '123';
+    assert.match((await prepare()).body.message, /cell number/);
+    request.booking.customer.mobile = '082 123 4567';
+    request.status = 'declined';
+    assert.equal((await prepare()).statusCode, 409);
 });
 
 test('declining a request sends email and SMS independently and reports failures', async (t) => {

@@ -10,6 +10,7 @@ import {
     buildBookingDeclinedEmail,
     buildBookingRequestBusinessEmail,
     buildBookingRequestReceivedEmail,
+    buildOnsiteBookingConfirmedEmail,
 } from './booking-request-email-template.js';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
@@ -205,6 +206,16 @@ export async function sendBookingRequestApprovedEmail(request, continuationUrl, 
         html: buildBookingApprovedEmail(request, continuationUrl),
         replyTo: BOOKINGS_EMAIL,
         idempotencyKey: `booking-request-approved-${request.id}${retryId ? `-${retryId}` : ''}`,
+    });
+}
+
+export async function sendOnsiteBookingConfirmedEmail(request, retryId = '') {
+    return sendViaResend({
+        to: request.booking.customer.email,
+        subject: `Booking confirmed — ${request.reference}`,
+        html: buildOnsiteBookingConfirmedEmail(request),
+        replyTo: BOOKINGS_EMAIL,
+        idempotencyKey: `booking-onsite-confirmed-${request.id}${retryId ? `-${retryId}` : ''}`,
     });
 }
 

@@ -11,13 +11,16 @@ import {
     getBooking,
     getBookingSlotOwner,
     getMonthlyPackageTotalCents,
+    getSharedPromoCodeStatus,
     markStoredBookingCancelled,
     looksLikeEmail,
     looksLikeVehicleRegistration,
     normaliseEmail,
     normaliseReg,
     releaseBookingSlotIfOwned,
+    releaseSharedPromoCode,
     reserveBookingSlot,
+    reserveSharedPromoCode,
 } from './store.js';
 import { checkMonthlyWashAvailability, refundMonthlyWashForCancelledBooking, validateMonthlyPurchaseDetails } from './monthly-promos.js';
 
@@ -63,6 +66,29 @@ request.continuationToken = ARGV[7]
 request.updatedAt = ARGV[1]
 redis.call('SET', KEYS[1], cjson.encode(request), 'EX', ARGV[4])
 redis.call('SET', KEYS[2], request.id, 'EX', ARGV[6])
+return {'OK', cjson.encode(request)}
+`;
+
+const ACCEPT_ONSITE_REQUEST_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return {'NOT_FOUND'} end
+local request = cjson.decode(raw)
+if request.status ~= 'pending_approval' then return {request.status} end
+if tonumber(request.requestExpiresAt) <= tonumber(ARGV[1]) then return {'EXPIRED'} end
+local owner = redis.call('GET', KEYS[2])
+if owner and owner ~= request.reference then return {'SLOT_TAKEN'} end
+if redis.call('EXISTS', KEYS[4]) == 1 then return {'BOOKING_EXISTS'} end
+request.status = 'confirmed'
+request.approvedAt = ARGV[3]
+request.approvedBy = ARGV[2]
+request.completedAt = ARGV[3]
+request.updatedAt = ARGV[3]
+request.booking.pricingSummary = cjson.decode(ARGV[7])
+redis.call('SET', KEYS[1], cjson.encode(request), 'EX', ARGV[4])
+redis.call('SET', KEYS[2], request.reference, 'EX', ARGV[5])
+redis.call('SADD', KEYS[3], request.booking.bookingTime)
+redis.call('EXPIRE', KEYS[3], ARGV[5])
+redis.call('SET', KEYS[4], ARGV[6], 'EX', ARGV[5])
 return {'OK', cjson.encode(request)}
 `;
 
@@ -403,8 +429,7 @@ export async function listBookingRequests() {
         const request = await expireRequestIfNeeded(await redis.get(requestKey(id)));
         if (!request || request.hiddenFromAdmin) return null;
         const visible = publicRequest(request);
-        if (request.status === 'confirmed' && request.booking?.purchaseType === 'monthly'
-            && request.booking?.requestedPaymentMethod === 'onsite') {
+        if (request.status === 'confirmed' && request.booking?.requestedPaymentMethod === 'onsite') {
             const booking = await getBooking(request.reference);
             visible.onsitePaymentStatus = booking?.paymentMethod === 'onsite' ? booking.status : null;
         }
@@ -464,6 +489,10 @@ export async function acceptBookingRequest(id, adminName) {
     if (!name) throw new Error('Enter the administrator name before approving a request.');
     const request = await redis.get(requestKey(requestId));
     if (!request) throw new Error(getRequestError('NOT_FOUND'));
+    if (request.booking?.requestedPaymentMethod === 'onsite'
+        && request.booking?.bookingType !== 'monthly-entitlement') {
+        return { request: await acceptOnsiteBookingRequest(request, name), continuationToken: null };
+    }
     const slotClaimed = await reserveBookingSlot(
         request.booking.bookingDate,
         request.booking.bookingTime,
@@ -493,6 +522,74 @@ export async function acceptBookingRequest(id, adminName) {
         throw new Error(getRequestError(result?.[0] || 'ERROR'));
     }
     return { request: await loadSavedRecord(result[1], requestId), continuationToken };
+}
+
+async function acceptOnsiteBookingRequest(request, adminName) {
+    if (request.status !== 'pending_approval') throw new Error(getRequestError(request.status));
+    if (Number(request.requestExpiresAt) <= Date.now()) throw new Error(getRequestError('EXPIRED'));
+    const booking = await validateBookingRequest(request.booking);
+    if (booking.purchaseType === 'monthly' && booking.promoCode) {
+        throw new Error('Promo codes are available for single washes only.');
+    }
+    const originalAmountCents = booking.pricingSummary.originalAmountCents;
+    let amountCents = originalAmountCents;
+    let discountCents = 0;
+    let promoReservationId = null;
+    let reservedPromoCode = null;
+    if (booking.promoCode) {
+        const status = await getSharedPromoCodeStatus(booking.promoCode);
+        if (status.status !== 'available') {
+            throw new Error(`The requested promo code is ${status.status}. Resolve the promo code before approving this request.`);
+        }
+        promoReservationId = crypto.randomUUID();
+        const slotTime = new Date(`${booking.bookingDate}T${booking.bookingTime}:00+02:00`).getTime();
+        const ttl = Math.max(3600, Math.ceil((slotTime + 48 * 60 * 60 * 1000 - Date.now()) / 1000));
+        if (!await reserveSharedPromoCode(status.promoCode, promoReservationId, ttl)) {
+            throw new Error('The requested promo code is already being used. Resolve the promo code before approving this request.');
+        }
+        reservedPromoCode = status.promoCode;
+        discountCents = Math.round(originalAmountCents * PROMO_DISCOUNT_RATE);
+        amountCents -= discountCents;
+    }
+    const now = Date.now();
+    const pricingSummary = { originalAmountCents, totalAmountCents: amountCents, promoPending: false, monthlyCovered: false };
+    const bookingRecord = {
+        ...booking,
+        pricingSummary,
+        reference: request.reference,
+        originalAmountCents,
+        amountCents,
+        discountCents,
+        appliedPromo: reservedPromoCode,
+        appliedPromoType: reservedPromoCode ? 'shared-code' : null,
+        promoReservationId,
+        paymentMethod: 'onsite',
+        status: 'confirmed_unpaid',
+        createdAt: new Date(now).toISOString(),
+    };
+    let rejected = false;
+    try {
+        const result = await redis.eval(ACCEPT_ONSITE_REQUEST_SCRIPT, [
+            requestKey(request.id),
+            `booking-slot:${booking.bookingDate}:${booking.bookingTime}`,
+            `booking-index:${booking.bookingDate}`,
+            `booking:${request.reference}`,
+        ], [
+            String(now), adminName, new Date(now).toISOString(), String(REQUEST_TTL_SECONDS),
+            String(REQUEST_TTL_SECONDS), JSON.stringify(bookingRecord), JSON.stringify(pricingSummary),
+        ]);
+        if (result?.[0] !== 'OK') {
+            rejected = true;
+            if (result?.[0] === 'SLOT_TAKEN') throw new Error('The requested time slot is no longer available.');
+            if (result?.[0] === 'BOOKING_EXISTS') throw new Error('A booking with this reference already exists.');
+            throw new Error(getRequestError(result?.[0] || 'ERROR'));
+        }
+        return parseScriptRecord(result[1]);
+    } finally {
+        if (rejected && reservedPromoCode) {
+            await releaseSharedPromoCode(reservedPromoCode, promoReservationId);
+        }
+    }
 }
 
 function parseScriptRecord(value) {
@@ -744,11 +841,15 @@ export async function cancelBookedSlotRecords(request) {
     const { bookingDate, bookingTime } = current.booking;
     await releaseBookingSlotIfOwned(bookingDate, bookingTime, current.reference);
     const storedBookingKey = current.checkoutId || current.reference;
-    const stored = await redis.get(`booking:${storedBookingKey}`).catch(() => null);
+    const stored = await redis.get(`booking:${storedBookingKey}`);
     await Promise.all([
         markStoredBookingCancelled(current.reference),
         markStoredBookingCancelled(current.checkoutId),
     ]);
+    if (stored?.status === 'confirmed_unpaid' && stored.appliedPromoType === 'shared-code'
+        && stored.appliedPromo && stored.promoReservationId) {
+        await releaseSharedPromoCode(stored.appliedPromo, stored.promoReservationId);
+    }
     let monthlyRefund = { status: 'NOT_MONTHLY' };
     const entitlementId = stored?.monthlyEntitlementId || current.booking.monthlyEntitlementId;
     if (entitlementId) {

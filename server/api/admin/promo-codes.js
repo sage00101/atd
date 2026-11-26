@@ -214,6 +214,11 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 .booking-request-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .booking-request-actions button{flex:1 1 145px;padding:10px 12px;border:1px solid var(--line-2);border-radius:9px;background:var(--accent-soft);color:var(--accent-2);font-size:12px;font-weight:750}
 .booking-request-actions button.danger{border-color:rgba(180,71,64,.25);background:var(--danger-soft);color:var(--danger)}
+.booking-request-actions button[data-request-action="whatsapp-approval"]{display:inline-flex;flex:0 1 auto;align-items:center;justify-content:center;gap:9px;min-height:44px;padding:11px 18px;border:1px solid #08703e;border-radius:11px;background:linear-gradient(135deg,#11874d,#076e3d);color:#fff;font-size:13px;font-weight:750;box-shadow:0 6px 16px -8px rgba(7,110,61,.65);cursor:pointer;transition:background .18s,box-shadow .18s,transform .18s}
+.booking-request-actions button[data-request-action="whatsapp-approval"]:hover:not(:disabled){background:linear-gradient(135deg,#0d7944,#075e35);box-shadow:0 9px 20px -8px rgba(7,110,61,.7);transform:translateY(-1px)}
+.booking-request-actions button[data-request-action="whatsapp-approval"]:focus-visible{outline:3px solid #8fcba8;outline-offset:3px}
+.booking-request-actions button[data-request-action="whatsapp-approval"] svg{width:19px;height:19px;flex:none}
+#recentApprovalWhatsApp{align-items:center;margin-bottom:14px}
 .booking-request-actions button:disabled{opacity:.55}
 
 /* ---------- entitlement cards ---------- */
@@ -511,6 +516,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
     <button id="bookingRequestsReload" class="secondary" type="button">Refresh requests</button>
     <span id="bookingRequestsCount" class="hint" aria-live="polite"></span>
   </div>
+  <div id="recentApprovalWhatsApp" class="booking-request-actions" aria-live="polite" hidden></div>
   <div id="bookingRequestCards" class="booking-request-grid" aria-live="polite"></div>
   <div id="bookingRequestsEmpty" class="empty-state" hidden>No booking requests are available.</div>
   <dialog id="declineConfirmDialog" class="manager-dialog">
@@ -705,6 +711,7 @@ const packageChangeContractOption=document.getElementById('packageChangeContract
 const packageChangeReference=document.getElementById('packageChangeReference');
 const packageChangeSubmit=document.getElementById('packageChangeSubmit');
 const bookingRequestCards=document.getElementById('bookingRequestCards');
+const recentApprovalWhatsApp=document.getElementById('recentApprovalWhatsApp');
 const bookingRequestsEmpty=document.getElementById('bookingRequestsEmpty');
 const bookingRequestsCount=document.getElementById('bookingRequestsCount');
 const bookingRequestsReload=document.getElementById('bookingRequestsReload');
@@ -902,6 +909,9 @@ function requestDisplayValue(value){
   if(value===null||value===undefined||value==='') return '—';
   return typeof value==='object'?JSON.stringify(value):String(value);
 }
+function whatsAppButton(id){
+  return '<button type="button" data-request-action="whatsapp-approval" data-id="'+escapeHtml(id)+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 11.8a8.5 8.5 0 0 1-12.6 7.4L3.5 20.5l1.3-4.3A8.5 8.5 0 1 1 20.5 11.8Z"/><path d="M8.2 8.2c.3-.4.8-.5 1.1-.1l1 1.5c.2.3.2.6-.1.9l-.6.7a6.1 6.1 0 0 0 3.2 3.2l.7-.6c.3-.3.6-.3.9-.1l1.5 1c.4.3.3.8-.1 1.1-.5.5-1.2.8-1.9.6-2.7-.8-5.8-3.9-6.6-6.6-.2-.7.1-1.4.6-1.9Z"/></svg>Open WhatsApp</button>';
+}
 function renderBookingRequestCard(record,showActions=false){
     const customer=record.booking?.customer||{};
     const identity=(String(customer.firstName||'')+' '+String(customer.surname||'')).trim()||'Customer';
@@ -922,10 +932,13 @@ function renderBookingRequestCard(record,showActions=false){
       :showActions&&['approved','awaiting_completion','declined'].includes(record.status)
         ?'<div class="booking-request-actions"><button type="button" data-request-action="resend-email" data-id="'+escapeHtml(record.id)+'">Resend customer decision email</button></div>'
         :!showActions&&['confirmed_unpaid','paid'].includes(record.onsitePaymentStatus)
-          ?'<div class="booking-request-actions"><button type="button" data-request-action="confirm-onsite-payment" data-id="'+escapeHtml(record.id)+'">'+(record.onsitePaymentStatus==='paid'?'Retry paid receipt':'Confirm on-site payment')+'</button></div>'
+          ?'<div class="booking-request-actions"><button type="button" data-request-action="confirm-onsite-payment" data-id="'+escapeHtml(record.id)+'">'+(record.onsitePaymentStatus==='paid'?'Retry paid receipt':'Confirm on-site payment')+'</button>'+(record.onsitePaymentStatus==='confirmed_unpaid'?'<button type="button" data-request-action="resend-email" data-id="'+escapeHtml(record.id)+'">Resend confirmation email</button>':'')+'</div>'
         :'';
+    const whatsappAction=!showActions&&['approved','awaiting_completion','confirmed'].includes(record.status)
+      ?'<div class="booking-request-actions">'+whatsAppButton(record.id)+'</div>'
+      :'';
     const occurredAt=record.approvedAt||record.declinedAt||record.updatedAt||record.submittedAt;
-    return '<article class="booking-request-card" data-id="'+escapeHtml(record.id)+'"><div class="entitlement-top"><div><h3>'+escapeHtml(identity)+'</h3><p class="booking-request-meta">'+escapeHtml(customer.email||'')+' · '+escapeHtml(record.reference)+'</p></div><span class="top-end"><span class="status-pill">'+escapeHtml(record.publicStatus||record.status)+'</span>'+(showActions?'':'<button type="button" class="bin-button" data-request-action="delete" data-id="'+escapeHtml(record.id)+'" aria-label="Delete permanently" title="Delete permanently">'+binIcon+'</button>')+'</span></div>'+(showActions?'':'<p class="booking-request-meta">Activity · '+escapeHtml(occurredAt||'')+'</p>')+'<details><summary>Open full request details</summary><dl class="booking-request-details">'+details+'</dl></details>'+actions+'</article>';
+    return '<article class="booking-request-card" data-id="'+escapeHtml(record.id)+'"><div class="entitlement-top"><div><h3>'+escapeHtml(identity)+'</h3><p class="booking-request-meta">'+escapeHtml(customer.email||'')+' · '+escapeHtml(record.reference)+'</p></div><span class="top-end"><span class="status-pill">'+escapeHtml(record.publicStatus||record.status)+'</span>'+(showActions?'':'<button type="button" class="bin-button" data-request-action="delete" data-id="'+escapeHtml(record.id)+'" aria-label="Delete permanently" title="Delete permanently">'+binIcon+'</button>')+'</span></div>'+(showActions?'':'<p class="booking-request-meta">Activity · '+escapeHtml(occurredAt||'')+'</p>')+'<details><summary>Open full request details</summary><dl class="booking-request-details">'+details+'</dl></details>'+actions+whatsappAction+'</article>';
 }
 function renderBookingRequests(){
   const pending=bookingRequests.filter(record=>record.status==='pending_approval');
@@ -995,11 +1008,16 @@ async function loadBookingRequests(){
   }
 }
 async function processBookingRequest(action,id,reason=''){
-  const buttons=[...bookingRequestCards.querySelectorAll('button[data-id="'+CSS.escape(id)+'"]')];
+  const selector='button[data-id="'+CSS.escape(id)+'"]';
+  const buttons=[...bookingRequestCards.querySelectorAll(selector),...activityCards.querySelectorAll(selector)];
   buttons.forEach(button=>button.disabled=true);
   try{
     const result=await bookingRequestsApi({action,id,reason,adminName:bookingRequestAdminName()});
     await loadBookingRequests();
+    if(action==='accept'){
+      recentApprovalWhatsApp.innerHTML='<span>Approved '+escapeHtml(result.request.reference)+'. Review and send the message in WhatsApp:</span> '+whatsAppButton(id);
+      recentApprovalWhatsApp.hidden=false;
+    }
     const problems=[];
     if(!result.emailSent)problems.push('Customer email: '+(result.emailProblem||'delivery was not confirmed')+'. Use the email resend option once fixed.');
     if(action==='accept'||action==='decline'){
@@ -1669,6 +1687,26 @@ managerTabs.forEach(tab=>{
   });
 });
 bookingRequestsReload.addEventListener('click',loadBookingRequests);
+async function openApprovalWhatsApp(event){
+  const button=event.target.closest('button[data-request-action="whatsapp-approval"]');
+  if(!button||button.disabled)return;
+  const popup=window.open('about:blank','_blank');
+  if(!popup){setStatus('Your browser blocked WhatsApp. Allow pop-ups and try again.','error');return;}
+  popup.opener=null;
+  button.disabled=true;
+  try{
+    const result=await bookingRequestsApi({action:'whatsapp-approval',id:button.dataset.id});
+    const url=new URL(result.url);
+    if(url.protocol!=='https:'||url.hostname!=='wa.me')throw new Error('Invalid WhatsApp link returned by the server.');
+    popup.location.replace(url.href);
+    setStatus('WhatsApp opened. Review the message and press Send.','ok');
+  }catch(error){
+    popup.close();
+    setStatus(error.message,'error');
+  }finally{button.disabled=false;}
+}
+recentApprovalWhatsApp.addEventListener('click',openApprovalWhatsApp);
+activityCards.addEventListener('click',openApprovalWhatsApp);
 async function handleRequestDelete(event){
   const button=event.target.closest('button[data-request-action="delete"]');
   if(!button||button.disabled)return;
@@ -1682,6 +1720,10 @@ async function handleRequestDelete(event){
 }
 expiredRequestCards.addEventListener('click',handleRequestDelete);
 activityCards.addEventListener('click',handleRequestDelete);
+activityCards.addEventListener('click',event=>{
+  const button=event.target.closest('button[data-request-action="resend-email"]');
+  if(button&&!button.disabled)processBookingRequest('resend-email',button.dataset.id);
+});
 activityCards.addEventListener('click',async event=>{
   const button=event.target.closest('button[data-request-action="confirm-onsite-payment"]');
   if(!button||button.disabled)return;
@@ -1698,7 +1740,7 @@ activityCards.addEventListener('click',async event=>{
     if(result.monthlyNeedsReview)await loadMonthlyEntitlements();
     if(!result.receiptSent)setStatus('Payment recorded, but the paid receipt was not sent. Retry the paid receipt from Activity.','error');
     else if(result.monthlyNeedsReview)setStatus('Payment recorded; the email provider accepted the receipt. Apply this purchase under Paid purchases needing review.','ok');
-    else setStatus('Payment recorded and monthly profile updated; the email provider accepted the receipt.','ok');
+    else setStatus('Payment recorded; the email provider accepted the receipt.','ok');
   }catch(error){setStatus(error.message+' The payment may already be recorded; refresh Activity before retrying.','error');}
   finally{button.disabled=false;}
 });
@@ -1724,7 +1766,9 @@ bookingRequestCards.addEventListener('click',event=>{
   if(!button||button.disabled)return;
   const id=button.dataset.id;
   if(button.dataset.requestAction==='accept'){
-    if(!window.confirm('Accept this booking request and email the customer a secure continuation link?'))return;
+    const record=bookingRequests.find(item=>item.id===id);
+    const onsite=record?.booking?.requestedPaymentMethod==='onsite';
+    if(!window.confirm(onsite?'Accept and confirm this booking? The customer will be notified and pay on arrival.':'Accept this booking request and email the customer a secure continuation link?'))return;
     processBookingRequest('accept',id);
   }else if(button.dataset.requestAction==='decline'){
     selectedDeclineRequestId=id;

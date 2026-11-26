@@ -8,6 +8,7 @@ import {
     buildBookingRequestBusinessEmail,
     buildBookingApprovedEmail,
     buildBookingDeclinedEmail,
+    buildOnsiteBookingConfirmedEmail,
 } from '../api/_lib/booking-request-email-template.js';
 import { buildReceiptEmailHtml } from '../api/_lib/email-template.js';
 import {
@@ -29,7 +30,7 @@ const redis = Object.fromEntries(['get', 'mget', 'set', 'del', 'lrange', 'smembe
     throw new Error(`Unexpected Redis call: ${name}`);
 }]));
 mock.module('../api/_lib/redis.js', { exports: { redis } });
-const [{ validateBookingRequest, listBookingRequests, cancelBookedSlotRecords }, { getBookedSlotsInRange, reserveBookingSlot, getMonthlyPackagePriceCents, getMonthlyPackageTotalCents, markOnsiteBookingPaid },
+const [{ validateBookingRequest, acceptBookingRequest, listBookingRequests, cancelBookedSlotRecords }, { getBookedSlotsInRange, reserveBookingSlot, getMonthlyPackagePriceCents, getMonthlyPackageTotalCents, markOnsiteBookingPaid },
     { default: cancelHandler }, { default: webhookHandler }, { default: calendarHandler }, { default: availabilityHandler },
     { default: promoValidationHandler }, { default: promoManagerHandler }] = await Promise.all([
     import('../api/_lib/booking-approval.js'),
@@ -55,6 +56,23 @@ function installRedisStub(t) {
     replace('smembers', async (key) => [...(sets.get(key) || [])]);
     replace('exists', async (key) => values.has(key) ? 1 : 0);
     replace('eval', async (script, keys, args) => {
+        if (script.includes("request.booking.pricingSummary = cjson.decode(ARGV[7])")) {
+            const request = values.get(keys[0]);
+            if (!request) return ['NOT_FOUND'];
+            if (request.status !== 'pending_approval') return [request.status];
+            if (Number(request.requestExpiresAt) <= Number(args[0])) return ['EXPIRED'];
+            const owner = values.get(keys[1]);
+            if (owner && owner !== request.reference) return ['SLOT_TAKEN'];
+            if (values.has(keys[3])) return ['BOOKING_EXISTS'];
+            const updated = { ...request, status: 'confirmed', approvedAt: args[2], approvedBy: args[1],
+                completedAt: args[2], booking: { ...request.booking, pricingSummary: JSON.parse(args[6]) } };
+            values.set(keys[0], updated);
+            values.set(keys[1], request.reference);
+            if (!sets.has(keys[2])) sets.set(keys[2], new Set());
+            sets.get(keys[2]).add(request.booking.bookingTime);
+            values.set(keys[3], JSON.parse(args[5]));
+            return ['OK', JSON.stringify(updated)];
+        }
         if (script.includes("local owner = redis.call('GET', KEYS[1])")) {
             const owner = values.get(keys[0]);
             if (owner && owner !== args[0]) return 0;
@@ -108,6 +126,71 @@ function installRedisStub(t) {
     });
     return { values, sets, lists };
 }
+
+test('onsite approval confirms the booking and calendar without collecting payment', async (t) => {
+    const db = installRedisStub(t);
+    const now = slotDateTime('2026-11-10', '14:30').getTime() - 7200000;
+    t.mock.method(Date, 'now', () => now);
+    const booking = {
+        purchaseType: 'single', vehicleType: 'Sedan / Hatchback', packageName: 'Standard Wash',
+        bookingDate: '2026-11-10', bookingTime: '14:30', termsAccepted: true, requestedPaymentMethod: 'onsite',
+        customer: { firstName: 'Jane', surname: 'Doe', mobile: '0821234567', email: 'jane@example.com', registration: 'ABC123', address: '1 Main Road' },
+    };
+    const request = { id: 'onsite', reference: 'REF123', status: 'pending_approval', requestExpiresAt: now + 3600000, booking };
+    db.values.set('booking:request:onsite', request);
+    db.values.set('booking-slot:2026-11-10:14:30', 'REF123');
+    const result = await acceptBookingRequest('onsite', 'Manager');
+    assert.equal(result.request.status, 'confirmed');
+    assert.equal(result.continuationToken, null);
+    const saved = db.values.get('booking:REF123');
+    assert.equal(saved.status, 'confirmed_unpaid');
+    assert.equal(saved.amountCents, 25000);
+    assert.equal(saved.paymentMethod, 'onsite');
+    assert.deepEqual(await getBookedSlotsInRange('2026-11-10', '2026-11-10'), { '2026-11-10': ['14:30'] });
+    const email = buildOnsiteBookingConfirmedEmail(result.request);
+    assert.match(email, /slot is confirmed/);
+    assert.match(email, /Amount due on-site/);
+    assert.match(email, /R250\.00/);
+    assert.doesNotMatch(email, /Continue With My Booking/);
+    await assert.rejects(acceptBookingRequest('onsite', 'Manager'), /already been completed/);
+
+    db.values.set('booking:request:other', { ...request, id: 'other', reference: 'REF999' });
+    await assert.rejects(acceptBookingRequest('other', 'Manager'), /no longer available/);
+    assert.equal(db.values.get('booking:request:other').status, 'pending_approval');
+    assert.equal(db.values.get('booking-slot:2026-11-10:14:30'), 'REF123');
+});
+
+test('onsite approval reserves a valid promo, rejects conflicts, and releases it on cancellation', async (t) => {
+    const db = installRedisStub(t);
+    const now = slotDateTime('2026-11-10', '14:30').getTime() - 7200000;
+    t.mock.method(Date, 'now', () => now);
+    redis.set.mock.mockImplementation(async (key, value, options = {}) => {
+        if (options.nx && db.values.has(key)) return null;
+        db.values.set(key, structuredClone(value));
+        return 'OK';
+    });
+    const booking = {
+        purchaseType: 'single', vehicleType: 'Sedan / Hatchback', packageName: 'Wash',
+        bookingDate: '2026-11-10', bookingTime: '14:30', termsAccepted: true,
+        requestedPaymentMethod: 'onsite', promoCode: 'SAVE50',
+        customer: { firstName: 'Jane', surname: 'Doe', mobile: '0821234567', email: 'jane@example.com', registration: 'ABC123', address: '1 Main Road' },
+    };
+    const request = { id: 'promo', reference: 'PROMO1', status: 'pending_approval', requestExpiresAt: now + 3600000, booking };
+    db.values.set('booking:request:promo', request);
+    await assert.rejects(acceptBookingRequest('promo', 'Manager'), /promo code is invalid/i);
+    db.values.set('promo:shared:active-batch', { pairs: [{ promoCode: 'SAVE50' }] });
+    const promoKey = `promo:shared:reservation:${crypto.createHash('sha256').update('SAVE50').digest('hex')}`;
+    db.values.set('booking-slot:2026-11-10:14:30', 'OTHER');
+    await assert.rejects(acceptBookingRequest('promo', 'Manager'), /no longer available/);
+    assert.equal(db.values.has(promoKey), false);
+    db.values.set('booking-slot:2026-11-10:14:30', 'PROMO1');
+    const { request: confirmed } = await acceptBookingRequest('promo', 'Manager');
+    assert.equal(db.values.get('booking:PROMO1').amountCents, 12500);
+    assert.equal(confirmed.booking.pricingSummary.totalAmountCents, 12500);
+    assert.ok(db.values.has(promoKey));
+    await cancelBookedSlotRecords(confirmed);
+    assert.equal(db.values.has(promoKey), false);
+});
 
 function response() {
     return {
