@@ -466,14 +466,14 @@ export async function deleteBookingRequestFromAdmin(id) {
     return { id: requestId, removed: 'hidden' };
 }
 
-/** Removes every finished (accepted, declined, confirmed) request from the Activity tab. */
+/** Removes every finished request shown in the Activity tab. */
 export async function clearBookingActivityFromAdmin() {
     const ids = await redis.lrange(REQUEST_INDEX_KEY, 0, -1);
     let cleared = 0;
     for (const id of ids || []) {
         const request = await redis.get(requestKey(id));
         if (!request || request.hiddenFromAdmin) continue;
-        if (!["approved", "awaiting_completion", "confirmed", "declined"].includes(request.status)) continue;
+        if (!["approved", "awaiting_completion", "confirmed", "declined", "cancelled"].includes(request.status)) continue;
         await deleteBookingRequestFromAdmin(id);
         cleared += 1;
     }

@@ -550,9 +550,9 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 </section>
 <section id="expiredRequestsPanel" class="tab-panel" hidden>
   <h2 class="section-title" style="margin-top:0">Expired requests</h2>
-  <p class="hint">Booking requests and continuation links that expired or were cancelled.</p>
+  <p class="hint">Booking requests and continuation links that expired.</p>
   <div id="expiredRequestCards" class="booking-request-grid"></div>
-  <div id="expiredRequestsEmpty" class="empty-state" hidden>No expired or cancelled requests.</div>
+  <div id="expiredRequestsEmpty" class="empty-state" hidden>No expired requests.</div>
 </section>
 <section id="activityPanel" class="tab-panel" hidden>
   <div class="buttons" style="justify-content:flex-end"><button id="activityClearAll" class="secondary" type="button">Clear all activity</button></div>
@@ -562,7 +562,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
   <h2 class="section-title">Code email activity</h2>
   <p class="hint">Recent monthly access-code email previews and sends.</p>
   <div id="distributionHistory" class="distribution-history" aria-live="polite"></div>
-  <div id="activityEmpty" class="empty-state" hidden>No recent accepted or declined requests.</div>
+  <div id="activityEmpty" class="empty-state" hidden>No recent accepted, declined or cancelled requests.</div>
 </section>
 <section id="calendarPanel" class="tab-panel" role="tabpanel" aria-labelledby="calendarTab" hidden>
   <iframe id="calendarFrame" class="calendar-frame" title="Booking calendar manager" loading="lazy"></iframe>
@@ -914,9 +914,10 @@ function whatsAppButton(id){
 }
 function renderBookingRequestCard(record,showActions=false){
     const customer=record.booking?.customer||{};
+    const displayStatus=record.status==='cancelled'?'Cancelled':record.publicStatus;
     const identity=(String(customer.firstName||'')+' '+String(customer.surname||'')).trim()||'Customer';
     const detailRows=[];
-    detailRows.push(['Booking reference',record.reference],['Request kind',record.kind],['Submitted',record.submittedAt],['Current status',record.publicStatus]);
+    detailRows.push(['Booking reference',record.reference],['Request kind',record.kind],['Submitted',record.submittedAt],['Current status',displayStatus]);
     Object.entries(record.booking||{}).forEach(([key,value])=>{
       if(key==='contractFileBase64'||key==='customer') return;
       detailRows.push([key.replace(/([A-Z])/g,' $1').replace(/^./,letter=>letter.toUpperCase()),value]);
@@ -938,7 +939,7 @@ function renderBookingRequestCard(record,showActions=false){
       ?'<div class="booking-request-actions">'+whatsAppButton(record.id)+'</div>'
       :'';
     const occurredAt=record.approvedAt||record.declinedAt||record.updatedAt||record.submittedAt;
-    return '<article class="booking-request-card" data-id="'+escapeHtml(record.id)+'"><div class="entitlement-top"><div><h3>'+escapeHtml(identity)+'</h3><p class="booking-request-meta">'+escapeHtml(customer.email||'')+' · '+escapeHtml(record.reference)+'</p></div><span class="top-end"><span class="status-pill">'+escapeHtml(record.publicStatus||record.status)+'</span>'+(showActions?'':'<button type="button" class="bin-button" data-request-action="delete" data-id="'+escapeHtml(record.id)+'" aria-label="Delete permanently" title="Delete permanently">'+binIcon+'</button>')+'</span></div>'+(showActions?'':'<p class="booking-request-meta">Activity · '+escapeHtml(occurredAt||'')+'</p>')+'<details><summary>Open full request details</summary><dl class="booking-request-details">'+details+'</dl></details>'+actions+whatsappAction+'</article>';
+    return '<article class="booking-request-card" data-id="'+escapeHtml(record.id)+'"><div class="entitlement-top"><div><h3>'+escapeHtml(identity)+'</h3><p class="booking-request-meta">'+escapeHtml(customer.email||'')+' · '+escapeHtml(record.reference)+'</p></div><span class="top-end"><span class="status-pill">'+escapeHtml(displayStatus||record.status)+'</span>'+(showActions?'':'<button type="button" class="bin-button" data-request-action="delete" data-id="'+escapeHtml(record.id)+'" aria-label="Delete permanently" title="Delete permanently">'+binIcon+'</button>')+'</span></div>'+(showActions?'':'<p class="booking-request-meta">Activity · '+escapeHtml(occurredAt||'')+'</p>')+'<details><summary>Open full request details</summary><dl class="booking-request-details">'+details+'</dl></details>'+actions+whatsappAction+'</article>';
 }
 function renderBookingRequests(){
   const pending=bookingRequests.filter(record=>record.status==='pending_approval');
@@ -947,12 +948,12 @@ function renderBookingRequests(){
   bookingRequestCards.innerHTML=pending.map(record=>renderBookingRequestCard(record,true)).join('');
 }
 function renderExpiredRequests(){
-  const expired=bookingRequests.filter(record=>['expired','cancelled'].includes(record.status));
+  const expired=bookingRequests.filter(record=>record.status==='expired');
   expiredRequestCards.innerHTML=expired.map(record=>renderBookingRequestCard(record)).join('');
   expiredRequestsEmpty.hidden=expired.length>0;
 }
 function renderBookingActivity(){
-  const activity=bookingRequests.filter(record=>['approved','awaiting_completion','confirmed','declined'].includes(record.status))
+  const activity=bookingRequests.filter(record=>['approved','awaiting_completion','confirmed','declined','cancelled'].includes(record.status))
     .sort((left,right)=>new Date(right.approvedAt||right.declinedAt||right.updatedAt||0)-new Date(left.approvedAt||left.declinedAt||left.updatedAt||0))
     .slice(0,100);
   activityCards.innerHTML=activity.map(record=>renderBookingRequestCard(record)).join('');
@@ -960,12 +961,14 @@ function renderBookingActivity(){
 }
 function renderNotifications(){
   const exhausted=monthlyEntitlements.filter(record=>!isArchivedRecord(record)&&record.active&&Number(record.creditsAvailable)<1);
-  const expired=bookingRequests.filter(record=>['expired','cancelled'].includes(record.status));
+  const expired=bookingRequests.filter(record=>record.status==='expired');
+  const cancelled=bookingRequests.filter(record=>record.status==='cancelled');
   const pending=bookingRequests.filter(record=>record.status==='pending_approval');
   const pendingGoogleReviews=googleReviewQueue.pending||[];
   const entries=[
     ...exhausted.map(record=>({key:'credits:'+record.id,html:'<article class="notification-item"><strong>Wash credits exhausted</strong><span>'+escapeHtml(record.customerName)+' · '+escapeHtml(record.email)+' has no prepaid washes remaining.</span><button type="button" data-open-tab="clients">Open monthly clients</button></article>'})),
-    ...(expired.length?[{key:'expired:'+expired.map(record=>record.id).sort().join(','),html:'<article class="notification-item"><strong>'+expired.length+' expired or cancelled request'+(expired.length===1?'':'s')+'</strong><span>Review requests that can no longer be completed.</span><button type="button" data-open-tab="expired">Review expired requests</button></article>'}]:[]),
+    ...(expired.length?[{key:'expired:'+expired.map(record=>record.id).sort().join(','),html:'<article class="notification-item"><strong>'+expired.length+' expired request'+(expired.length===1?'':'s')+'</strong><span>Review requests that can no longer be completed.</span><button type="button" data-open-tab="expired">Review expired requests</button></article>'}]:[]),
+    ...(cancelled.length?[{key:'cancelled:'+cancelled.map(record=>record.id).sort().join(','),html:'<article class="notification-item"><strong>'+cancelled.length+' cancelled request'+(cancelled.length===1?'':'s')+'</strong><span>Review cancelled or failed payments in activity.</span><button type="button" data-open-tab="activity">Review activity</button></article>'}]:[]),
     ...(pending.length?[{key:'pending:'+pending.map(record=>record.id).sort().join(','),html:'<article class="notification-item"><strong>'+pending.length+' request'+(pending.length===1?'':'s')+' awaiting review</strong><span>New bookings are waiting for an accept or decline decision.</span><button type="button" data-open-tab="requests">Open new requests</button></article>'}]:[]),
     ...(pendingGoogleReviews.length?[{key:'google-reviews:'+pendingGoogleReviews.map(review=>review.id).sort().join(','),html:'<article class="notification-item"><strong>'+pendingGoogleReviews.length+' Google review'+(pendingGoogleReviews.length===1?'':'s')+' awaiting approval</strong><span>Choose whether to add '+(pendingGoogleReviews.length===1?'this review':'these reviews')+' to the website.</span><button type="button" data-open-tab="reviews">Review Google reviews</button></article>'}]:[]),
   ];

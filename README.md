@@ -61,8 +61,8 @@ The Business Manager continues to manage promo
 batches, Monthly Clients, booking requests and calendar availability. Pending
 request and checkout holds expire automatically after five days. The five-day
 period starts again when a request is approved or a checkout is started.
-Cancelled requests and failed or cancelled payments can still appear in the
-Expired requests tab sooner.
+Cancelled requests and failed or cancelled payments appear in Activity instead
+and can become unavailable sooner.
 
 The **Monthly Clients** manager tracks a customer's package, random access code,
 payment history, prepaid wash-credit balance, reservations, and confirmed

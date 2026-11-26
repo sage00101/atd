@@ -593,6 +593,25 @@ test('manager activity receives on-site monthly payment status and its script pa
     assert.match(script[1], /Retry paid receipt/);
 });
 
+test('manager separates cancelled requests from expired requests', async () => {
+    const res = response();
+    await promoManagerHandler({ method: 'GET', headers: { accept: 'text/html' } }, res);
+    const script = res.body.match(/<script>([\s\S]*?)<\/script>/)[1];
+    const start = script.indexOf('function renderExpiredRequests()');
+    const end = script.indexOf('function renderNotifications()', start);
+    const context = vm.createContext({
+        bookingRequests: [
+            { id: 'expired', status: 'expired' },
+            { id: 'cancelled', status: 'cancelled' },
+        ],
+        expiredRequestCards: {}, expiredRequestsEmpty: {}, activityCards: {}, activityEmpty: {},
+        renderBookingRequestCard: (record) => record.id,
+    });
+    vm.runInContext(`${script.slice(start, end)}\nrenderExpiredRequests(); renderBookingActivity();`, context);
+    assert.equal(context.expiredRequestCards.innerHTML, 'expired');
+    assert.equal(context.activityCards.innerHTML, 'cancelled');
+});
+
 test('manager deactivation and permanent deletion require an explicit yes', async () => {
     const res = response();
     await promoManagerHandler({ method: 'GET', headers: { accept: 'text/html' } }, res);
