@@ -1,6 +1,13 @@
 export const WEEKDAY_BOOKING_TIMES = ['09:30', '12:00', '14:30', '16:00', '18:30'];
 export const SATURDAY_BOOKING_TIMES = ['09:00', '11:30', '13:30'];
-export const BOOKING_SLOT_TIMES = [...WEEKDAY_BOOKING_TIMES, ...SATURDAY_BOOKING_TIMES];
+export const DATE_BOOKING_TIME_OVERRIDES = {
+    '2026-11-26': ['09:00', '11:30', '14:00', '16:30', '19:00'],
+};
+export const BOOKING_SLOT_TIMES = [...new Set([
+    ...WEEKDAY_BOOKING_TIMES,
+    ...SATURDAY_BOOKING_TIMES,
+    ...Object.values(DATE_BOOKING_TIME_OVERRIDES).flat(),
+])];
 
 function getDayOfWeek(date) {
     if (date instanceof Date) {
@@ -20,6 +27,13 @@ export function isBookableBookingDate(date) {
 }
 
 export function getBookingTimesForDate(date) {
+    const dateKey = date instanceof Date
+        ? (Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10))
+        : String(date || '');
+    if (Object.prototype.hasOwnProperty.call(DATE_BOOKING_TIME_OVERRIDES, dateKey)) {
+        return DATE_BOOKING_TIME_OVERRIDES[dateKey];
+    }
+
     const day = getDayOfWeek(date);
     if (day === 6) return SATURDAY_BOOKING_TIMES;
     if (day >= 1 && day <= 5) return WEEKDAY_BOOKING_TIMES;
