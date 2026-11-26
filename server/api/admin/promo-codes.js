@@ -511,7 +511,7 @@ button:disabled{opacity:.5;cursor:not-allowed;transform:none!important;filter:no
 </section>
 </section>
 <section id="bookingRequestsPanel" class="tab-panel" role="tabpanel" aria-labelledby="bookingRequestsTab">
-  <p class="note">Review website booking requests before payment or final confirmation. Pending requests hold their selected time for 3 days; monthly wash credits are not reserved until the approved customer completes the booking.</p>
+  <p class="note">Review website booking requests before payment or final confirmation. Pending requests hold their selected time for 5 days; monthly wash credits are not reserved until the approved customer completes the booking.</p>
   <div class="booking-requests-toolbar">
     <button id="bookingRequestsReload" class="secondary" type="button">Refresh requests</button>
     <span id="bookingRequestsCount" class="hint" aria-live="polite"></span>

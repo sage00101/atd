@@ -200,7 +200,12 @@ export default async function handler(req, res) {
             return;
         }
         const reference = approvalRequest.reference || await claimUniqueReferenceNumber();
-        if (!await reserveBookingSlot(bookingDate, bookingTime, reference)) {
+        const remainingCheckoutTtl = Math.ceil((Number(approvalRequest.checkoutExpiresAt) - Date.now()) / 1000);
+        if (!Number.isFinite(remainingCheckoutTtl) || remainingCheckoutTtl <= 0) {
+            res.status(409).json({ message: 'This checkout has expired. Please submit a new booking request.' });
+            return;
+        }
+        if (!await reserveBookingSlot(bookingDate, bookingTime, reference, remainingCheckoutTtl)) {
             res.status(409).json({ message: 'That time slot was just booked by someone else. Please choose another.' });
             return;
         }
@@ -520,6 +525,7 @@ export default async function handler(req, res) {
             body: JSON.stringify({
                 amount: amountCents,
                 currency: 'ZAR',
+                expiresAt: new Date(Number(approvalRequest.checkoutExpiresAt)).toISOString(),
                 subtotalAmount: originalAmountCents,
                 totalDiscount: discountCents || undefined,
                 successUrl: `${siteUrl}?payment=success&ref=${encodeURIComponent(reference)}#booking`,
@@ -561,6 +567,8 @@ export default async function handler(req, res) {
         }
 
         // Store pending booking until the webhook confirms payment.
+        const pendingTtl = Math.ceil((Number(approvalRequest.checkoutExpiresAt) - Date.now()) / 1000);
+        if (pendingTtl <= 0) throw new Error('Checkout expired before it could be saved.');
         await savePendingBooking(yocoBody.id, {
             ...booking,
             reference,
@@ -580,7 +588,7 @@ export default async function handler(req, res) {
             contractFileName,
             yocoCheckoutId: yocoBody.id,
             createdAt: new Date().toISOString(),
-        });
+        }, pendingTtl);
 
         await completeBookingContinuation(approvalRequest.id, {
             status: 'awaiting_completion',

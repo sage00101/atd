@@ -6,7 +6,7 @@ import { businessFleetRates, getBusinessFleetRateCents, getBusinessFleetTierForC
 import { BOOKING_SLOT_TIMES } from '../../../shared/booking-schedule.js';
 import { getOnlineMonthlyContractMonths } from '../../../shared/monthly-contract.js';
 
-const PENDING_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 3; // 3 days — abandoned checkouts expire
+export const PENDING_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 5; // 5 days — abandoned checkouts expire
 const CONFIRMED_BOOKING_TTL_SECONDS = 60 * 60 * 24 * 365; // 1 year — keep the slot blocked long-term
 const DATE_INDEX_TTL_SECONDS = 60 * 60 * 24 * 90; // 90 days — bookings are never made further out than this
 const WEBHOOK_DEDUPE_TTL_SECONDS = 60 * 60 * 24 * 3; // 3 days — longer than Yoco's retry window
@@ -360,10 +360,10 @@ export async function reserveBookingSlot(bookingDate, bookingTime, token, ttlSec
 }
 
 /** Stores the booking record once the slot is already claimed via reserveBookingSlot. */
-export async function savePendingBooking(checkoutId, booking) {
-    await redis.set(bookingKey(checkoutId), { ...booking, status: 'pending' }, { ex: PENDING_BOOKING_TTL_SECONDS });
+export async function savePendingBooking(checkoutId, booking, ttlSeconds = PENDING_BOOKING_TTL_SECONDS) {
+    await redis.set(bookingKey(checkoutId), { ...booking, status: 'pending' }, { ex: ttlSeconds });
     if (booking.cancellationToken) {
-        await redis.set(cancellationTokenKey(booking.cancellationToken), checkoutId, { ex: PENDING_BOOKING_TTL_SECONDS });
+        await redis.set(cancellationTokenKey(booking.cancellationToken), checkoutId, { ex: ttlSeconds });
     }
 }
 

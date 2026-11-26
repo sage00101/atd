@@ -59,7 +59,10 @@ code, which is checked and reserved again when the approved booking is completed
 Codes are redeemed after Yoco confirms payment or an on-site payment is recorded.
 The Business Manager continues to manage promo
 batches, Monthly Clients, booking requests and calendar availability. Pending
-request and checkout holds expire automatically within three days.
+request and checkout holds expire automatically after five days. The five-day
+period starts again when a request is approved or a checkout is started.
+Cancelled requests and failed or cancelled payments can still appear in the
+Expired requests tab sooner.
 
 The **Monthly Clients** manager tracks a customer's package, random access code,
 payment history, prepaid wash-credit balance, reservations, and confirmed

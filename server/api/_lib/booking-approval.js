@@ -7,6 +7,7 @@ import { redis } from './redis.js';
 import {
     SINGLE_WASH_CENTS,
     PROMO_DISCOUNT_RATE,
+    PENDING_BOOKING_TTL_SECONDS,
     claimUniqueReferenceNumber,
     getBooking,
     getBookingSlotOwner,
@@ -25,8 +26,8 @@ import {
 import { checkMonthlyWashAvailability, refundMonthlyWashForCancelledBooking, validateMonthlyPurchaseDetails } from './monthly-promos.js';
 
 const REQUEST_TTL_SECONDS = 60 * 60 * 24 * 365;
-const REQUEST_SLOT_TTL_SECONDS = 60 * 60 * 24 * 3;
-const APPROVAL_TTL_SECONDS = 60 * 60 * 24 * 3;
+const REQUEST_SLOT_TTL_SECONDS = PENDING_BOOKING_TTL_SECONDS;
+const APPROVAL_TTL_SECONDS = PENDING_BOOKING_TTL_SECONDS;
 const CONTINUATION_LOCK_SECONDS = 60 * 5;
 const REQUEST_INDEX_KEY = 'booking:requests:index';
 
@@ -126,9 +127,8 @@ if ARGV[4] ~= '' then request.checkoutId = ARGV[4] end
 if ARGV[5] ~= '' then request.checkoutUrl = ARGV[5] end
 if ARGV[6] ~= '' then request.completedAt = ARGV[6] end
 if ARGV[2] == 'awaiting_completion' then
-  local serverTime = redis.call('TIME')
-  request.approvalExpiresAt = tonumber(serverTime[1]) * 1000 + tonumber(ARGV[8]) * 1000
-  redis.call('EXPIRE', KEYS[3], ARGV[8])
+  request.approvalExpiresAt = request.checkoutExpiresAt
+  redis.call('PEXPIREAT', KEYS[3], request.checkoutExpiresAt)
 elseif ARGV[2] == 'confirmed' or ARGV[2] == 'cancelled' or ARGV[2] == 'expired' or ARGV[2] == 'declined' then
   request.continuationTokenDigest = cjson.null
   request.continuationToken = cjson.null
@@ -154,6 +154,10 @@ if tonumber(request.approvalExpiresAt) <= tonumber(ARGV[1]) then
 end
 local locked = redis.call('SET', KEYS[2], ARGV[1], 'NX', 'EX', ARGV[2])
 if not locked then return {'PROCESSING'} end
+if not request.checkoutExpiresAt then
+  request.checkoutExpiresAt = string.format('%.0f', tonumber(ARGV[1]) + tonumber(ARGV[4]) * 1000)
+  redis.call('SET', KEYS[1], cjson.encode(request), 'EX', ARGV[3])
+end
 return {'OK', cjson.encode(request)}
 `;
 
@@ -645,6 +649,7 @@ export async function beginBookingContinuation(token) {
         String(Date.now()),
         String(CONTINUATION_LOCK_SECONDS),
         String(REQUEST_TTL_SECONDS),
+        String(PENDING_BOOKING_TTL_SECONDS),
     ]);
     if (result?.[0] === 'EXISTING_CHECKOUT') {
         return { status: result[0], request: parseScriptRecord(result[1]) };

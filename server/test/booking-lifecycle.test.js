@@ -26,11 +26,11 @@ import {
 import { getMonthlyContractMonths } from '../../shared/monthly-contract.js';
 import vm from 'node:vm';
 
-const redis = Object.fromEntries(['get', 'mget', 'set', 'del', 'lrange', 'smembers', 'exists', 'eval'].map((name) => [name, () => {
+const redis = Object.fromEntries(['get', 'mget', 'set', 'del', 'lrange', 'lpush', 'ltrim', 'expire', 'smembers', 'exists', 'eval'].map((name) => [name, () => {
     throw new Error(`Unexpected Redis call: ${name}`);
 }]));
 mock.module('../api/_lib/redis.js', { exports: { redis } });
-const [{ validateBookingRequest, acceptBookingRequest, listBookingRequests, cancelBookedSlotRecords }, { getBookedSlotsInRange, reserveBookingSlot, getMonthlyPackagePriceCents, getMonthlyPackageTotalCents, markOnsiteBookingPaid },
+const [{ validateBookingRequest, createBookingRequest, acceptBookingRequest, beginBookingContinuation, completeBookingContinuation, listBookingRequests, cancelBookedSlotRecords }, { getBookedSlotsInRange, reserveBookingSlot, savePendingBooking, getMonthlyPackagePriceCents, getMonthlyPackageTotalCents, markOnsiteBookingPaid },
     { default: cancelHandler }, { default: webhookHandler }, { default: calendarHandler }, { default: availabilityHandler },
     { default: promoValidationHandler }, { default: promoManagerHandler }] = await Promise.all([
     import('../api/_lib/booking-approval.js'),
@@ -47,12 +47,16 @@ function installRedisStub(t) {
     const values = new Map();
     const sets = new Map();
     const lists = new Map();
+    const ttls = new Map();
     const replace = (name, fn) => t.mock.method(redis, name, fn);
     replace('get', async (key) => values.get(key) ?? null);
     replace('mget', async (...keys) => keys.map((key) => values.get(key) ?? null));
-    replace('set', async (key, value) => { values.set(key, structuredClone(value)); return 'OK'; });
+    replace('set', async (key, value, options) => { values.set(key, structuredClone(value)); if (options?.ex) ttls.set(key, options.ex); return 'OK'; });
     replace('del', async (...keys) => { keys.forEach((key) => values.delete(key)); return 1; });
     replace('lrange', async (key) => lists.get(key) || []);
+    replace('lpush', async (key, value) => { lists.set(key, [value, ...(lists.get(key) || [])]); });
+    replace('ltrim', async () => {});
+    replace('expire', async (key, ttl) => { ttls.set(key, ttl); });
     replace('smembers', async (key) => [...(sets.get(key) || [])]);
     replace('exists', async (key) => values.has(key) ? 1 : 0);
     replace('eval', async (script, keys, args) => {
@@ -77,9 +81,31 @@ function installRedisStub(t) {
             const owner = values.get(keys[0]);
             if (owner && owner !== args[0]) return 0;
             values.set(keys[0], args[0]);
+            ttls.set(keys[0], Number(args[1]));
             if (!sets.has(keys[1])) sets.set(keys[1], new Set());
             sets.get(keys[1]).add(args[2]);
             return 1;
+        }
+        if (script.includes("request.continuationToken = ARGV[7]")) {
+            const request = values.get(keys[0]);
+            if (!request) return ['NOT_FOUND'];
+            if (request.status !== 'pending_approval') return [request.status];
+            if (Number(request.requestExpiresAt) <= Number(args[0])) return ['EXPIRED'];
+            const updated = { ...request, status: 'approved', approvedAt: args[0], approvedBy: args[1],
+                approvalExpiresAt: args[2], continuationTokenDigest: args[4], continuationToken: args[6] };
+            values.set(keys[0], updated);
+            values.set(keys[1], request.id);
+            ttls.set(keys[1], Number(args[5]));
+            return ['OK', JSON.stringify(updated)];
+        }
+        if (script.includes('request.checkoutExpiresAt = string.format')) {
+            const request = values.get(keys[0]);
+            if (!request) return ['NOT_FOUND'];
+            if (request.status !== 'approved') return [request.status];
+            if (Number(request.approvalExpiresAt) <= Number(args[0])) return ['EXPIRED'];
+            const updated = { ...request, checkoutExpiresAt: request.checkoutExpiresAt || String(Number(args[0]) + Number(args[3]) * 1000) };
+            values.set(keys[0], updated);
+            return ['OK', JSON.stringify(updated)];
         }
         if (script.includes("booking.cancelledAt = ARGV[1]")) {
             const booking = values.get(keys[0]);
@@ -109,6 +135,10 @@ function installRedisStub(t) {
             if (request.status !== args[0]) return [request.status];
             const updated = { ...request, status: args[1], updatedAt: args[2] };
             if (args[1] === 'cancelled') updated.hiddenFromAdmin = false;
+            if (args[1] === 'awaiting_completion') {
+                updated.approvalExpiresAt = request.checkoutExpiresAt;
+                ttls.set(keys[2], (Number(request.checkoutExpiresAt) - Date.now()) / 1000);
+            }
             values.set(keys[0], updated);
             return ['OK', JSON.stringify(updated)];
         }
@@ -124,8 +154,63 @@ function installRedisStub(t) {
         }
         throw new Error('Unexpected Redis script');
     });
-    return { values, sets, lists };
+    return { values, sets, lists, ttls };
 }
+
+test('requests and online checkout holds last five days at each stage', async (t) => {
+    const db = installRedisStub(t);
+    const start = slotDateTime('2026-11-10', '14:30').getTime() - 10 * 86400000;
+    t.mock.method(Date, 'now', () => start);
+    const booking = {
+        purchaseType: 'single', vehicleType: 'Sedan / Hatchback', bookingDate: '2026-11-10', bookingTime: '14:30',
+        customer: { firstName: 'Test', surname: 'Customer', mobile: '0821234567', email: 'test@example.com', registration: 'ABC123', address: 'Test address' },
+        termsAccepted: true, requestedPaymentMethod: 'online',
+    };
+    const { request } = await createBookingRequest(booking);
+    const slot = 'booking-slot:2026-11-10:14:30';
+    const fiveDays = 5 * 86400;
+    assert.equal(request.requestExpiresAt, start + fiveDays * 1000);
+    assert.equal(db.ttls.get(slot), fiveDays);
+    Date.now.mock.mockImplementation(() => start + fiveDays * 1000 - 1);
+    assert.equal((await listBookingRequests())[0].status, 'pending_approval');
+    const approved = await acceptBookingRequest(request.id, 'Manager');
+    assert.equal(Number(approved.request.approvalExpiresAt), Date.now() + fiveDays * 1000);
+    assert.equal(db.ttls.get(slot), fiveDays);
+    const tokenKey = `booking:request-continuation:${approved.request.continuationTokenDigest}`;
+    assert.equal(db.ttls.get(tokenKey), fiveDays);
+    const continuation = await beginBookingContinuation(approved.continuationToken);
+    assert.equal(Number(continuation.request.checkoutExpiresAt), Date.now() + fiveDays * 1000);
+    assert.equal((await beginBookingContinuation(approved.continuationToken)).request.checkoutExpiresAt, continuation.request.checkoutExpiresAt);
+
+    await reserveBookingSlot(booking.bookingDate, booking.bookingTime, request.reference);
+    await savePendingBooking('checkout', { cancellationToken: 'cancel-token' });
+    assert.equal(db.ttls.get(slot), fiveDays);
+    assert.equal(db.ttls.get('booking:checkout'), fiveDays);
+    assert.equal(db.ttls.get('booking-cancel-token:cancel-token'), fiveDays);
+    assert.equal(await completeBookingContinuation(request.id, { status: 'awaiting_completion', checkoutId: 'checkout' }), true);
+    assert.equal(db.ttls.get(tokenKey), fiveDays);
+    Date.now.mock.mockImplementation(() => start + 2 * fiveDays * 1000 - 2);
+    assert.equal((await listBookingRequests())[0].status, 'awaiting_completion');
+    Date.now.mock.mockImplementation(() => start + 2 * fiveDays * 1000 - 1);
+    assert.equal((await listBookingRequests())[0].status, 'expired');
+});
+
+test('unapproved requests expire at the five-day boundary', async (t) => {
+    const db = installRedisStub(t);
+    const start = slotDateTime('2026-11-10', '14:30').getTime() - 10 * 86400000;
+    t.mock.method(Date, 'now', () => start);
+    const { request } = await createBookingRequest({
+        purchaseType: 'single', vehicleType: 'Sedan / Hatchback', bookingDate: '2026-11-10', bookingTime: '14:30',
+        customer: { firstName: 'Test', surname: 'Customer', mobile: '0821234567', email: 'test@example.com', registration: 'ABC123', address: 'Test address' },
+        termsAccepted: true, requestedPaymentMethod: 'online',
+    });
+    Date.now.mock.mockImplementation(() => start + 5 * 86400000 - 1);
+    assert.equal((await listBookingRequests())[0].status, 'pending_approval');
+    Date.now.mock.mockImplementation(() => start + 5 * 86400000);
+    assert.equal((await listBookingRequests())[0].status, 'expired');
+    assert.equal(db.values.has('booking-slot:2026-11-10:14:30'), false);
+    await assert.rejects(acceptBookingRequest(request.id, 'Manager'), /expired/);
+});
 
 test('onsite approval confirms the booking and calendar without collecting payment', async (t) => {
     const db = installRedisStub(t);

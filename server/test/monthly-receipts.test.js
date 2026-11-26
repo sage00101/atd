@@ -36,7 +36,7 @@ mock.module('../api/_lib/monthly-promos.js', { exports: {
 } });
 mock.module('../api/_lib/booking-approval.js', { exports: {
     beginBookingContinuation: async () => ({
-        request: { id: 'request-id', reference: 'REF123', booking: approvedBooking, approvalExpiresAt: Date.now() + 300000 },
+        request: { id: 'request-id', reference: 'REF123', booking: approvedBooking, continuationToken: 'test-token', approvalExpiresAt: Date.now() + 300000, checkoutExpiresAt: Date.now() + 5 * 86400000 },
     }),
     completeBookingContinuation: async () => true,
     resetBookingContinuation: async () => {},
@@ -164,6 +164,32 @@ test('covered wash receipts include the validated access code', async () => {
         assert.equal(receipts[0].monthlyCode, 'ATDM-TESTCODE');
         assert.equal(receipts[0].customerEmail, 'client@example.test');
     }
+});
+
+test('online checkout requests a five-day Yoco expiry', async (t) => {
+    reset();
+    const now = Date.parse('2029-12-01T10:00:00Z');
+    t.mock.method(Date, 'now', () => now);
+    const previous = process.env.YOCO_SECRET_KEY;
+    process.env.YOCO_SECRET_KEY = 'test-secret';
+    t.after(() => {
+        if (previous === undefined) delete process.env.YOCO_SECRET_KEY;
+        else process.env.YOCO_SECRET_KEY = previous;
+    });
+    approvedBooking = { ...monthlyBooking(), purchaseType: 'single', requestedPaymentMethod: 'online', termsAccepted: true };
+    let payload;
+    t.mock.method(globalThis, 'fetch', async (_url, options) => {
+        payload = JSON.parse(options.body);
+        return { ok: true, json: async () => ({ id: 'checkout', redirectUrl: 'https://example.test/checkout' }) };
+    });
+    const body = Buffer.from('--test\r\nContent-Disposition: form-data; name="booking"\r\n\r\n{"approvalToken":"test"}\r\n--test--\r\n');
+    const req = Readable.from([body]);
+    req.method = 'POST';
+    req.headers = { 'content-type': 'multipart/form-data; boundary=test', 'content-length': String(body.length) };
+    const res = response();
+    await online(req, res);
+    assert.equal(res.body.redirectUrl, 'https://example.test/checkout');
+    assert.equal(Date.parse(payload.expiresAt), now + 5 * 86400000);
 });
 
 test('online monthly receipts include the issued code and retry if email delivery fails', async (t) => {
