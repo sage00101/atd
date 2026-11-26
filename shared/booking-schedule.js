@@ -3,6 +3,9 @@ export const SATURDAY_BOOKING_TIMES = ['09:00', '11:30', '13:30'];
 export const DATE_BOOKING_TIME_ADDITIONS = {
     '2026-11-26': ['09:00', '11:30', '14:00', '16:30', '19:00'],
 };
+export const DATE_BOOKING_TIME_REMOVALS = {
+    '2026-11-26': ['12:00', '18:30'],
+};
 export const BOOKING_SLOT_TIMES = [...new Set([
     ...WEEKDAY_BOOKING_TIMES,
     ...SATURDAY_BOOKING_TIMES,
@@ -39,7 +42,10 @@ export function getBookingTimesForDate(date) {
             ? WEEKDAY_BOOKING_TIMES
             : [];
     const additionalTimes = DATE_BOOKING_TIME_ADDITIONS[dateKey] || [];
-    return [...new Set([...regularTimes, ...additionalTimes])].sort();
+    const removedTimes = new Set(DATE_BOOKING_TIME_REMOVALS[dateKey] || []);
+    return [...new Set([...regularTimes, ...additionalTimes])]
+        .filter((time) => !removedTimes.has(time))
+        .sort();
 }
 
 export function isBookableBookingTime(date, time) {

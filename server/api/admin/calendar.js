@@ -10,7 +10,12 @@ import {
     getCalendarHistory,
     setCalendarBlockRange,
 } from '../_lib/store.js';
-import { DATE_BOOKING_TIME_ADDITIONS, SATURDAY_BOOKING_TIMES, WEEKDAY_BOOKING_TIMES } from '../../../shared/booking-schedule.js';
+import {
+  DATE_BOOKING_TIME_ADDITIONS,
+  DATE_BOOKING_TIME_REMOVALS,
+  SATURDAY_BOOKING_TIMES,
+  WEEKDAY_BOOKING_TIMES,
+} from '../../../shared/booking-schedule.js';
 
 function safeEqual(left, right) {
     const leftDigest = crypto.createHash('sha256').update(String(left)).digest();
@@ -225,6 +230,7 @@ const adminPage = `<!doctype html>
   const weekdaySlots = ${JSON.stringify(WEEKDAY_BOOKING_TIMES)};
   const saturdaySlots = ${JSON.stringify(SATURDAY_BOOKING_TIMES)};
   const dateSlotAdditions = ${JSON.stringify(DATE_BOOKING_TIME_ADDITIONS)};
+  const dateSlotRemovals = ${JSON.stringify(DATE_BOOKING_TIME_REMOVALS)};
   const keyInput = document.getElementById('adminKey');
   const loginKeyInput = document.getElementById('loginKeyInput');
   const calendarNode = document.getElementById('calendar');
@@ -272,7 +278,10 @@ const adminPage = `<!doctype html>
     const day = dateFromIso(value).getDay();
     const regularSlots = day === 6 ? saturdaySlots : day >= 1 && day <= 5 ? weekdaySlots : [];
     const additionalSlots = dateSlotAdditions[value] || [];
-    return [...new Set([...regularSlots, ...additionalSlots])].sort();
+    const removedSlots = new Set(dateSlotRemovals[value] || []);
+    return [...new Set([...regularSlots, ...additionalSlots])]
+      .filter((time) => !removedSlots.has(time))
+      .sort();
   }
 
   function buildDateRange(days = 30) {
